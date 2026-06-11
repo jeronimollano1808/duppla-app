@@ -2154,7 +2154,16 @@ function renderInventario() {
   document.getElementById('page-inventario').innerHTML = `
     <div class="page-header">
       <div><div class="page-title">Inventario</div><div class="page-sub">${DATA.inventario.length} productos · ${totalUnidades} unidades</div></div>
-      <button class="btn btn-lime btn-sm" onclick="abrirNuevoProducto()">+ Agregar producto</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <!-- 162. Botón temporal para corregir precios que están sin los ceros
+                  Detecta precios menores a 1000 y los multiplica por 1000
+                  Solo aparece si hay productos con precios incorrectos -->
+        ${DATA.inventario.some(p => p.pventa > 0 && p.pventa < 1000) ?
+          `<button class="btn btn-sm" style="color:var(--amber);border-color:#FDE68A" onclick="corregirPrecios()">
+            ⚠️ Corregir precios × 1000
+          </button>` : ''}
+        <button class="btn btn-lime btn-sm" onclick="abrirNuevoProducto()">+ Agregar producto</button>
+      </div>
     </div>
     ${alertHtml}
     ${capitalHtml}
@@ -2167,6 +2176,39 @@ function renderInventario() {
         : `<div class="empty-state"><div class="empty-state-icon">📦</div><div class="empty-state-text">Sin productos en inventario</div><div class="empty-state-sub">Agrega tu primer producto con el botón de arriba</div></div>`}
     </div>`;
 }
+
+window.corregirPrecios = async () => {
+  // 163. Identificamos productos con precios que parecen estar sin los ceros
+  //      Criterio: precio público mayor a 0 pero menor a 1000
+  //      (ningún suplemento debería costar menos de $1.000 COP)
+  const aCorregir = DATA.inventario.filter(p => p.pventa > 0 && p.pventa < 1000);
+
+  if(aCorregir.length === 0) {
+    toast('Todos los precios ya están correctos', 'info');
+    return;
+  }
+
+  // 164. Mostramos confirmación con la lista de productos a corregir
+  const lista = aCorregir.map(p =>
+    `${p.nombre}: $${p.pventa} → $${(p.pventa*1000).toLocaleString('es-CO')}`
+  ).join('\n');
+
+  if(!confirm(`Se van a multiplicar por 1000 los precios de ${aCorregir.length} productos:\n\n${lista}\n\n¿Continuar?`)) return;
+
+  // 165. Actualizamos cada producto en Firebase multiplicando todos sus precios por 1000
+  let corregidos = 0;
+  for(const prod of aCorregir) {
+    await updateDoc(doc(db,'inventario',prod.id), {
+      pventa: prod.pventa * 1000,
+      pdist:  (prod.pdist||0) > 0 && (prod.pdist||0) < 1000 ? prod.pdist * 1000 : prod.pdist,
+      pesp:   (prod.pesp||0)  > 0 && (prod.pesp||0)  < 1000 ? prod.pesp  * 1000 : prod.pesp,
+      costo:  (prod.costo||0) > 0 && (prod.costo||0) < 1000 ? prod.costo * 1000 : prod.costo,
+    });
+    corregidos++;
+  }
+
+  toast(`✅ ${corregidos} productos corregidos correctamente`);
+};
 
 window.abrirNuevoProducto = () => {
   // 133. Reseteamos el formulario completamente antes de abrir para agregar
