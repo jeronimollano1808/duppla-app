@@ -771,9 +771,18 @@ body{
     </div>
     <div class="f-row">
       <div class="f-group"><label class="f-label">Cantidad</label><input type="number" id="v-cant" class="f-input" value="1" min="1" oninput="calcVentaTotal()"></div>
-      <div class="f-group"><label class="f-label">Precio unitario ($)</label><input type="number" id="v-precio" class="f-input" oninput="calcVentaTotal()"></div>
+      <div class="f-group">
+        <label class="f-label">Precio unitario ($)</label>
+        <input type="number" id="v-precio" class="f-input" oninput="calcVentaTotal();previoCOP('v-precio','prev-vprecio')">
+        <div id="prev-vprecio" style="font-size:11px;margin-top:4px;font-weight:600"></div>
+      </div>
     </div>
-    <div class="f-group"><label class="f-label">Total ($)</label><input type="number" id="v-total" class="f-input" readonly style="opacity:.6;cursor:not-allowed"></div>
+    <div class="f-group">
+      <label class="f-label">Total ($)</label>
+      <input type="number" id="v-total" class="f-input" readonly style="opacity:.6;cursor:not-allowed">
+      <!-- 130. Preview del total también formateado para confirmación visual -->
+      <div id="prev-vtotal" style="font-size:12px;margin-top:4px;font-weight:700;color:var(--lime)"></div>
+    </div>
     <div class="f-group"><label class="f-label">Cliente</label><input type="text" id="v-cliente" class="f-input" placeholder="Nombre del cliente"></div>
     <!-- 101. Sección de pago — permite registrar cuánto pagó el cliente al momento
                Si pagó menos que el total, la diferencia queda como saldo pendiente -->
@@ -862,7 +871,12 @@ body{
       <div class="f-group"><label class="f-label">Stock</label><input type="number" id="p-stock" class="f-input" value="0" min="0"></div>
     </div>
     <!-- 63. Precio de costo: lo que pagamos al proveedor, sirve para calcular margen -->
-    <div class="f-group"><label class="f-label">Precio de costo ($)</label><input type="number" id="p-costo" class="f-input" value="0"></div>
+    <div class="f-group">
+      <label class="f-label">Precio de costo ($)</label>
+      <input type="number" id="p-costo" class="f-input" value="0" oninput="previoCOP('p-costo','prev-costo')">
+      <!-- 129. Preview en tiempo real del valor formateado en COP -->
+      <div id="prev-costo" style="font-size:11px;margin-top:4px;font-weight:600"></div>
+    </div>
     <!-- 64. Los 3 precios de venta — cada uno aplica según el tipo de cliente:
               Público = precio estándar para cualquier comprador
               Distribuidor = precio mayorista para revendedores
@@ -875,21 +889,24 @@ body{
             <span style="width:8px;height:8px;border-radius:50%;background:#2563EB;display:inline-block"></span>
             Precio público ($)
           </label>
-          <input type="number" id="p-pventa" class="f-input" value="0" placeholder="0">
+          <input type="number" id="p-pventa" class="f-input" value="0" placeholder="Ej: 110000" oninput="previoCOP('p-pventa','prev-pventa')">
+          <div id="prev-pventa" style="font-size:11px;margin-top:4px;font-weight:600"></div>
         </div>
         <div class="f-group" style="margin-bottom:0">
           <label class="f-label" style="display:flex;align-items:center;gap:5px">
             <span style="width:8px;height:8px;border-radius:50%;background:#D97706;display:inline-block"></span>
             Precio distribuidor ($)
           </label>
-          <input type="number" id="p-pdist" class="f-input" value="0" placeholder="0">
+          <input type="number" id="p-pdist" class="f-input" value="0" placeholder="Ej: 91000" oninput="previoCOP('p-pdist','prev-pdist')">
+          <div id="prev-pdist" style="font-size:11px;margin-top:4px;font-weight:600"></div>
         </div>
         <div class="f-group" style="margin-bottom:0">
           <label class="f-label" style="display:flex;align-items:center;gap:5px">
             <span style="width:8px;height:8px;border-radius:50%;background:#16A34A;display:inline-block"></span>
             Precio especial ($)
           </label>
-          <input type="number" id="p-pesp" class="f-input" value="0" placeholder="0">
+          <input type="number" id="p-pesp" class="f-input" value="0" placeholder="Ej: 100000" oninput="previoCOP('p-pesp','prev-pesp')">
+          <div id="prev-pesp" style="font-size:11px;margin-top:4px;font-weight:600"></div>
         </div>
       </div>
     </div>
@@ -1083,8 +1100,23 @@ let ajusteProductoId = null;    // ID del producto que se está ajustando
 const fmt = n => '$' + Number(n||0).toLocaleString('es-CO');
 
 // 99. fmtCOP igual que fmt pero agrega la etiqueta COP al final
-//     Se usa en los botones de tipo de precio para máxima claridad
 const fmtCOP = n => n > 0 ? '$' + Number(n).toLocaleString('es-CO') + ' COP' : 'N/D';
+
+// 128. previoCOP: muestra debajo de un input el valor formateado mientras escribe
+//      inputId = ID del campo, previewId = ID del div donde se muestra la preview
+//      Ejemplo: si escribe 110000 → muestra "$110.000 COP"
+//      Esto evita confundir $100 con $100.000
+window.previoCOP = (inputId, previewId) => {
+  const val = Number(document.getElementById(inputId).value)||0;
+  const el = document.getElementById(previewId);
+  if(!el) return;
+  if(val === 0) {
+    el.textContent = '';
+  } else {
+    el.textContent = '→ ' + fmtCOP(val);
+    el.style.color = val >= 1000 ? 'var(--green)' : 'var(--amber)';
+  }
+};
 const today = () => new Date().toISOString().slice(0,10);
 
 // ============================================================
@@ -1642,7 +1674,9 @@ window.calcVentaTotal = () => {
   const p = Number(document.getElementById('v-precio').value)||0;
   const total = c * p;
   document.getElementById('v-total').value = total;
-  // 109. Cada vez que cambia el total, recalculamos el saldo
+  // 131. Mostramos el total formateado en COP debajo del campo para confirmación
+  const prevTotal = document.getElementById('prev-vtotal');
+  if(prevTotal) prevTotal.textContent = total > 0 ? '→ ' + fmt(total) + ' COP' : '';
   calcSaldo();
 };
 
