@@ -3034,18 +3034,20 @@ window.editarCombo = (id) => {
 };
 
 function renderLineasCombo() {
-  // 187. Renderiza las filas de productos del combo con select + cantidad
+  // 197. Mismo fix: data-index para evitar problemas de closures en onchange
   const html = comboLineas.map((l,i) => `
     <div style="display:grid;grid-template-columns:1fr 80px 32px;gap:8px;margin-bottom:8px;align-items:center">
-      <select class="f-input" style="font-size:13px" onchange="comboLineas[${i}].prodId=this.value;calcSumaIndividual()"
-        value="${l.prodId}">
+      <select class="f-input" style="font-size:13px" data-idx="${i}" data-tipo="prod"
+        onchange="actualizarLineaCombo(this)">
         <option value="">— Producto —</option>
         ${DATA.inventario.map(p =>
           `<option value="${p.id}" ${p.id===l.prodId?'selected':''}>${p.nombre}</option>`
         ).join('')}
       </select>
-      <input type="number" class="f-input" value="${l.cant}" min="1" style="font-size:13px;text-align:center"
-        oninput="comboLineas[${i}].cant=Number(this.value)||1;calcSumaIndividual()">
+      <input type="number" class="f-input" value="${l.cant}" min="1"
+        style="font-size:13px;text-align:center"
+        data-idx="${i}" data-tipo="cant"
+        oninput="actualizarLineaCombo(this);calcSumaIndividual()">
       <button type="button" onclick="quitarLineaCombo(${i})"
         style="width:32px;height:38px;border:1px solid #FECACA;border-radius:8px;background:var(--red-bg);color:var(--red);cursor:pointer;font-size:14px">✕</button>
     </div>`).join('');
@@ -3178,16 +3180,21 @@ window.cargarComboFijo = () => {
 };
 
 function renderLineasVentaCombo() {
+  // 196. Usamos data-index en vez de índice directo en el onchange
+  //      para evitar problemas cuando el array se actualiza
   const html = vcLineas.map((l,i) => `
     <div style="display:grid;grid-template-columns:1fr 80px 32px;gap:8px;margin-bottom:8px;align-items:center">
-      <select class="f-input" style="font-size:13px" onchange="vcLineas[${i}].prodId=this.value">
+      <select class="f-input" style="font-size:13px" data-idx="${i}" data-tipo="prod"
+        onchange="actualizarLineaVC(this)">
         <option value="">— Producto —</option>
         ${DATA.inventario.map(p =>
           `<option value="${p.id}" ${p.id===l.prodId?'selected':''}>${p.nombre} (${p.stock})</option>`
         ).join('')}
       </select>
-      <input type="number" class="f-input" value="${l.cant}" min="1" style="font-size:13px;text-align:center"
-        oninput="vcLineas[${i}].cant=Number(this.value)||1">
+      <input type="number" class="f-input" value="${l.cant}" min="1"
+        style="font-size:13px;text-align:center"
+        data-idx="${i}" data-tipo="cant"
+        oninput="actualizarLineaVC(this)">
       <button type="button" onclick="quitarLineaVentaCombo(${i})"
         style="width:32px;height:38px;border:1px solid #FECACA;border-radius:8px;background:var(--red-bg);color:var(--red);cursor:pointer;font-size:14px">✕</button>
     </div>`).join('');
@@ -3203,6 +3210,28 @@ window.quitarLineaVentaCombo = (i) => {
   vcLineas.splice(i, 1);
   if(!vcLineas.length) vcLineas = [{ prodId:'', cant:1 }];
   renderLineasVentaCombo();
+};
+
+// 198. actualizarLineaVC: lee el valor del elemento que cambió y actualiza vcLineas
+//      Usamos dataset.idx para saber qué línea y dataset.tipo para saber qué campo
+window.actualizarLineaVC = (el) => {
+  const i = Number(el.dataset.idx);
+  if(el.dataset.tipo === 'prod') {
+    vcLineas[i].prodId = el.value;
+  } else {
+    vcLineas[i].cant = Number(el.value)||1;
+  }
+};
+
+// 199. actualizarLineaCombo: igual pero para el modal de crear combo fijo
+window.actualizarLineaCombo = (el) => {
+  const i = Number(el.dataset.idx);
+  if(el.dataset.tipo === 'prod') {
+    comboLineas[i].prodId = el.value;
+    calcSumaIndividual();
+  } else {
+    comboLineas[i].cant = Number(el.value)||1;
+  }
 };
 
 window.calcSaldoCombo = () => {
