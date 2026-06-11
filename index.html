@@ -1614,10 +1614,17 @@ function renderDashboard() {
 // Lista de ventas con filtro de búsqueda y exportación CSV
 // ============================================================
 function renderVentas() {
-  // 114. Calculamos la cartera total pendiente para mostrar en el header
+  // 114. Calculamos la cartera total pendiente
   const carteraPendiente = DATA.ventas.reduce((s,v) => s + Number(v.saldo||0), 0);
 
-  const rows = DATA.ventas.map(v => {
+  // 158. Ordenamos las ventas por fecha descendente (más reciente primero)
+  //      Si dos ventas tienen la misma fecha, las más nuevas (por createdAt) van primero
+  const ventasOrdenadas = [...DATA.ventas].sort((a,b) => {
+    if(b.fecha !== a.fecha) return b.fecha > a.fecha ? 1 : -1;
+    return (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0);
+  });
+
+  const rows = ventasOrdenadas.map(v => {
     // 79. Badge de tipo de precio
     const tpLabel = { publico:'Público', distribuidor:'Dist.', especial:'Especial' };
     const tpClass = { publico:'b-info', distribuidor:'b-warning', especial:'b-success' };
@@ -2078,6 +2085,43 @@ function renderInventario() {
       <div><strong>Stock bajo:</strong> ${low.map(p=>`${p.nombre} (${p.stock})`).join(', ')}</div>
     </div>` : '';
 
+  // 160. Calculamos el resumen de capital invertido en inventario
+  //      capitalCosto = suma de (costo × stock) de todos los productos
+  //      capitalPventa = valor del inventario a precio de venta público
+  //      gananciaEsperada = lo que ganaríamos si vendemos todo al precio público
+  const capitalCosto = DATA.inventario.reduce((s,p) =>
+    s + (Number(p.costo||0) * Number(p.stock||0)), 0);
+  const capitalPventa = DATA.inventario.reduce((s,p) =>
+    s + (Number(p.pventa||0) * Number(p.stock||0)), 0);
+  const gananciaEsperada = capitalPventa - capitalCosto;
+  const totalUnidades = DATA.inventario.reduce((s,p) => s + Number(p.stock||0), 0);
+  const totalProductos = DATA.inventario.length;
+
+  // 161. Resumen visual de capital en tarjetas métricas
+  const capitalHtml = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px">
+      <div class="metric-card">
+        <div class="metric-label">Capital invertido</div>
+        <div class="metric-value" style="font-size:18px;color:var(--blue)">${fmt(capitalCosto)}</div>
+        <div class="metric-sub">A precio de costo</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Valor del inventario</div>
+        <div class="metric-value" style="font-size:18px;color:var(--lime)">${fmt(capitalPventa)}</div>
+        <div class="metric-sub">A precio público</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Ganancia esperada</div>
+        <div class="metric-value" style="font-size:18px;color:${gananciaEsperada>=0?'var(--green)':'var(--red)'}">${fmt(gananciaEsperada)}</div>
+        <div class="metric-sub">Si se vende todo</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Total en stock</div>
+        <div class="metric-value" style="font-size:18px">${totalUnidades}</div>
+        <div class="metric-sub">${totalProductos} productos</div>
+      </div>
+    </div>`;
+
   const rows = DATA.inventario.map(p => {
     const margen = p.costo > 0 ? Math.round(((p.pventa-p.costo)/p.costo)*100) : null;
     const sc = p.stock===0 ? 'badge b-danger' : p.stock<=(p.stockMinimo||5) ? 'badge b-warning' : 'badge b-success';
@@ -2109,10 +2153,11 @@ function renderInventario() {
 
   document.getElementById('page-inventario').innerHTML = `
     <div class="page-header">
-      <div><div class="page-title">Inventario</div><div class="page-sub">${DATA.inventario.length} productos</div></div>
+      <div><div class="page-title">Inventario</div><div class="page-sub">${DATA.inventario.length} productos · ${totalUnidades} unidades</div></div>
       <button class="btn btn-lime btn-sm" onclick="abrirNuevoProducto()">+ Agregar producto</button>
     </div>
     ${alertHtml}
+    ${capitalHtml}
     <div class="card">
       ${DATA.inventario.length ?
         `<div class="table-wrap"><table class="tbl">
@@ -2331,13 +2376,18 @@ function renderGastos() {
   })).filter(c=>c.t>0);
   const total = DATA.gastos.reduce((s,g)=>s+Number(g.valor||0),0);
 
+  // 159. Ordenamos gastos por fecha descendente igual que ventas
+  const gastosOrdenados = [...DATA.gastos].sort((a,b) => {
+    if(b.fecha !== a.fecha) return b.fecha > a.fecha ? 1 : -1;
+    return (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0);
+  });
   const catHtml = [...totPorCat, {k:'total',l:'Total gastos',t:total}].map(c => `
     <div class="metric-card">
       <div class="metric-label">${c.l}</div>
       <div class="metric-value" style="color:${c.k==='total'?'var(--red)':'var(--amber)'};font-size:18px">${fmt(c.t)}</div>
     </div>`).join('');
 
-  const rows = DATA.gastos.map(g => `
+  const rows = gastosOrdenados.map(g => `
     <tr>
       <td style="color:var(--ink-3)">${g.fecha||''}</td>
       <td><span class="badge b-warning">${CATS[g.cat]||g.cat}</span></td>
@@ -2621,7 +2671,24 @@ window.guardarMeta = async () => {
 // ============================================================
 window.eliminarDoc = async (col, id) => {
   if(!confirm('¿Eliminar este registro? Esta acción no se puede deshacer.')) return;
+
+  // 157. Si es una venta, devolvemos el stock al inventario antes de eliminar
+  //      Esto corrige el problema donde eliminar una venta no restauraba el stock
+  if(col === 'ventas') {
+    const venta = DATA.ventas.find(v => v.id === id);
+    if(venta?.prodId && venta?.cant) {
+      const prod = DATA.inventario.find(p => p.id === venta.prodId);
+      if(prod) {
+        // Devolvemos las unidades vendidas al stock del producto
+        await updateDoc(doc(db,'inventario',venta.prodId), {
+          stock: prod.stock + Number(venta.cant)
+        });
+      }
+    }
+  }
+
   await deleteDoc(doc(db, col, id));
+  toast('Registro eliminado');
 };
 
 </script>
