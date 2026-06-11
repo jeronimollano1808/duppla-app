@@ -1,13 +1,925 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="es">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <title>DUPPLA</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>DUPPLA</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f0f0f;color:#f0f0f0;min-height:100vh;overflow-x:hidden}
+#app{display:none}
+#loading{display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:12px}
+#login-screen{display:none;align-items:center;justify-content:center;min-height:100vh;background:#0a0a0a;padding:24px}
+.login-box{width:100%;max-width:380px;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:16px;padding:32px}
+.logo{font-size:32px;font-weight:800;color:#C8E05A;letter-spacing:2px;text-align:center;margin-bottom:6px}
+.logo-sub{font-size:13px;color:#555;text-align:center;margin-bottom:28px}
+.form-group{margin-bottom:16px}
+.form-group label{font-size:13px;color:#888;display:block;margin-bottom:6px}
+.form-group input{width:100%;padding:12px 14px;background:#111;border:1px solid #333;border-radius:10px;color:#fff;font-size:15px;outline:none;-webkit-appearance:none}
+.form-group input:focus{border-color:#C8E05A}
+.btn-login{width:100%;padding:13px;background:#C8E05A;border:none;border-radius:10px;color:#0a0a0a;font-weight:700;font-size:15px;cursor:pointer;margin-top:8px}
+.err-box{background:#2a1010;border:1px solid #4a2020;border-radius:8px;padding:10px 14px;font-size:13px;color:#ff6b6b;margin-bottom:16px;display:none}
+/* Layout */
+.sidebar{position:fixed;left:0;top:0;width:220px;height:100vh;background:#141414;border-right:1px solid #1f1f1f;display:flex;flex-direction:column;z-index:100;transition:transform .25s}
+.sidebar-logo{padding:22px 20px 14px;border-bottom:1px solid #1f1f1f}
+.sidebar-logo .l{font-size:20px;font-weight:800;color:#C8E05A;letter-spacing:1px}
+.sidebar-logo .ls{font-size:11px;color:#555;margin-top:2px}
+nav{flex:1;padding:10px;overflow-y:auto}
+.nav-btn{width:100%;display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;border:none;background:transparent;color:#888;cursor:pointer;font-size:13px;margin-bottom:2px;text-align:left;transition:all .15s}
+.nav-btn.active{background:#1e2a0e;color:#C8E05A;font-weight:600}
+.nav-btn .ico{font-size:16px}
+.sidebar-footer{padding:14px 18px;border-top:1px solid #1f1f1f}
+.user-email{font-size:11px;color:#444;margin-bottom:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.btn-logout{width:100%;padding:8px;background:transparent;border:1px solid #2a2a2a;border-radius:8px;color:#555;cursor:pointer;font-size:12px}
+.main{margin-left:220px;padding:28px;min-height:100vh}
+.mobile-header{display:none;position:fixed;top:0;left:0;right:0;height:54px;background:#141414;border-bottom:1px solid #1f1f1f;align-items:center;justify-content:space-between;padding:0 16px;z-index:200}
+.mobile-header .ml{font-size:18px;font-weight:800;color:#C8E05A}
+.hamburger{background:none;border:none;color:#fff;font-size:24px;cursor:pointer;padding:4px}
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99}
+/* Page */
+.page{display:none}
+.page.active{display:block}
+.page-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px}
+.page-title{font-size:22px;font-weight:700;color:#f0f0f0}
+.page-sub{font-size:13px;color:#555;margin-top:3px}
+/* Cards */
+.card{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:14px;padding:20px 22px;margin-bottom:16px}
+.metric-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:20px}
+.metric{background:#141414;border:1px solid #222;border-radius:12px;padding:14px 16px}
+.metric-label{font-size:11px;color:#555;margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em}
+.metric-value{font-size:22px;font-weight:700}
+.green{color:#C8E05A}.red{color:#ff6b6b}.blue{color:#378ADD}
+/* Table */
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th{text-align:left;padding:8px 10px;color:#555;font-weight:500;font-size:11px;border-bottom:1px solid #222}
+.tbl td{padding:9px 10px;border-bottom:1px solid #1a1a1a;color:#ccc;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px}
+.tbl tr:last-child td{border-bottom:none}
+.badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600}
+.b-web{background:#0c2a3a;color:#378ADD}
+.b-directo{background:#1a2a0a;color:#C8E05A}
+.b-distribuidor{background:#2a1f00;color:#EF9F27}
+.b-danger{background:#2a1010;color:#ff6b6b}
+/* Forms */
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.form-row.trio{grid-template-columns:1fr 1fr 1fr}
+.f-group{margin-bottom:12px}
+.f-group label{font-size:12px;color:#666;display:block;margin-bottom:5px}
+.f-group input,.f-group select,.f-group textarea{width:100%;padding:9px 12px;background:#111;border:1px solid #2a2a2a;border-radius:9px;color:#f0f0f0;font-size:14px;font-family:inherit;outline:none;-webkit-appearance:none}
+.f-group input:focus,.f-group select:focus{border-color:#C8E05A}
+/* Buttons */
+.btn{padding:9px 16px;border-radius:10px;border:1px solid #2a2a2a;background:transparent;color:#ccc;cursor:pointer;font-size:13px;font-weight:500;display:inline-flex;align-items:center;gap:5px;font-family:inherit}
+.btn-primary{background:#C8E05A;color:#0a0a0a;border-color:#C8E05A;font-weight:700}
+.btn-danger{color:#ff6b6b;border-color:#3a2020}
+.btn-sm{padding:5px 10px;font-size:12px;border-radius:8px}
+/* Modal */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:500;align-items:center;justify-content:center;padding:16px}
+.modal-bg.open{display:flex}
+.modal{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:16px;padding:26px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto}
+.modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+.modal-title{font-size:16px;font-weight:700;color:#f0f0f0}
+.modal-close{background:none;border:none;color:#666;font-size:20px;cursor:pointer;padding:0}
+/* Alert */
+.alert-warn{background:#1f1700;border:1px solid #3a2e00;border-radius:12px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:#EF9F27}
+/* Progress */
+.prog{height:7px;background:#111;border-radius:4px;margin-top:5px}
+.prog-fill{height:100%;border-radius:4px;background:#C8E05A;transition:width .4s}
+/* Stock badge */
+.s-ok{color:#C8E05A;font-weight:600}
+.s-low{color:#EF9F27;font-weight:600}
+.s-zero{color:#ff6b6b;font-weight:600}
+/* Notification bell */
+.notif-btn{position:relative;background:transparent;border:1px solid #2a2a2a;border-radius:10px;padding:6px 12px;color:#ccc;cursor:pointer;font-size:14px}
+.notif-dot{position:absolute;top:-3px;right:-3px;background:#C8E05A;color:#0a0a0a;border-radius:50%;width:16px;height:16px;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.notif-panel{position:absolute;bottom:calc(100% + 8px);right:0;width:280px;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:14px;overflow:hidden;display:none;z-index:300}
+.notif-panel.open{display:block}
+.notif-head{padding:10px 14px;border-bottom:1px solid #222;font-size:13px;font-weight:600;color:#f0f0f0}
+.notif-item{padding:10px 14px;border-bottom:1px solid #1a1a1a;cursor:pointer}
+.notif-item.unread{background:#1e2a0e}
+.notif-item-title{font-size:12px;font-weight:600;color:#f0f0f0;margin-bottom:2px}
+.notif-item-body{font-size:11px;color:#666;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.notif-empty{padding:20px;text-align:center;font-size:13px;color:#555}
+/* Responsive */
+@media(max-width:768px){
+  .sidebar{transform:translateX(-100%)}
+  .sidebar.open{transform:translateX(0)}
+  .mobile-header{display:flex}
+  .main{margin-left:0;padding:70px 14px 24px}
+  .form-row.trio{grid-template-columns:1fr 1fr}
+  .form-row{grid-template-columns:1fr}
+}
+/* Bar chart */
+.bar-chart{display:flex;align-items:flex-end;gap:8px;height:100px;margin:12px 0}
+.bar-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px}
+.bar-rect{width:100%;border-radius:4px 4px 0 0;min-height:3px;transition:height .4s}
+.bar-lbl{font-size:10px;color:#555;text-align:center}
+.bar-val{font-size:10px;font-weight:600;color:#f0f0f0}
+.empty-state{text-align:center;padding:32px;color:#444;font-size:14px}
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <div style="font-size:28px;font-weight:800;color:#C8E05A;letter-spacing:2px">DUPPLA</div>
+  <div style="font-size:13px;color:#555">Cargando...</div>
+</div>
+
+<div id="login-screen">
+  <div class="login-box">
+    <div class="logo">DUPPLA</div>
+    <div class="logo-sub">Panel de gestión interno</div>
+    <div class="err-box" id="login-err"></div>
+    <div class="form-group"><label>Correo electrónico</label><input type="email" id="li-email" placeholder="correo@ejemplo.com"></div>
+    <div class="form-group"><label>Contraseña</label><input type="password" id="li-pass" placeholder="••••••••"></div>
+    <button class="btn-login" id="btn-login" onclick="doLogin()">Ingresar</button>
+  </div>
+</div>
+
+<div id="app">
+  <div class="overlay" id="overlay" onclick="closeSidebar()"></div>
+  <div class="mobile-header">
+    <span class="ml">DUPPLA</span>
+    <div style="display:flex;gap:8px;align-items:center">
+      <div style="position:relative">
+        <button class="notif-btn" onclick="toggleNotif()" id="notif-toggle">🔔<span class="notif-dot" id="notif-count" style="display:none">0</span></button>
+        <div class="notif-panel" id="notif-panel">
+          <div class="notif-head">Notificaciones</div>
+          <div id="notif-list"><div class="notif-empty">Sin notificaciones</div></div>
+        </div>
+      </div>
+      <button class="hamburger" onclick="toggleSidebar()">☰</button>
+    </div>
+  </div>
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-logo"><div class="l">DUPPLA</div><div class="ls">Panel de gestión</div></div>
+    <nav id="nav-menu"></nav>
+    <div class="sidebar-footer">
+      <div style="position:relative;margin-bottom:10px">
+        <button class="notif-btn" style="width:100%" onclick="toggleNotif2()" id="notif-toggle2">🔔 Notificaciones <span class="notif-dot" id="notif-count2" style="display:none;position:relative;top:0;right:0;margin-left:4px">0</span></button>
+        <div class="notif-panel" id="notif-panel2" style="bottom:auto;top:auto;left:0;right:0;margin-bottom:8px;position:relative">
+        </div>
+      </div>
+      <div class="user-email" id="user-email-display"></div>
+      <button class="btn-logout" onclick="doLogout()">Cerrar sesión</button>
+    </div>
+  </div>
+  <div class="main">
+    <div class="page active" id="page-dashboard"></div>
+    <div class="page" id="page-ventas"></div>
+    <div class="page" id="page-inventario"></div>
+    <div class="page" id="page-clientes"></div>
+    <div class="page" id="page-gastos"></div>
+    <div class="page" id="page-proveedores"></div>
+    <div class="page" id="page-pedidos"></div>
+    <div class="page" id="page-metas"></div>
+  </div>
+</div>
+
+<!-- Modals -->
+<div class="modal-bg" id="modal-venta">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title">Registrar venta</span><button class="modal-close" onclick="closeModal('modal-venta')">✕</button></div>
+    <div class="form-row">
+      <div class="f-group"><label>Fecha *</label><input type="date" id="v-fecha"></div>
+      <div class="f-group"><label>Canal</label><select id="v-canal"><option value="web">Página web</option><option value="directo">Venta directa</option><option value="distribuidor">Distribuidor</option></select></div>
+    </div>
+    <div class="f-group"><label>Producto *</label><select id="v-prod" onchange="fillVentaPrecio()"><option value="">— Selecciona —</option></select></div>
+    <div class="form-row">
+      <div class="f-group"><label>Cantidad</label><input type="number" id="v-cant" value="1" min="1" oninput="calcVentaTotal()"></div>
+      <div class="f-group"><label>Precio ($)</label><input type="number" id="v-precio" oninput="calcVentaTotal()"></div>
+    </div>
+    <div class="f-group"><label>Total ($)</label><input type="number" id="v-total" readonly style="opacity:.6"></div>
+    <div class="f-group"><label>Cliente</label><input type="text" id="v-cliente" placeholder="Nombre del cliente"></div>
+    <div class="f-group"><label>Nota</label><input type="text" id="v-nota" placeholder="Opcional"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">
+      <button class="btn" onclick="closeModal('modal-venta')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarVenta()">Registrar venta</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="modal-producto">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title">Nuevo producto</span><button class="modal-close" onclick="closeModal('modal-producto')">✕</button></div>
+    <div class="f-group"><label>Nombre *</label><input type="text" id="p-nombre" placeholder="Ej: Omega 3 Integral Médica"></div>
+    <div class="form-row">
+      <div class="f-group"><label>Marca</label><select id="p-marca"><option>Integral Médica</option><option>MuscleTech</option><option>BSN</option><option>Nutrex</option><option>Nutricost</option><option>Vitanas</option><option>Smart Nutrition</option><option>Insane Labz</option><option>Youtheory</option><option>Otra</option></select></div>
+      <div class="f-group"><label>Stock inicial</label><input type="number" id="p-stock" value="0" min="0"></div>
+    </div>
+    <div class="form-row">
+      <div class="f-group"><label>Precio costo ($)</label><input type="number" id="p-costo" value="0"></div>
+      <div class="f-group"><label>Precio venta ($)</label><input type="number" id="p-pventa" value="0"></div>
+    </div>
+    <div class="f-group"><label>Stock mínimo (alerta)</label><input type="number" id="p-minimo" value="5" min="0"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">
+      <button class="btn" onclick="closeModal('modal-producto')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarProducto()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="modal-gasto">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title">Registrar gasto</span><button class="modal-close" onclick="closeModal('modal-gasto')">✕</button></div>
+    <div class="form-row">
+      <div class="f-group"><label>Fecha *</label><input type="date" id="g-fecha"></div>
+      <div class="f-group"><label>Categoría</label><select id="g-cat"><option value="importacion">Importación</option><option value="marketing">Marketing</option><option value="logistica">Logística</option><option value="plataformas">Plataformas</option><option value="operativo">Operativo</option><option value="otro">Otro</option></select></div>
+    </div>
+    <div class="f-group"><label>Descripción *</label><input type="text" id="g-desc" placeholder="Ej: Pago proveedor MuscleTech"></div>
+    <div class="f-group"><label>Valor ($) *</label><input type="number" id="g-valor"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">
+      <button class="btn" onclick="closeModal('modal-gasto')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarGasto()">Guardar gasto</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="modal-proveedor">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title">Agregar proveedor</span><button class="modal-close" onclick="closeModal('modal-proveedor')">✕</button></div>
+    <div class="f-group"><label>Nombre *</label><input type="text" id="pr-nombre" placeholder="Ej: NutritionFirst USA"></div>
+    <div class="form-row">
+      <div class="f-group"><label>País</label><input type="text" id="pr-pais" value="Estados Unidos"></div>
+      <div class="f-group"><label>Contacto</label><input type="text" id="pr-contacto"></div>
+    </div>
+    <div class="form-row">
+      <div class="f-group"><label>Email</label><input type="email" id="pr-email"></div>
+      <div class="f-group"><label>WhatsApp</label><input type="text" id="pr-wa" placeholder="+1 555 000 0000"></div>
+    </div>
+    <div class="f-group"><label>Notas</label><input type="text" id="pr-notas"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">
+      <button class="btn" onclick="closeModal('modal-proveedor')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarProveedor()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="modal-pedido">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title">Nuevo pedido</span><button class="modal-close" onclick="closeModal('modal-pedido')">✕</button></div>
+    <div class="form-row">
+      <div class="f-group"><label>Proveedor *</label><select id="pe-prov"><option value="">— Selecciona —</option></select></div>
+      <div class="f-group"><label>Fecha</label><input type="date" id="pe-fecha"></div>
+    </div>
+    <div class="f-group"><label>Productos (descripción)</label><input type="text" id="pe-prods" placeholder="Ej: 20x Omega 3, 10x Proteína"></div>
+    <div class="form-row">
+      <div class="f-group"><label>Total pedido ($)</label><input type="number" id="pe-total"></div>
+      <div class="f-group"><label>Costo flete ($)</label><input type="number" id="pe-flete" value="0"></div>
+    </div>
+    <div class="f-group"><label>Notas</label><input type="text" id="pe-notas"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">
+      <button class="btn" onclick="closeModal('modal-pedido')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarPedido()">Crear pedido</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="modal-meta">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title">Nueva meta mensual</span><button class="modal-close" onclick="closeModal('modal-meta')">✕</button></div>
+    <div class="f-group"><label>Mes *</label><input type="month" id="me-mes"></div>
+    <div class="form-row">
+      <div class="f-group"><label>Meta ventas ($) *</label><input type="number" id="me-ventas"></div>
+      <div class="f-group"><label>Máx. gastos ($)</label><input type="number" id="me-gastos" value="0"></div>
+    </div>
+    <div class="f-group"><label>Notas</label><input type="text" id="me-notas"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">
+      <button class="btn" onclick="closeModal('modal-meta')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarMeta()">Guardar meta</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="modal-ajuste">
+  <div class="modal" style="max-width:320px">
+    <div class="modal-header"><span class="modal-title" id="ajuste-title">Ajustar stock</span><button class="modal-close" onclick="closeModal('modal-ajuste')">✕</button></div>
+    <div class="f-group"><label>Cantidad a sumar (+) o restar (-)</label><input type="number" id="aj-delta" placeholder="Ej: 10 o -5"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">
+      <button class="btn" onclick="closeModal('modal-ajuste')">Cancelar</button>
+      <button class="btn btn-primary" onclick="aplicarAjuste()">Aplicar</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, query, orderBy, serverTimestamp, limit } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAll_znaCE0lQO2eyVf_1-vpJvfDg2ALuE",
+  authDomain: "dupplafitness.firebaseapp.com",
+  projectId: "dupplafitness",
+  storageBucket: "dupplafitness.firebasestorage.app",
+  messagingSenderId: "324586851417",
+  appId: "1:324586851417:web:ab0b979ff1fa36e7cb7548"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+
+// State
+let DATA = { ventas:[], inventario:[], gastos:[], proveedores:[], pedidos:[], metas:[], notificaciones:[] };
+let currentPage = 'dashboard';
+let ajusteProductoId = null;
+let unsubs = [];
+
+const fmt = n => '$' + Number(n||0).toLocaleString('es-CO');
+const today = () => new Date().toISOString().slice(0,10);
+
+// Auth
+onAuthStateChanged(auth, user => {
+  document.getElementById('loading').style.display = 'none';
+  if (user) {
+    document.getElementById('user-email-display').textContent = user.email;
+    document.getElementById('app').style.display = 'block';
+    startListeners();
+    buildNav();
+    showPage('dashboard');
+    requestNotifPermission();
+  } else {
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('app').style.display = 'none';
+  }
+});
+
+window.doLogin = async () => {
+  const email = document.getElementById('li-email').value;
+  const pass = document.getElementById('li-pass').value;
+  const err = document.getElementById('login-err');
+  const btn = document.getElementById('btn-login');
+  err.style.display = 'none';
+  btn.textContent = 'Ingresando...';
+  try {
+    await signInWithEmailAndPassword(auth, email, pass);
+    document.getElementById('login-screen').style.display = 'none';
+  } catch(e) {
+    err.textContent = 'Correo o contraseña incorrectos';
+    err.style.display = 'block';
+    btn.textContent = 'Ingresar';
+  }
+};
+
+window.doLogout = () => signOut(auth);
+
+// Firestore listeners
+function startListeners() {
+  const cols = ['ventas','inventario','gastos','proveedores','pedidos','metas'];
+  cols.forEach(col => {
+    const q = query(collection(db, col), orderBy('createdAt','desc'));
+    const unsub = onSnapshot(q, snap => {
+      DATA[col] = snap.docs.map(d => ({id:d.id,...d.data()}));
+      if (currentPage === col || currentPage === 'dashboard') renderPage(currentPage);
+      if (col === 'inventario') checkStockAlerts();
+    });
+    unsubs.push(unsub);
+  });
+  // Notificaciones
+  const nq = query(collection(db,'notificaciones'), orderBy('createdAt','desc'), limit(30));
+  const unsub = onSnapshot(nq, (snap, prevSnap) => {
+    const prev = DATA.notificaciones.map(n=>n.id);
+    DATA.notificaciones = snap.docs.map(d=>({id:d.id,...d.data()}));
+    // Show browser notification for new ones
+    snap.docChanges().forEach(change => {
+      if (change.type === 'added' && prev.length > 0 && !prev.includes(change.doc.id)) {
+        const d = change.doc.data();
+        showBrowserNotif(d.titulo, d.cuerpo);
+      }
+    });
+    renderNotifBell();
+  });
+  unsubs.push(unsub);
+}
+
+// Navigation
+const MENU = [
+  {id:'dashboard',label:'Dashboard',ico:'📊'},
+  {id:'ventas',label:'Ventas',ico:'🛒'},
+  {id:'inventario',label:'Inventario',ico:'📦'},
+  {id:'clientes',label:'Clientes',ico:'👥'},
+  {id:'gastos',label:'Gastos',ico:'💸'},
+  {id:'proveedores',label:'Proveedores',ico:'🚚'},
+  {id:'pedidos',label:'Pedidos',ico:'📋'},
+  {id:'metas',label:'Metas',ico:'🎯'},
+];
+
+function buildNav() {
+  const nav = document.getElementById('nav-menu');
+  nav.innerHTML = MENU.map(m => `<button class="nav-btn${m.id===currentPage?' active':''}" onclick="showPage('${m.id}')"><span class="ico">${m.ico}</span>${m.label}</button>`).join('');
+}
+
+window.showPage = (id) => {
+  currentPage = id;
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => { if(b.textContent.trim().toLowerCase().includes(MENU.find(m=>m.id===id)?.label.toLowerCase())) b.classList.add('active'); });
+  buildNav();
+  renderPage(id);
+  closeSidebar();
+};
+
+function renderPage(id) {
+  if(id==='dashboard') renderDashboard();
+  else if(id==='ventas') renderVentas();
+  else if(id==='inventario') renderInventario();
+  else if(id==='clientes') renderClientes();
+  else if(id==='gastos') renderGastos();
+  else if(id==='proveedores') renderProveedores();
+  else if(id==='pedidos') renderPedidos();
+  else if(id==='metas') renderMetas();
+}
+
+// Sidebar mobile
+window.toggleSidebar = () => { document.getElementById('sidebar').classList.toggle('open'); document.getElementById('overlay').style.display='block'; };
+window.closeSidebar = () => { document.getElementById('sidebar').classList.remove('open'); document.getElementById('overlay').style.display='none'; };
+
+// Modals
+window.openModal = (id) => document.getElementById(id).classList.add('open');
+window.closeModal = (id) => document.getElementById(id).classList.remove('open');
+
+// Notifications
+function requestNotifPermission() {
+  if ('Notification' in window && Notification.permission === 'default') {
+    setTimeout(() => Notification.requestPermission(), 3000);
+  }
+}
+
+function showBrowserNotif(title, body) {
+  if ('Notification' in window && Notification.permission === 'granted') {
+    new Notification(title, {body, tag:'duppla'});
+  }
+}
+
+async function pushNotif(titulo, cuerpo, tipo) {
+  try {
+    await addDoc(collection(db,'notificaciones'), {titulo, cuerpo, tipo, leida:false, createdAt:serverTimestamp()});
+  } catch(e) {}
+}
+
+function renderNotifBell() {
+  const unread = DATA.notificaciones.filter(n=>!n.leida).length;
+  ['notif-count','notif-count2'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) { el.textContent = unread; el.style.display = unread>0?'flex':'none'; }
+  });
+  const list = DATA.notificaciones.slice(0,15).map(n => `
+    <div class="notif-item${n.leida?'':' unread'}">
+      <div class="notif-item-title">${n.titulo||''}</div>
+      <div class="notif-item-body">${n.cuerpo||''}</div>
+    </div>`).join('') || '<div class="notif-empty">Sin notificaciones</div>';
+  document.getElementById('notif-list').innerHTML = list;
+}
+
+window.toggleNotif = () => {
+  document.getElementById('notif-panel').classList.toggle('open');
+  markNotifsRead();
+};
+window.toggleNotif2 = () => markNotifsRead();
+
+async function markNotifsRead() {
+  DATA.notificaciones.filter(n=>!n.leida).forEach(n => updateDoc(doc(db,'notificaciones',n.id),{leida:true}).catch(()=>{}));
+}
+
+function checkStockAlerts() {
+  const low = DATA.inventario.filter(p => p.stock <= (p.stockMinimo||5));
+  if(low.length > 0) {
+    const key = 'duppla_stock_'+today();
+    if(!localStorage.getItem(key)) {
+      const nombres = low.map(p=>`${p.nombre} (${p.stock})`).join(', ');
+      pushNotif('⚠️ Stock bajo', nombres, 'stock');
+      localStorage.setItem(key,'1');
+    }
+  }
+}
+
+// ===== DASHBOARD =====
+function getWeek() {
+  const now = new Date(), day = now.getDay();
+  const mon = new Date(now);
+  mon.setDate(now.getDate()-(day===0?6:day-1));
+  mon.setHours(0,0,0,0);
+  const sun = new Date(mon); sun.setDate(mon.getDate()+6); sun.setHours(23,59,59,999);
+  return {start:mon,end:sun};
+}
+
+function renderDashboard() {
+  const {start,end} = getWeek();
+  const wv = DATA.ventas.filter(v=>{const d=new Date(v.fecha);return d>=start&&d<=end;});
+  const wg = DATA.gastos.filter(g=>{const d=new Date(g.fecha);return d>=start&&d<=end;});
+  const tv = wv.reduce((s,v)=>s+Number(v.total||0),0);
+  const tg = wg.reduce((s,g)=>s+Number(g.valor||0),0);
+  const util = tv-tg;
+  const hoyV = DATA.ventas.filter(v=>v.fecha===today());
+  const totalHoy = hoyV.reduce((s,v)=>s+Number(v.total||0),0);
+
+  const low = DATA.inventario.filter(p=>p.stock<=(p.stockMinimo||5));
+  const alertHtml = low.length?`<div class="alert-warn">⚠️ <strong>Stock bajo:</strong> ${low.map(p=>`${p.nombre} (${p.stock})`).join(' · ')}</div>`:'';
+
+  const canales = {web:0,directo:0,distribuidor:0};
+  wv.forEach(v=>{if(canales[v.canal]!==undefined)canales[v.canal]+=Number(v.total||0);});
+  const maxC = Math.max(...Object.values(canales),1);
+  const barHtml = Object.entries({web:'Web',directo:'Directo',distribuidor:'Dist.'}).map(([k,l])=>`
+    <div class="bar-col">
+      <div class="bar-val">${fmt(canales[k])}</div>
+      <div class="bar-rect" style="height:${Math.max(3,(canales[k]/maxC)*80)}px;background:${k==='web'?'#378ADD':k==='directo'?'#C8E05A':'#EF9F27'}"></div>
+      <div class="bar-lbl">${l}</div>
+    </div>`).join('');
+
+  const pm={};
+  DATA.ventas.forEach(v=>{if(!pm[v.producto])pm[v.producto]={cant:0};pm[v.producto].cant+=Number(v.cant||0);});
+  const top = Object.entries(pm).sort((a,b)=>b[1].cant-a[1].cant).slice(0,5);
+  const maxT = top.length?top[0][1].cant:1;
+  const medals=['🥇','🥈','🥉','4️⃣','5️⃣'];
+  const topHtml = top.length?top.map(([n,d],i)=>`
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+      <span style="font-size:16px">${medals[i]}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12px;font-weight:500;color:#ccc;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${n}</div>
+        <div class="prog"><div class="prog-fill" style="width:${Math.round((d.cant/maxT)*100)}%"></div></div>
+      </div>
+      <span style="font-size:11px;color:#555">${d.cant} uds</span>
+    </div>`).join(''):'<div class="empty-state">Sin ventas aún</div>';
+
+  const metaActual = DATA.metas.find(m=>m.mes===new Date().toISOString().slice(0,7));
+  const metaHtml = metaActual?`
+    <div class="card" style="margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+        <span style="font-size:13px;font-weight:600;color:#ccc">Meta del mes</span>
+        <span style="font-size:13px;color:#C8E05A;font-weight:700">${Math.min(100,Math.round((tv/metaActual.ventasMeta)*100))}%</span>
+      </div>
+      <div class="prog"><div class="prog-fill" style="width:${Math.min(100,Math.round((tv/metaActual.ventasMeta)*100))}%"></div></div>
+      <div style="display:flex;justify-content:space-between;margin-top:5px;font-size:11px;color:#555">
+        <span>${fmt(tv)} acumulado</span><span>Meta: ${fmt(metaActual.ventasMeta)}</span>
+      </div>
+    </div>`:'';
+
+  const lastV = DATA.ventas.slice(0,8);
+  const tblHtml = lastV.length?`<table class="tbl"><thead><tr><th>Fecha</th><th>Cliente</th><th>Producto</th><th>Canal</th><th>Total</th></tr></thead><tbody>${
+    lastV.map(v=>`<tr><td>${v.fecha||''}</td><td>${v.cliente||'—'}</td><td>${v.producto||''}</td><td><span class="badge b-${v.canal||'web'}">${v.canal||''}</span></td><td style="color:#C8E05A;font-weight:600">${fmt(v.total)}</td></tr>`).join('')
+  }</tbody></table>`:'<div class="empty-state">Sin ventas registradas</div>';
+
+  document.getElementById('page-dashboard').innerHTML = `
+    <div class="page-header"><div><div class="page-title">Dashboard</div><div class="page-sub">Semana actual</div></div></div>
+    ${alertHtml}
+    <div class="metric-grid">
+      <div class="metric"><div class="metric-label">Ingresos semana</div><div class="metric-value green">${fmt(tv)}</div></div>
+      <div class="metric"><div class="metric-label">Gastos semana</div><div class="metric-value red">${fmt(tg)}</div></div>
+      <div class="metric"><div class="metric-label">Utilidad</div><div class="metric-value ${util>=0?'green':'red'}">${fmt(util)}</div></div>
+      <div class="metric"><div class="metric-label">Ventas hoy</div><div class="metric-value blue">${hoyV.length}</div></div>
+    </div>
+    ${metaHtml}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
+      <div class="card"><div style="font-size:13px;font-weight:600;color:#ccc;margin-bottom:8px">Por canal — semana</div><div class="bar-chart">${barHtml}</div></div>
+      <div class="card"><div style="font-size:13px;font-weight:600;color:#ccc;margin-bottom:12px">Más vendidos</div>${topHtml}</div>
+    </div>
+    <div class="card"><div style="font-size:13px;font-weight:600;color:#ccc;margin-bottom:12px">Últimas ventas</div>${tblHtml}</div>`;
+}
+
+// ===== VENTAS =====
+function renderVentas() {
+  const rows = DATA.ventas.map(v=>`<tr>
+    <td>${v.fecha||''}</td><td>${v.cliente||'—'}</td><td>${v.producto||''}</td>
+    <td><span class="badge b-${v.canal||'web'}">${v.canal||''}</span></td>
+    <td>${v.cant||1}</td><td style="color:#C8E05A;font-weight:600">${fmt(v.total)}</td>
+    <td><button class="btn btn-sm btn-danger" onclick="eliminarDoc('ventas','${v.id}')">✕</button></td>
+  </tr>`).join('');
+
+  document.getElementById('page-ventas').innerHTML = `
+    <div class="page-header">
+      <div><div class="page-title">Ventas</div></div>
+      <button class="btn btn-primary" onclick="abrirModalVenta()">+ Nueva venta</button>
+    </div>
+    <div class="card">
+      ${DATA.ventas.length?`<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Fecha</th><th>Cliente</th><th>Producto</th><th>Canal</th><th>Cant.</th><th>Total</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`:'<div class="empty-state">Sin ventas registradas</div>'}
+    </div>`;
+}
+
+window.abrirModalVenta = () => {
+  document.getElementById('v-fecha').value = today();
+  const sel = document.getElementById('v-prod');
+  sel.innerHTML = '<option value="">— Selecciona —</option>' + DATA.inventario.map(p=>`<option value="${p.id}" data-pventa="${p.pventa}" data-stock="${p.stock}">${p.nombre} (stock: ${p.stock})</option>`).join('');
+  openModal('modal-venta');
+};
+
+window.fillVentaPrecio = () => {
+  const sel = document.getElementById('v-prod');
+  const opt = sel.options[sel.selectedIndex];
+  if(opt && opt.dataset.pventa) {
+    document.getElementById('v-precio').value = opt.dataset.pventa;
+    calcVentaTotal();
+  }
+};
+
+window.calcVentaTotal = () => {
+  const c = Number(document.getElementById('v-cant').value)||0;
+  const p = Number(document.getElementById('v-precio').value)||0;
+  document.getElementById('v-total').value = c*p;
+};
+
+window.guardarVenta = async () => {
+  const prodId = document.getElementById('v-prod').value;
+  const cant = Number(document.getElementById('v-cant').value);
+  const precio = Number(document.getElementById('v-precio').value);
+  const fecha = document.getElementById('v-fecha').value;
+  if(!fecha||!prodId||!cant||!precio){alert('Completa los campos requeridos');return;}
+  const prod = DATA.inventario.find(p=>p.id===prodId);
+  if(!prod){alert('Producto no encontrado');return;}
+  if(prod.stock < cant){alert(`Stock insuficiente. Disponible: ${prod.stock}`);return;}
+  const total = Number(document.getElementById('v-total').value);
+  const cliente = document.getElementById('v-cliente').value;
+  await updateDoc(doc(db,'inventario',prodId),{stock:prod.stock-cant});
+  await addDoc(collection(db,'ventas'),{fecha,canal:document.getElementById('v-canal').value,producto:prod.nombre,prodId,cant,precio,total,cliente,nota:document.getElementById('v-nota').value,createdAt:serverTimestamp()});
+  await pushNotif('💰 Nueva venta',`${prod.nombre}${cliente?' — '+cliente:''} · ${fmt(total)}`,'venta');
+  if(prod.stock-cant<=prod.stockMinimo) await pushNotif('⚠️ Stock bajo',`${prod.nombre} (${prod.stock-cant} uds)`,'stock');
+  closeModal('modal-venta');
+};
+
+// ===== INVENTARIO =====
+function renderInventario() {
+  const low = DATA.inventario.filter(p=>p.stock<=(p.stockMinimo||5));
+  const alertHtml = low.length?`<div class="alert-warn">⚠️ Stock bajo: ${low.map(p=>`${p.nombre} (${p.stock})`).join(', ')}</div>`:'';
+  const rows = DATA.inventario.map(p=>{
+    const margen = p.costo>0?Math.round(((p.pventa-p.costo)/p.costo)*100):null;
+    const sc = p.stock===0?'s-zero':p.stock<=(p.stockMinimo||5)?'s-low':'s-ok';
+    return `<tr>
+      <td style="font-weight:500;color:#f0f0f0">${p.nombre}</td>
+      <td style="color:#666;font-size:12px">${p.marca||''}</td>
+      <td><span class="${sc}">${p.stock}</span><span style="color:#444;font-size:11px"> /mín ${p.stockMinimo||5}</span></td>
+      <td>${fmt(p.pventa)}</td>
+      <td>${margen!==null?margen+'%':'—'}</td>
+      <td>
+        <button class="btn btn-sm" onclick="abrirAjuste('${p.id}','${p.nombre.replace(/'/g,"\\'")}',${p.stock})">±</button>
+        <button class="btn btn-sm btn-danger" onclick="eliminarDoc('inventario','${p.id}')">✕</button>
+      </td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('page-inventario').innerHTML = `
+    <div class="page-header">
+      <div><div class="page-title">Inventario</div></div>
+      <button class="btn btn-primary" onclick="openModal('modal-producto')">+ Agregar producto</button>
+    </div>
+    ${alertHtml}
+    <div class="card">
+      ${DATA.inventario.length?`<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Producto</th><th>Marca</th><th>Stock</th><th>P.Venta</th><th>Margen</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`:'<div class="empty-state">Sin productos. Agrega el primero.</div>'}
+    </div>`;
+}
+
+window.guardarProducto = async () => {
+  const nombre = document.getElementById('p-nombre').value.trim();
+  const pventa = Number(document.getElementById('p-pventa').value);
+  if(!nombre||!pventa){alert('Nombre y precio de venta son requeridos');return;}
+  await addDoc(collection(db,'inventario'),{
+    nombre, marca:document.getElementById('p-marca').value,
+    stock:Number(document.getElementById('p-stock').value)||0,
+    costo:Number(document.getElementById('p-costo').value)||0,
+    pventa, stockMinimo:Number(document.getElementById('p-minimo').value)||5,
+    createdAt:serverTimestamp()
+  });
+  closeModal('modal-producto');
+  document.getElementById('p-nombre').value='';
+  document.getElementById('p-stock').value='0';
+  document.getElementById('p-costo').value='0';
+  document.getElementById('p-pventa').value='0';
+};
+
+window.abrirAjuste = (id, nombre, stock) => {
+  ajusteProductoId = id;
+  document.getElementById('ajuste-title').textContent = `Ajustar stock — ${nombre} (actual: ${stock})`;
+  document.getElementById('aj-delta').value = '';
+  openModal('modal-ajuste');
+};
+
+window.aplicarAjuste = async () => {
+  const delta = Number(document.getElementById('aj-delta').value);
+  if(!delta){alert('Ingresa un número distinto de 0');return;}
+  const prod = DATA.inventario.find(p=>p.id===ajusteProductoId);
+  if(!prod) return;
+  const nuevo = Math.max(0, prod.stock+delta);
+  await updateDoc(doc(db,'inventario',ajusteProductoId),{stock:nuevo});
+  closeModal('modal-ajuste');
+};
+
+// ===== CLIENTES =====
+function renderClientes() {
+  const cm={};
+  DATA.ventas.forEach(v=>{
+    if(!v.cliente) return;
+    if(!cm[v.cliente]) cm[v.cliente]={nombre:v.cliente,compras:0,total:0,ultima:'',fav:{}};
+    cm[v.cliente].compras++;
+    cm[v.cliente].total+=Number(v.total||0);
+    if(!cm[v.cliente].ultima||v.fecha>cm[v.cliente].ultima) cm[v.cliente].ultima=v.fecha;
+    cm[v.cliente].fav[v.producto]=(cm[v.cliente].fav[v.producto]||0)+1;
+  });
+  const clientes = Object.values(cm).sort((a,b)=>b.total-a.total);
+  const rows = clientes.map(c=>{
+    const initials = c.nombre.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+    const fav = Object.entries(c.fav).sort((a,b)=>b[1]-a[1])[0];
+    return `<tr>
+      <td><div style="display:flex;align-items:center;gap:8px"><span style="width:30px;height:30px;border-radius:50%;background:#1e2a0e;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#C8E05A;flex-shrink:0">${initials}</span>${c.nombre}</div></td>
+      <td>${c.compras}</td>
+      <td style="color:#C8E05A;font-weight:600">${fmt(c.total)}</td>
+      <td style="font-size:12px;color:#666">${fav?fav[0].split(' ').slice(0,2).join(' '):'—'}</td>
+      <td style="font-size:12px">${c.ultima}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('page-clientes').innerHTML = `
+    <div class="page-header"><div><div class="page-title">Clientes</div><div class="page-sub">${clientes.length} clientes registrados</div></div></div>
+    <div class="card">
+      ${clientes.length?`<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Cliente</th><th>Compras</th><th>Total</th><th>Producto fav.</th><th>Última compra</th></tr></thead><tbody>${rows}</tbody></table></div>`:'<div class="empty-state">Se crean automáticamente desde las ventas</div>'}
+    </div>`;
+}
+
+// ===== GASTOS =====
+const CATS = {importacion:'Importación',marketing:'Marketing',logistica:'Logística',plataformas:'Plataformas',operativo:'Operativo',otro:'Otro'};
+
+function renderGastos() {
+  const totCat = Object.keys(CATS).map(k=>({k,l:CATS[k],t:DATA.gastos.filter(g=>g.cat===k).reduce((s,g)=>s+Number(g.valor||0),0)})).filter(c=>c.t>0);
+  const total = DATA.gastos.reduce((s,g)=>s+Number(g.valor||0),0);
+  const catHtml = [...totCat,{k:'total',l:'Total',t:total}].map(c=>`<div class="metric"><div class="metric-label">${c.l}</div><div class="metric-value" style="color:${c.k==='total'?'#ff6b6b':'#EF9F27'};font-size:18px">${fmt(c.t)}</div></div>`).join('');
+  const rows = DATA.gastos.map(g=>`<tr>
+    <td>${g.fecha||''}</td>
+    <td><span class="badge b-danger">${CATS[g.cat]||g.cat}</span></td>
+    <td>${g.desc||''}</td>
+    <td style="color:#ff6b6b;font-weight:600">${fmt(g.valor)}</td>
+    <td><button class="btn btn-sm btn-danger" onclick="eliminarDoc('gastos','${g.id}')">✕</button></td>
+  </tr>`).join('');
+
+  document.getElementById('page-gastos').innerHTML = `
+    <div class="page-header">
+      <div><div class="page-title">Gastos</div></div>
+      <button class="btn btn-primary" onclick="abrirModalGasto()">+ Registrar gasto</button>
+    </div>
+    <div class="metric-grid" style="margin-bottom:16px">${catHtml}</div>
+    <div class="card">
+      ${DATA.gastos.length?`<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Fecha</th><th>Categoría</th><th>Descripción</th><th>Valor</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`:'<div class="empty-state">Sin gastos registrados</div>'}
+    </div>`;
+}
+
+window.abrirModalGasto = () => { document.getElementById('g-fecha').value=today(); openModal('modal-gasto'); };
+
+window.guardarGasto = async () => {
+  const fecha=document.getElementById('g-fecha').value;
+  const desc=document.getElementById('g-desc').value.trim();
+  const valor=Number(document.getElementById('g-valor').value);
+  if(!fecha||!desc||!valor){alert('Completa todos los campos');return;}
+  await addDoc(collection(db,'gastos'),{fecha,cat:document.getElementById('g-cat').value,desc,valor,createdAt:serverTimestamp()});
+  closeModal('modal-gasto');
+  document.getElementById('g-desc').value='';
+  document.getElementById('g-valor').value='';
+};
+
+// ===== PROVEEDORES =====
+function renderProveedores() {
+  const cards = DATA.proveedores.map(p=>`
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">
+        <div>
+          <div style="font-size:15px;font-weight:700;color:#f0f0f0;margin-bottom:4px">${p.nombre}</div>
+          <div style="font-size:12px;color:#555">${p.pais||''}</div>
+          ${p.contacto?`<div style="font-size:12px;color:#666;margin-top:4px">👤 ${p.contacto}</div>`:''}
+          ${p.email?`<div style="font-size:12px;color:#666">✉️ ${p.email}</div>`:''}
+          ${p.wa?`<div style="font-size:12px;color:#666">📱 ${p.wa}</div>`:''}
+          ${p.notas?`<div style="font-size:12px;color:#555;margin-top:6px">📝 ${p.notas}</div>`:''}
+        </div>
+        <button class="btn btn-sm btn-danger" onclick="eliminarDoc('proveedores','${p.id}')">Eliminar</button>
+      </div>
+    </div>`).join('');
+
+  document.getElementById('page-proveedores').innerHTML = `
+    <div class="page-header">
+      <div><div class="page-title">Proveedores</div></div>
+      <button class="btn btn-primary" onclick="openModal('modal-proveedor')">+ Agregar proveedor</button>
+    </div>
+    ${DATA.proveedores.length?cards:'<div class="card"><div class="empty-state">Sin proveedores. Agrega el primero.</div></div>'}`;
+}
+
+window.guardarProveedor = async () => {
+  const nombre=document.getElementById('pr-nombre').value.trim();
+  if(!nombre){alert('El nombre es requerido');return;}
+  await addDoc(collection(db,'proveedores'),{nombre,pais:document.getElementById('pr-pais').value,contacto:document.getElementById('pr-contacto').value,email:document.getElementById('pr-email').value,wa:document.getElementById('pr-wa').value,notas:document.getElementById('pr-notas').value,createdAt:serverTimestamp()});
+  closeModal('modal-proveedor');
+  ['pr-nombre','pr-contacto','pr-email','pr-wa','pr-notas'].forEach(id=>document.getElementById(id).value='');
+};
+
+// ===== PEDIDOS =====
+const EST = {pendiente:{l:'Pendiente',c:'#EF9F27',bg:'#2a1f00'},transito:{l:'En tránsito',c:'#378ADD',bg:'#0c2a3a'},recibido:{l:'Recibido',c:'#C8E05A',bg:'#1a2a0a'},cancelado:{l:'Cancelado',c:'#ff6b6b',bg:'#2a1010'}};
+
+function renderPedidos() {
+  const cards = DATA.pedidos.map(p=>{
+    const est = EST[p.estado]||EST.pendiente;
+    const otrosEst = Object.entries(EST).filter(([k])=>k!==p.estado).map(([k,v])=>`<button class="btn btn-sm" style="color:${v.c};border-color:${v.c}44" onclick="cambiarEstadoPedido('${p.id}','${k}')">→ ${v.l}</button>`).join('');
+    return `<div class="card">
+      <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+        <div>
+          <div style="font-size:15px;font-weight:700;color:#f0f0f0">${p.proveedorNombre||'Proveedor'}</div>
+          <div style="font-size:12px;color:#555;margin-top:3px">${p.fecha||''}</div>
+          <span class="badge" style="background:${est.bg};color:${est.c};margin-top:6px;display:inline-block">${est.l}</span>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:20px;font-weight:700;color:#C8E05A">${fmt(p.total)}</div>
+        </div>
+      </div>
+      ${p.prods?`<div style="background:#111;border-radius:8px;padding:10px;font-size:12px;color:#888;margin-bottom:10px">${p.prods}</div>`:''}
+      ${p.notas?`<div style="font-size:12px;color:#555;margin-bottom:10px">📝 ${p.notas}</div>`:''}
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        ${otrosEst}
+        <button class="btn btn-sm btn-danger" onclick="eliminarDoc('pedidos','${p.id}')">Eliminar</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('page-pedidos').innerHTML = `
+    <div class="page-header">
+      <div><div class="page-title">Pedidos a proveedores</div></div>
+      <button class="btn btn-primary" onclick="abrirModalPedido()">+ Nuevo pedido</button>
+    </div>
+    ${DATA.pedidos.length?cards:'<div class="card"><div class="empty-state">Sin pedidos registrados</div></div>'}`;
+}
+
+window.abrirModalPedido = () => {
+  document.getElementById('pe-fecha').value = today();
+  const sel = document.getElementById('pe-prov');
+  sel.innerHTML = '<option value="">— Selecciona —</option>' + DATA.proveedores.map(p=>`<option value="${p.id}" data-nombre="${p.nombre}">${p.nombre}</option>`).join('');
+  openModal('modal-pedido');
+};
+
+window.guardarPedido = async () => {
+  const sel = document.getElementById('pe-prov');
+  const opt = sel.options[sel.selectedIndex];
+  if(!opt||!opt.value){alert('Selecciona un proveedor');return;}
+  const total = Number(document.getElementById('pe-total').value)||0;
+  await addDoc(collection(db,'pedidos'),{proveedorId:opt.value,proveedorNombre:opt.dataset.nombre||opt.text,fecha:document.getElementById('pe-fecha').value,prods:document.getElementById('pe-prods').value,total,flete:Number(document.getElementById('pe-flete').value)||0,notas:document.getElementById('pe-notas').value,estado:'pendiente',createdAt:serverTimestamp()});
+  await pushNotif('📋 Nuevo pedido',`Pedido a ${opt.dataset.nombre||opt.text} · ${fmt(total)}`,'pedido');
+  closeModal('modal-pedido');
+};
+
+window.cambiarEstadoPedido = async (id, estado) => {
+  await updateDoc(doc(db,'pedidos',id),{estado});
+  const p = DATA.pedidos.find(x=>x.id===id);
+  if(p) await pushNotif('📋 Pedido actualizado',`${p.proveedorNombre} → ${EST[estado]?.l||estado}`,'pedido');
+};
+
+// ===== METAS =====
+function renderMetas() {
+  const cards = DATA.metas.map(m=>{
+    const [anio,mes] = (m.mes||'').split('-');
+    const MESES=['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+    const mesLabel = MESES[parseInt(mes)]||m.mes;
+    const tv = DATA.ventas.filter(v=>v.fecha?.slice(0,7)===m.mes).reduce((s,v)=>s+Number(v.total||0),0);
+    const tg = DATA.gastos.filter(g=>g.fecha?.slice(0,7)===m.mes).reduce((s,g)=>s+Number(g.valor||0),0);
+    const pv = m.ventasMeta>0?Math.min(100,Math.round((tv/m.ventasMeta)*100)):0;
+    const pg = m.gastoMax>0?Math.min(100,Math.round((tg/m.gastoMax)*100)):0;
+    return `<div class="card">
+      <div style="display:flex;justify-content:space-between;margin-bottom:14px">
+        <div style="font-size:16px;font-weight:700;color:#f0f0f0">${mesLabel} ${anio}</div>
+        <button class="btn btn-sm btn-danger" onclick="eliminarDoc('metas','${m.id}')">✕</button>
+      </div>
+      <div style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:12px;color:#666">Ventas</span><span style="font-size:12px;font-weight:600;color:${pv>=100?'#C8E05A':pv>=70?'#EF9F27':'#ccc'}">${pv}%</span></div>
+        <div class="prog"><div class="prog-fill" style="width:${pv}%;background:${pv>=100?'#C8E05A':pv>=70?'#EF9F27':'#378ADD'}"></div></div>
+        <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:11px;color:#555"><span>${fmt(tv)}</span><span>Meta: ${fmt(m.ventasMeta)}</span></div>
+      </div>
+      ${m.gastoMax>0?`<div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:12px;color:#666">Gastos</span><span style="font-size:12px;font-weight:600;color:${pg>=90?'#ff6b6b':pg>=70?'#EF9F27':'#ccc'}">${pg}%</span></div>
+        <div class="prog"><div class="prog-fill" style="width:${pg}%;background:${pg>=90?'#ff6b6b':pg>=70?'#EF9F27':'#5DCAA5'}"></div></div>
+        <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:11px;color:#555"><span>${fmt(tg)}</span><span>Máx: ${fmt(m.gastoMax)}</span></div>
+      </div>`:''}
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:12px">
+        ${[['Ingresos',fmt(tv),'#C8E05A'],['Gastos',fmt(tg),'#ff6b6b'],['Utilidad',fmt(tv-tg),tv-tg>=0?'#C8E05A':'#ff6b6b']].map(([l,v,c])=>`<div style="background:#111;border-radius:8px;padding:8px;text-align:center"><div style="font-size:10px;color:#555;margin-bottom:2px">${l}</div><div style="font-size:13px;font-weight:700;color:${c}">${v}</div></div>`).join('')}
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('page-metas').innerHTML = `
+    <div class="page-header">
+      <div><div class="page-title">Metas y presupuesto</div></div>
+      <button class="btn btn-primary" onclick="openModal('modal-meta')">+ Nueva meta</button>
+    </div>
+    ${DATA.metas.length?cards:'<div class="card"><div class="empty-state">Sin metas configuradas</div></div>'}`;
+}
+
+window.guardarMeta = async () => {
+  const mes=document.getElementById('me-mes').value;
+  const ventasMeta=Number(document.getElementById('me-ventas').value);
+  if(!mes||!ventasMeta){alert('Mes y meta de ventas son requeridos');return;}
+  await addDoc(collection(db,'metas'),{mes,ventasMeta,gastoMax:Number(document.getElementById('me-gastos').value)||0,notas:document.getElementById('me-notas').value,createdAt:serverTimestamp()});
+  closeModal('modal-meta');
+};
+
+// Helpers
+window.eliminarDoc = async (col, id) => {
+  if(!confirm('¿Eliminar este registro?')) return;
+  await deleteDoc(doc(db, col, id));
+};
+
+// Login enter key
+document.getElementById('li-pass').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
+
+</script>
+</body>
 </html>
