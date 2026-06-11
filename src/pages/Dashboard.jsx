@@ -1,5 +1,6 @@
-import { useMemo } from "react";
+import { useMemo, useEffect } from "react";
 import useCollection from "../hooks/useCollection";
+import { useResumenDiario, notifyProveedorAlerta } from "../hooks/useNotifications";
 import MetricCard from "../components/MetricCard";
 import Card from "../components/Card";
 import PageHeader from "../components/PageHeader";
@@ -19,8 +20,27 @@ function getWeek(offset=0) {
 export default function Dashboard() {
   const { data: ventas } = useCollection("ventas");
   const { data: gastos } = useCollection("gastos");
-  const { data: inventario } = useCollection("inventario", "nombre");
-  const { data: metas } = useCollection("metas", "mes");
+  const { data: inventario } = useCollection("inventario","nombre");
+  const { data: metas } = useCollection("metas","mes");
+  const { data: proveedores } = useCollection("proveedores","nombre");
+
+  useResumenDiario(ventas, gastos);
+
+  // Notificar alertas de proveedor cuando hay stock bajo
+  useEffect(() => {
+    if (!proveedores.length || !inventario.length) return;
+    proveedores.forEach(prov => {
+      if (!prov.productos?.length) return;
+      const bajos = inventario.filter(p => prov.productos.includes(p.id) && p.stock <= p.stockMinimo);
+      if (bajos.length > 0) {
+        const key = `duppla_prov_alert_${prov.id}_${new Date().toISOString().slice(0,10)}`;
+        if (!localStorage.getItem(key)) {
+          notifyProveedorAlerta(prov.nombre, bajos);
+          localStorage.setItem(key, "1");
+        }
+      }
+    });
+  }, [proveedores, inventario]);
 
   const { start, end } = getWeek(0);
   const semanaVentas = ventas.filter(v => { const d = new Date(v.fecha); return d>=start&&d<=end; });
@@ -49,6 +69,10 @@ export default function Dashboard() {
   const metaMes = metas[0];
   const pctMeta = metaMes ? Math.min(100, Math.round((totalVentas/metaMes.ventasMeta)*100)) : null;
 
+  const hoy = new Date().toISOString().slice(0,10);
+  const ventasHoy = ventas.filter(v=>v.fecha===hoy);
+  const totalHoy = ventasHoy.reduce((s,v)=>s+Number(v.total||0),0);
+
   return (
     <div>
       <PageHeader title="Dashboard" subtitle={`Semana del ${start.toLocaleDateString("es-CO",{day:"numeric",month:"short"})} al ${end.toLocaleDateString("es-CO",{day:"numeric",month:"short"})}`} />
@@ -59,11 +83,11 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12,marginBottom:24}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:12,marginBottom:24}}>
         <MetricCard label="Ingresos semana" value={fmt(totalVentas)} color="#C8E05A" />
         <MetricCard label="Gastos semana" value={fmt(totalGastos)} color="#ff6b6b" />
         <MetricCard label="Utilidad" value={fmt(utilidad)} color={utilidad>=0?"#C8E05A":"#ff6b6b"} />
-        <MetricCard label="Ventas" value={semanaVentas.length} color="#378ADD" />
+        <MetricCard label="Ventas hoy" value={ventasHoy.length} color="#378ADD" sub={fmt(totalHoy)} />
       </div>
 
       {metaMes && (

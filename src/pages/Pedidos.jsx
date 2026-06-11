@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { notifyPedidoEstado } from "../hooks/useNotifications";
 import { collection, addDoc, deleteDoc, doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase";
 import useCollection from "../hooks/useCollection";
@@ -33,6 +34,8 @@ export default function Pedidos() {
 
   const cambiarEstado = async (id, estado) => {
     await updateDoc(doc(db,"pedidos",id),{estado});
+    const prov = proveedores.find(p=>p.id===p.proveedorId);
+    notifyPedidoEstado(pedidos.find(x=>x.id===id)?.proveedorNombre||"Proveedor", estado);
   };
 
   const eliminar = async id => { if(!confirm("¿Eliminar pedido?"))return; await deleteDoc(doc(db,"pedidos",id)); };

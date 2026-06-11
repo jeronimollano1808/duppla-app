@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { collection, addDoc, deleteDoc, doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase";
 import useCollection from "../hooks/useCollection";
+import { notifyVenta, notifyStockBajo } from "../hooks/useNotifications";
 import PageHeader from "../components/PageHeader";
 import Card from "../components/Card";
 import Btn from "../components/Btn";
@@ -24,18 +25,24 @@ export default function Ventas() {
     if(prod) set("precio", prod.pventa.toString());
   },[form.prodId]);
 
-  const calcTotal = (cant,precio) => set("total", (Number(cant||0)*Number(precio||0)).toString());
+  const calcTotal = (cant,precio) => set("total",(Number(cant||0)*Number(precio||0)).toString());
 
   const registrar = async () => {
     if(!form.fecha||!form.prodId||!form.cant||!form.precio){alert("Completa todos los campos requeridos");return;}
     if(!prod){alert("Producto no encontrado");return;}
     if(prod.stock < Number(form.cant)){alert(`Stock insuficiente. Disponible: ${prod.stock} uds.`);return;}
-    await updateDoc(doc(db,"inventario",prod.id),{stock: prod.stock - Number(form.cant)});
+    const nuevoStock = prod.stock - Number(form.cant);
+    await updateDoc(doc(db,"inventario",prod.id),{stock: nuevoStock});
     await addDoc(collection(db,"ventas"),{
       fecha:form.fecha, canal:form.canal, producto:prod.nombre, prodId:prod.id,
       cant:Number(form.cant), precio:Number(form.precio), total:Number(form.total),
       cliente:form.cliente, nota:form.nota, createdAt:serverTimestamp()
     });
+    // Notificaciones
+    notifyVenta(prod.nombre, form.cliente, form.total);
+    if(nuevoStock <= prod.stockMinimo) {
+      notifyStockBajo([{...prod, stock: nuevoStock}]);
+    }
     setModal(false);
     setForm({fecha:new Date().toISOString().slice(0,10),canal:"web",prodId:"",cant:"1",precio:"",total:"",cliente:"",nota:""});
   };
@@ -90,7 +97,6 @@ export default function Ventas() {
           </div>
         )}
       </Card>
-
       <Modal open={modal} onClose={()=>setModal(false)} title="Registrar venta">
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
           <Input label="Fecha" type="date" value={form.fecha} onChange={e=>set("fecha",e.target.value)} />
