@@ -2275,55 +2275,65 @@ window.guardarEditarVenta = async () => {
   const id = document.getElementById('ev-id').value;
   if(!id) return;
 
+  const venta = DATA.ventas.find(v => v.id === id);
+  const precio = Number(document.getElementById('ev-precio').value)||0;
+  const total = Number(document.getElementById('ev-total').value)||0;
+
+  // 203. Si es combo solo actualizamos campos básicos sin tocar stock
+  if(venta?.esCombo) {
+    await updateDoc(doc(db,'ventas',id), {
+      fecha:   document.getElementById('ev-fecha').value,
+      canal:   document.getElementById('ev-canal').value,
+      cliente: document.getElementById('ev-cliente').value,
+      precio, total: precio,
+      nota:    document.getElementById('ev-nota').value,
+    });
+    document.getElementById('ev-cant').disabled = false;
+    document.getElementById('ev-prod').disabled = false;
+    closeModal('modal-editar-venta');
+    toast('✅ Combo actualizado');
+    return;
+  }
+
+  // 204. Venta normal — ajuste de stock si cambió cantidad o producto
   const cantOriginal = Number(document.getElementById('ev-cant-original').value)||0;
   const prodOriginal = document.getElementById('ev-prod-original').value;
   const cantNueva = Number(document.getElementById('ev-cant').value)||0;
   const prodNuevo = document.getElementById('ev-prod').value;
-  const precio = Number(document.getElementById('ev-precio').value)||0;
-  const total = Number(document.getElementById('ev-total').value)||0;
 
   if(!prodNuevo||!cantNueva||!precio) { alert('Producto, cantidad y precio son requeridos'); return; }
 
   const prodNuevoData = DATA.inventario.find(p => p.id === prodNuevo);
   if(!prodNuevoData) { alert('Producto no encontrado'); return; }
 
-  // 149. Ajuste de stock:
-  //      1. Devolvemos la cantidad original al producto original
-  //      2. Descontamos la nueva cantidad del producto nuevo
   if(prodOriginal && prodOriginal !== prodNuevo) {
-    // Cambió el producto — devolvemos stock al original y descontamos del nuevo
     const prodOriginalData = DATA.inventario.find(p => p.id === prodOriginal);
-    if(prodOriginalData) {
+    if(prodOriginalData)
       await updateDoc(doc(db,'inventario',prodOriginal), { stock: prodOriginalData.stock + cantOriginal });
-    }
-    if(prodNuevoData.stock < cantNueva) { alert(`Stock insuficiente para ${prodNuevoData.nombre}. Disponible: ${prodNuevoData.stock}`); return; }
+    if(prodNuevoData.stock < cantNueva) { alert(`Stock insuficiente. Disponible: ${prodNuevoData.stock}`); return; }
     await updateDoc(doc(db,'inventario',prodNuevo), { stock: prodNuevoData.stock - cantNueva });
   } else if(cantNueva !== cantOriginal) {
-    // Mismo producto pero cambió la cantidad — ajustamos la diferencia
-    const diff = cantOriginal - cantNueva; // positivo = devolvemos, negativo = descontamos
+    const diff = cantOriginal - cantNueva;
     const nuevoStock = prodNuevoData.stock + diff;
     if(nuevoStock < 0) { alert(`Stock insuficiente. Solo hay ${prodNuevoData.stock} unidades`); return; }
     await updateDoc(doc(db,'inventario',prodNuevo), { stock: nuevoStock });
   }
 
-  // 150. Actualizamos todos los campos de la venta en Firebase
   await updateDoc(doc(db,'ventas',id), {
-    fecha:       document.getElementById('ev-fecha').value,
-    canal:       document.getElementById('ev-canal').value,
-    producto:    prodNuevoData.nombre,
-    prodId:      prodNuevo,
-    cant:        cantNueva,
-    precio,
-    total,
-    cliente:     document.getElementById('ev-cliente').value,
-    tipoPrecio:  document.getElementById('ev-tipo-precio').value,
-    nota:        document.getElementById('ev-nota').value,
+    fecha:      document.getElementById('ev-fecha').value,
+    canal:      document.getElementById('ev-canal').value,
+    producto:   prodNuevoData.nombre,
+    prodId:     prodNuevo,
+    cant:       cantNueva,
+    precio, total,
+    cliente:    document.getElementById('ev-cliente').value,
+    tipoPrecio: document.getElementById('ev-tipo-precio').value,
+    nota:       document.getElementById('ev-nota').value,
   });
 
-  closeModal('modal-editar-venta');
-  // 202. Rehabilitamos campos por si venían deshabilitados de una edición de combo
   document.getElementById('ev-cant').disabled = false;
   document.getElementById('ev-prod').disabled = false;
+  closeModal('modal-editar-venta');
   toast('✅ Venta actualizada correctamente');
 };
 
