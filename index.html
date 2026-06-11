@@ -2206,24 +2206,32 @@ window.editarVenta = (id) => {
   const venta = DATA.ventas.find(v => v.id === id);
   if(!venta) return;
 
-  // 200. Si es una venta de combo, abrimos el modal de combo en vez del de venta normal
+  // 200. Si es combo, abrimos modal especial
   if(venta.esCombo) {
     abrirEditarComboVenta(id);
     return;
   }
 
-  // 145. Para ventas normales cargamos el formulario estándar
   document.getElementById('ev-id').value = id;
   document.getElementById('ev-cant-original').value = venta.cant || 1;
   document.getElementById('ev-prod-original').value = venta.prodId || '';
 
   const sel = document.getElementById('ev-prod');
-  sel.innerHTML = '<option value="">— Selecciona —</option>' +
-    DATA.inventario.map(p =>
-      `<option value="${p.id}" data-pventa="${p.pventa}" data-pdist="${p.pdist||0}" data-pesp="${p.pesp||0}">${p.nombre}</option>`
-    ).join('');
 
-  if(venta.prodId) sel.value = venta.prodId;
+  // 211. Si es venta manual (sin prodId), mostramos el nombre como opción fija
+  //      y deshabilitamos el select para que no falle la validación de producto
+  if(venta.esManual || !venta.prodId) {
+    sel.innerHTML = `<option value="__manual__" selected>✏️ ${venta.producto} (manual)</option>`;
+    sel.disabled = true;
+  } else {
+    sel.disabled = false;
+    sel.innerHTML = '<option value="">— Selecciona —</option>' +
+      DATA.inventario.map(p =>
+        `<option value="${p.id}">${p.nombre}</option>`
+      ).join('');
+    sel.value = venta.prodId;
+  }
+
   document.getElementById('ev-fecha').value = venta.fecha || '';
   document.getElementById('ev-canal').value = venta.canal || 'directo';
   document.getElementById('ev-cant').value = venta.cant || 1;
@@ -2318,6 +2326,24 @@ window.guardarEditarVenta = async () => {
     document.getElementById('ev-prod').disabled = false;
     closeModal('modal-editar-venta');
     toast('✅ Combo actualizado');
+    return;
+  }
+
+  // 212. Si es venta manual, solo actualizamos campos editables sin tocar stock
+  if(venta?.esManual || !venta?.prodId) {
+    document.getElementById('ev-prod').disabled = false;
+    await updateDoc(doc(db,'ventas',id), {
+      fecha:      document.getElementById('ev-fecha').value,
+      canal:      document.getElementById('ev-canal').value,
+      cliente:    document.getElementById('ev-cliente').value,
+      precio, total: precio,
+      cant:       Number(document.getElementById('ev-cant').value)||1,
+      tipoPrecio: document.getElementById('ev-tipo-precio').value,
+      nota:       document.getElementById('ev-nota').value,
+    });
+    document.getElementById('ev-cant').disabled = false;
+    closeModal('modal-editar-venta');
+    toast('✅ Venta actualizada');
     return;
   }
 
