@@ -904,7 +904,11 @@ body{
     </div>
     <div class="f-group">
       <label class="f-label">Valor del abono ($) *</label>
-      <input type="number" id="ab-valor" class="f-input" placeholder="0" oninput="calcNuevoSaldo()">
+      <!-- 151. oninput dispara tanto el cálculo del nuevo saldo como la preview COP
+                Esto permite ver "$100.000 COP" mientras escribes "100000" -->
+      <input type="number" id="ab-valor" class="f-input" placeholder="Ej: 50000"
+        oninput="calcNuevoSaldo();previoCOP('ab-valor','prev-ab-valor')">
+      <div id="prev-ab-valor" style="font-size:11px;margin-top:4px;font-weight:600"></div>
     </div>
     <!-- 107. Muestra el nuevo saldo que quedaría después del abono -->
     <div id="ab-nuevo-saldo" style="font-size:13px;color:var(--ink-2);margin-bottom:14px"></div>
@@ -1848,41 +1852,50 @@ window.guardarVenta = async () => {
 let abonoVentaId = null; // 119. ID de la venta que se está abonando
 
 window.abrirAbono = (ventaId) => {
-  // 120. Buscamos la venta en DATA para mostrar el resumen de la deuda
+  // 120. Buscamos la venta para mostrar el resumen de la deuda
   const venta = DATA.ventas.find(v => v.id === ventaId);
   if(!venta) return;
   abonoVentaId = ventaId;
 
-  // 121. Mostramos el resumen: producto, cliente, total, pagado y saldo
+  // 121. Resumen con todos los valores formateados en COP
   document.getElementById('abono-titulo').textContent =
     `Abono — ${venta.cliente || 'Cliente'}`;
   document.getElementById('abono-resumen').innerHTML = `
     <strong>${venta.producto}</strong><br>
-    Total: ${fmt(venta.total)} · Pagado: ${fmt(venta.pagado||0)}<br>
+    Total venta: ${fmt(venta.total)} · Pagado: ${fmt(venta.pagado||0)}<br>
     <span style="font-size:15px;font-weight:700">Saldo pendiente: ${fmt(venta.saldo||0)}</span>
-    ${venta.abonos?.length ? `<br><span style="font-size:11px;color:#92400E">${venta.abonos.length} abono(s) registrado(s)</span>` : ''}
+    ${venta.abonos?.length ? `<br><span style="font-size:11px;color:#92400E">${venta.abonos.length} abono(s) previo(s) registrado(s)</span>` : ''}
   `;
   document.getElementById('ab-fecha').value = today();
   document.getElementById('ab-valor').value = '';
   document.getElementById('ab-nota').value = '';
+  // 152. Limpiamos la preview y el indicador de nuevo saldo al abrir
+  document.getElementById('prev-ab-valor').textContent = '';
   document.getElementById('ab-nuevo-saldo').textContent = '';
   openModal('modal-abono');
 };
 
 window.calcNuevoSaldo = () => {
-  // 122. Calculamos el nuevo saldo que quedaría después del abono
+  // 153. Calculamos el nuevo saldo con los valores en COP correctamente
   const venta = DATA.ventas.find(v => v.id === abonoVentaId);
   if(!venta) return;
   const abono = Number(document.getElementById('ab-valor').value)||0;
-  const nuevoSaldo = Math.max(0, (venta.saldo||0) - abono);
+  const saldoActual = venta.saldo || 0;
+  const nuevoSaldo = Math.max(0, saldoActual - abono);
   const el = document.getElementById('ab-nuevo-saldo');
-  if(abono > (venta.saldo||0)) {
-    el.innerHTML = `⚠️ El abono supera el saldo. Máximo: ${fmt(venta.saldo||0)}`;
+
+  if(abono <= 0) {
+    el.textContent = '';
+  } else if(abono > saldoActual) {
+    // 154. Advertencia si el abono supera el saldo
+    el.innerHTML = `⚠️ El abono supera el saldo. Máximo: <strong>${fmt(saldoActual)}</strong>`;
     el.style.color = 'var(--red)';
   } else if(nuevoSaldo === 0) {
+    // 155. Mensaje de éxito si queda saldado
     el.innerHTML = `✅ Con este abono queda <strong>saldado completamente</strong>`;
     el.style.color = 'var(--green)';
   } else {
+    // 156. Muestra el nuevo saldo formateado en COP
     el.innerHTML = `Nuevo saldo pendiente: <strong>${fmt(nuevoSaldo)}</strong>`;
     el.style.color = 'var(--amber)';
   }
