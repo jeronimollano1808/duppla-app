@@ -661,12 +661,20 @@ body{
     </div>
     <div class="sidebar-nav" id="nav-menu"></div>
     <div class="sidebar-footer">
-      <!-- Campana de notificaciones en sidebar -->
-      <div class="notif-wrap" style="margin-bottom:10px">
+      <!-- 135. Campana de notificaciones en sidebar — con panel desplegable -->
+      <div class="notif-wrap" style="margin-bottom:10px;position:relative">
         <button class="notif-btn" style="width:100%;justify-content:space-between" onclick="toggleNotif('sidebar')">
           <span>🔔 Notificaciones</span>
           <span class="notif-dot" id="notif-count-s" style="position:relative;top:0;right:0;border:none;min-width:18px;height:18px"></span>
         </button>
+        <!-- 136. Panel de notificaciones del sidebar — aparece hacia arriba para no salir de pantalla -->
+        <div class="notif-panel" id="notif-panel-s" style="bottom:calc(100% + 8px);top:auto;left:0;right:0;width:auto">
+          <div class="notif-panel-header">
+            <span>Notificaciones</span>
+            <button onclick="markNotifsRead()" style="font-size:11px;background:none;border:none;color:var(--ink-3);cursor:pointer">Marcar leídas</button>
+          </div>
+          <div id="notif-list-s"></div>
+        </div>
       </div>
       <div class="sidebar-user">
         <div class="sidebar-avatar" id="user-avatar">J</div>
@@ -818,6 +826,43 @@ body{
      Se abre desde el historial de ventas para registrar
      pagos parciales en ventas con saldo pendiente
      ============================================================ -->
+<!-- ============================================================
+     141. MODAL: EDITAR VENTA
+     Permite corregir fecha, canal, cliente y nota de una venta
+     No permite cambiar producto ni precio porque eso afectaría
+     el stock del inventario y los cálculos financieros
+     ============================================================ -->
+<div class="modal-bg" id="modal-editar-venta">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <span class="modal-title" id="editar-venta-titulo">Editar venta</span>
+      <button class="modal-close" onclick="closeModal('modal-editar-venta')">✕</button>
+    </div>
+    <!-- 142. Campo oculto con el ID de la venta que se está editando -->
+    <input type="hidden" id="ev-id" value="">
+    <!-- 143. Mostramos el producto como referencia (solo lectura, no editable) -->
+    <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-bottom:16px;font-size:13px;color:var(--ink-2)">
+      <span style="font-weight:500;color:var(--ink)" id="ev-producto-ref"></span>
+    </div>
+    <div class="f-row">
+      <div class="f-group"><label class="f-label">Fecha</label><input type="date" id="ev-fecha" class="f-input"></div>
+      <div class="f-group"><label class="f-label">Canal</label>
+        <select id="ev-canal" class="f-input">
+          <option value="web">Página web</option>
+          <option value="directo">Venta directa</option>
+          <option value="distribuidor">Distribuidor</option>
+        </select>
+      </div>
+    </div>
+    <div class="f-group"><label class="f-label">Cliente</label><input type="text" id="ev-cliente" class="f-input" placeholder="Nombre del cliente"></div>
+    <div class="f-group"><label class="f-label">Nota</label><input type="text" id="ev-nota" class="f-input" placeholder="Referencia adicional"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-editar-venta')">Cancelar</button>
+      <button class="btn btn-lime" onclick="guardarEditarVenta()">Guardar cambios</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-bg" id="modal-abono">
   <div class="modal" style="max-width:400px">
     <div class="modal-header">
@@ -1317,17 +1362,20 @@ async function pushNotif(titulo, cuerpo, tipo) {
 // ============================================================
 function renderNotifBell() {
   const unread = DATA.notificaciones.filter(n=>!n.leida).length;
-  // Actualizamos todos los contadores
+  // 138. Actualizamos los contadores en sidebar y mobile
   ['notif-count-s','notif-count-m'].forEach(id => {
     const el = document.getElementById(id);
     if(!el) return;
     el.textContent = unread > 9 ? '9+' : unread;
     el.style.display = unread > 0 ? 'flex' : 'none';
   });
-  // Generamos el HTML de la lista
+  // 139. Generamos el HTML de la lista de notificaciones
   const listHtml = DATA.notificaciones.slice(0,15).map(n => {
     const t = n.createdAt?.seconds
-      ? (() => { const diff = Math.floor((Date.now()-n.createdAt.seconds*1000)/60000); return diff<1?'ahora':diff<60?`${diff}m`:diff<1440?`${Math.floor(diff/60)}h`:`${Math.floor(diff/1440)}d`; })()
+      ? (() => {
+          const diff = Math.floor((Date.now()-n.createdAt.seconds*1000)/60000);
+          return diff<1?'ahora':diff<60?`${diff}m`:diff<1440?`${Math.floor(diff/60)}h`:`${Math.floor(diff/1440)}d`;
+        })()
       : '';
     return `<div class="notif-item${n.leida?'':' unread'}">
       <div class="notif-item-title">${n.titulo||''}</div>
@@ -1335,14 +1383,25 @@ function renderNotifBell() {
       <div class="notif-item-time">${t}</div>
     </div>`;
   }).join('') || '<div class="notif-empty">Sin notificaciones aún</div>';
-  document.getElementById('notif-list-m').innerHTML = listHtml;
+
+  // 140. Actualizamos la lista tanto en sidebar como en mobile
+  const listS = document.getElementById('notif-list-s');
+  const listM = document.getElementById('notif-list-m');
+  if(listS) listS.innerHTML = listHtml;
+  if(listM) listM.innerHTML = listHtml;
 }
 
 window.toggleNotif = (ctx) => {
-  if(ctx==='mobile') {
+  // 137. Cerramos el otro panel si está abierto, y alternamos el que se pidió
+  //      Esto evita que ambos paneles queden abiertos al mismo tiempo
+  if(ctx === 'mobile') {
+    document.getElementById('notif-panel-s')?.classList.remove('open');
     document.getElementById('notif-panel-m')?.classList.toggle('open');
-    markNotifsRead();
+  } else {
+    document.getElementById('notif-panel-m')?.classList.remove('open');
+    document.getElementById('notif-panel-s')?.classList.toggle('open');
   }
+  markNotifsRead();
 };
 window.markNotifsRead = async () => {
   DATA.notificaciones.filter(n=>!n.leida).forEach(n =>
@@ -1560,6 +1619,7 @@ function renderVentas() {
       <td><span class="badge ${epClass[ep]}">${epLabel[ep]||ep}</span></td>
       <td>
         <div style="display:flex;gap:4px">
+          <button class="btn btn-xs" onclick="editarVenta('${v.id}')">✏️</button>
           ${btnAbono}
           <button class="btn btn-xs btn-danger" onclick="eliminarDoc('ventas','${v.id}')">✕</button>
         </div>
@@ -1836,6 +1896,41 @@ window.guardarAbono = async () => {
 
   closeModal('modal-abono');
   abonoVentaId = null;
+};
+
+// ============================================================
+// 144. EDITAR VENTA
+// Permite corregir fecha, canal, cliente y nota
+// El producto, precio y stock NO se pueden cambiar aquí
+// ============================================================
+
+window.editarVenta = (id) => {
+  // 145. Buscamos la venta en DATA y cargamos sus datos en el formulario
+  const venta = DATA.ventas.find(v => v.id === id);
+  if(!venta) return;
+  document.getElementById('ev-id').value = id;
+  document.getElementById('ev-producto-ref').textContent =
+    `${venta.producto} · ${fmt(venta.total)} · ${venta.cliente||'Sin cliente'}`;
+  document.getElementById('ev-fecha').value = venta.fecha || '';
+  document.getElementById('ev-canal').value = venta.canal || 'directo';
+  document.getElementById('ev-cliente').value = venta.cliente || '';
+  document.getElementById('ev-nota').value = venta.nota || '';
+  openModal('modal-editar-venta');
+};
+
+window.guardarEditarVenta = async () => {
+  const id = document.getElementById('ev-id').value;
+  if(!id) return;
+  // 146. Actualizamos solo los campos editables — fecha, canal, cliente, nota
+  //      No tocamos: producto, precio, total, stock, tipoPrecio, pagado, saldo
+  await updateDoc(doc(db,'ventas',id), {
+    fecha:   document.getElementById('ev-fecha').value,
+    canal:   document.getElementById('ev-canal').value,
+    cliente: document.getElementById('ev-cliente').value,
+    nota:    document.getElementById('ev-nota').value,
+  });
+  closeModal('modal-editar-venta');
+  toast('✅ Venta actualizada');
 };
 
 window.exportarCSV = () => {
