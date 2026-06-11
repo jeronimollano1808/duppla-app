@@ -828,22 +828,21 @@ body{
      ============================================================ -->
 <!-- ============================================================
      141. MODAL: EDITAR VENTA
-     Permite corregir fecha, canal, cliente y nota de una venta
-     No permite cambiar producto ni precio porque eso afectaría
-     el stock del inventario y los cálculos financieros
+     Permite editar todos los campos de una venta.
+     Si cambia la cantidad, ajusta el stock automáticamente:
+     devuelve la cantidad anterior y descuenta la nueva.
      ============================================================ -->
 <div class="modal-bg" id="modal-editar-venta">
-  <div class="modal" style="max-width:420px">
+  <div class="modal">
     <div class="modal-header">
-      <span class="modal-title" id="editar-venta-titulo">Editar venta</span>
+      <span class="modal-title">Editar venta</span>
       <button class="modal-close" onclick="closeModal('modal-editar-venta')">✕</button>
     </div>
     <!-- 142. Campo oculto con el ID de la venta que se está editando -->
     <input type="hidden" id="ev-id" value="">
-    <!-- 143. Mostramos el producto como referencia (solo lectura, no editable) -->
-    <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-bottom:16px;font-size:13px;color:var(--ink-2)">
-      <span style="font-weight:500;color:var(--ink)" id="ev-producto-ref"></span>
-    </div>
+    <!-- 143. Guardamos la cantidad original para calcular el ajuste de stock -->
+    <input type="hidden" id="ev-cant-original" value="">
+    <input type="hidden" id="ev-prod-original" value="">
     <div class="f-row">
       <div class="f-group"><label class="f-label">Fecha</label><input type="date" id="ev-fecha" class="f-input"></div>
       <div class="f-group"><label class="f-label">Canal</label>
@@ -854,7 +853,35 @@ body{
         </select>
       </div>
     </div>
+    <div class="f-group"><label class="f-label">Producto</label>
+      <select id="ev-prod" class="f-input" onchange="fillEditVentaPrecio()">
+        <option value="">— Selecciona —</option>
+      </select>
+    </div>
+    <div class="f-row">
+      <div class="f-group">
+        <label class="f-label">Cantidad</label>
+        <input type="number" id="ev-cant" class="f-input" min="1" oninput="calcEditTotal()">
+      </div>
+      <div class="f-group">
+        <label class="f-label">Precio unitario ($)</label>
+        <input type="number" id="ev-precio" class="f-input" oninput="calcEditTotal();previoCOP('ev-precio','prev-ev-precio')">
+        <div id="prev-ev-precio" style="font-size:11px;margin-top:4px;font-weight:600"></div>
+      </div>
+    </div>
+    <div class="f-group">
+      <label class="f-label">Total ($)</label>
+      <input type="number" id="ev-total" class="f-input" readonly style="opacity:.6;cursor:not-allowed">
+      <div id="prev-ev-total" style="font-size:12px;margin-top:4px;font-weight:700;color:var(--lime)"></div>
+    </div>
     <div class="f-group"><label class="f-label">Cliente</label><input type="text" id="ev-cliente" class="f-input" placeholder="Nombre del cliente"></div>
+    <div class="f-group"><label class="f-label">Tipo de precio</label>
+      <select id="ev-tipo-precio" class="f-input">
+        <option value="publico">Público</option>
+        <option value="distribuidor">Distribuidor</option>
+        <option value="especial">Especial</option>
+      </select>
+    </div>
     <div class="f-group"><label class="f-label">Nota</label><input type="text" id="ev-nota" class="f-input" placeholder="Referencia adicional"></div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('modal-editar-venta')">Cancelar</button>
@@ -1899,38 +1926,121 @@ window.guardarAbono = async () => {
 };
 
 // ============================================================
-// 144. EDITAR VENTA
-// Permite corregir fecha, canal, cliente y nota
-// El producto, precio y stock NO se pueden cambiar aquí
+// 144. EDITAR VENTA — versión completa
+// Permite editar todos los campos incluyendo producto, cantidad y precio
+// Si cambia la cantidad o el producto, ajusta el stock automáticamente
 // ============================================================
 
 window.editarVenta = (id) => {
-  // 145. Buscamos la venta en DATA y cargamos sus datos en el formulario
+  // 145. Buscamos la venta y cargamos todos sus datos en el formulario
   const venta = DATA.ventas.find(v => v.id === id);
   if(!venta) return;
+
+  // Guardamos los campos ocultos para calcular ajuste de stock al guardar
   document.getElementById('ev-id').value = id;
-  document.getElementById('ev-producto-ref').textContent =
-    `${venta.producto} · ${fmt(venta.total)} · ${venta.cliente||'Sin cliente'}`;
+  document.getElementById('ev-cant-original').value = venta.cant || 1;
+  document.getElementById('ev-prod-original').value = venta.prodId || '';
+
+  // Cargamos el selector de productos
+  const sel = document.getElementById('ev-prod');
+  sel.innerHTML = '<option value="">— Selecciona —</option>' +
+    DATA.inventario.map(p =>
+      `<option value="${p.id}" data-pventa="${p.pventa}" data-pdist="${p.pdist||0}" data-pesp="${p.pesp||0}">${p.nombre}</option>`
+    ).join('');
+
+  // Seleccionamos el producto actual
+  if(venta.prodId) sel.value = venta.prodId;
+
+  // Cargamos los demás campos
   document.getElementById('ev-fecha').value = venta.fecha || '';
   document.getElementById('ev-canal').value = venta.canal || 'directo';
+  document.getElementById('ev-cant').value = venta.cant || 1;
+  document.getElementById('ev-precio').value = venta.precio || 0;
+  document.getElementById('ev-total').value = venta.total || 0;
   document.getElementById('ev-cliente').value = venta.cliente || '';
+  document.getElementById('ev-tipo-precio').value = venta.tipoPrecio || 'publico';
   document.getElementById('ev-nota').value = venta.nota || '';
+
+  // Mostramos previews de precios
+  previoCOP('ev-precio', 'prev-ev-precio');
+  const prevTotal = document.getElementById('prev-ev-total');
+  if(prevTotal && venta.total > 0) prevTotal.textContent = '→ ' + fmt(venta.total) + ' COP';
+
   openModal('modal-editar-venta');
+};
+
+window.fillEditVentaPrecio = () => {
+  // 147. Al cambiar el producto en edición, sugerimos el precio público como base
+  const sel = document.getElementById('ev-prod');
+  const opt = sel.options[sel.selectedIndex];
+  if(opt?.dataset.pventa) {
+    document.getElementById('ev-precio').value = opt.dataset.pventa;
+    previoCOP('ev-precio','prev-ev-precio');
+    calcEditTotal();
+  }
+};
+
+window.calcEditTotal = () => {
+  // 148. Calculamos el total en tiempo real mientras editan
+  const c = Number(document.getElementById('ev-cant').value)||0;
+  const p = Number(document.getElementById('ev-precio').value)||0;
+  const total = c * p;
+  document.getElementById('ev-total').value = total;
+  const prevTotal = document.getElementById('prev-ev-total');
+  if(prevTotal) prevTotal.textContent = total > 0 ? '→ ' + fmt(total) + ' COP' : '';
 };
 
 window.guardarEditarVenta = async () => {
   const id = document.getElementById('ev-id').value;
   if(!id) return;
-  // 146. Actualizamos solo los campos editables — fecha, canal, cliente, nota
-  //      No tocamos: producto, precio, total, stock, tipoPrecio, pagado, saldo
+
+  const cantOriginal = Number(document.getElementById('ev-cant-original').value)||0;
+  const prodOriginal = document.getElementById('ev-prod-original').value;
+  const cantNueva = Number(document.getElementById('ev-cant').value)||0;
+  const prodNuevo = document.getElementById('ev-prod').value;
+  const precio = Number(document.getElementById('ev-precio').value)||0;
+  const total = Number(document.getElementById('ev-total').value)||0;
+
+  if(!prodNuevo||!cantNueva||!precio) { alert('Producto, cantidad y precio son requeridos'); return; }
+
+  const prodNuevoData = DATA.inventario.find(p => p.id === prodNuevo);
+  if(!prodNuevoData) { alert('Producto no encontrado'); return; }
+
+  // 149. Ajuste de stock:
+  //      1. Devolvemos la cantidad original al producto original
+  //      2. Descontamos la nueva cantidad del producto nuevo
+  if(prodOriginal && prodOriginal !== prodNuevo) {
+    // Cambió el producto — devolvemos stock al original y descontamos del nuevo
+    const prodOriginalData = DATA.inventario.find(p => p.id === prodOriginal);
+    if(prodOriginalData) {
+      await updateDoc(doc(db,'inventario',prodOriginal), { stock: prodOriginalData.stock + cantOriginal });
+    }
+    if(prodNuevoData.stock < cantNueva) { alert(`Stock insuficiente para ${prodNuevoData.nombre}. Disponible: ${prodNuevoData.stock}`); return; }
+    await updateDoc(doc(db,'inventario',prodNuevo), { stock: prodNuevoData.stock - cantNueva });
+  } else if(cantNueva !== cantOriginal) {
+    // Mismo producto pero cambió la cantidad — ajustamos la diferencia
+    const diff = cantOriginal - cantNueva; // positivo = devolvemos, negativo = descontamos
+    const nuevoStock = prodNuevoData.stock + diff;
+    if(nuevoStock < 0) { alert(`Stock insuficiente. Solo hay ${prodNuevoData.stock} unidades`); return; }
+    await updateDoc(doc(db,'inventario',prodNuevo), { stock: nuevoStock });
+  }
+
+  // 150. Actualizamos todos los campos de la venta en Firebase
   await updateDoc(doc(db,'ventas',id), {
-    fecha:   document.getElementById('ev-fecha').value,
-    canal:   document.getElementById('ev-canal').value,
-    cliente: document.getElementById('ev-cliente').value,
-    nota:    document.getElementById('ev-nota').value,
+    fecha:       document.getElementById('ev-fecha').value,
+    canal:       document.getElementById('ev-canal').value,
+    producto:    prodNuevoData.nombre,
+    prodId:      prodNuevo,
+    cant:        cantNueva,
+    precio,
+    total,
+    cliente:     document.getElementById('ev-cliente').value,
+    tipoPrecio:  document.getElementById('ev-tipo-precio').value,
+    nota:        document.getElementById('ev-nota').value,
   });
+
   closeModal('modal-editar-venta');
-  toast('✅ Venta actualizada');
+  toast('✅ Venta actualizada correctamente');
 };
 
 window.exportarCSV = () => {
