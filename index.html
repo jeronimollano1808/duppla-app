@@ -748,10 +748,35 @@ body{
         </select>
       </div>
     </div>
-    <div class="f-group"><label class="f-label">Producto *</label>
-      <select id="v-prod" class="f-input" onchange="fillVentaPrecio()">
-        <option value="">— Selecciona un producto —</option>
-      </select>
+    <!-- 166. Selector de tipo de producto: del inventario o producto manual
+               Permite registrar ventas de productos que no están en el catálogo -->
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <button type="button" id="btn-tipo-inv" onclick="setTipoProducto('inventario')"
+        style="flex:1;padding:8px;border-radius:var(--radius);border:2px solid var(--ink);background:var(--ink);color:#fff;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">
+        📦 Del inventario
+      </button>
+      <button type="button" id="btn-tipo-manual" onclick="setTipoProducto('manual')"
+        style="flex:1;padding:8px;border-radius:var(--radius);border:2px solid var(--border);background:var(--surface-2);color:var(--ink-2);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">
+        ✏️ Producto manual
+      </button>
+    </div>
+
+    <!-- 167. Sección del inventario (visible por defecto) -->
+    <div id="seccion-inventario">
+      <div class="f-group"><label class="f-label">Producto *</label>
+        <select id="v-prod" class="f-input" onchange="fillVentaPrecio()">
+          <option value="">— Selecciona un producto —</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- 168. Sección manual (oculta por defecto) — para productos fuera del catálogo
+               No descuenta stock ni requiere que el producto esté en el inventario -->
+    <div id="seccion-manual" style="display:none">
+      <div class="f-group">
+        <label class="f-label">Nombre del producto *</label>
+        <input type="text" id="v-prod-manual" class="f-input" placeholder="Ej: Servicio de asesoría, Kit promocional...">
+      </div>
     </div>
     <!-- 65. Selector de tipo de precio — aparece al seleccionar un producto
               Muestra los 3 precios disponibles para que el vendedor elija cuál aplica
@@ -1629,6 +1654,10 @@ function renderVentas() {
     const tpLabel = { publico:'Público', distribuidor:'Dist.', especial:'Especial' };
     const tpClass = { publico:'b-info', distribuidor:'b-warning', especial:'b-success' };
     const tp = v.tipoPrecio || 'publico';
+    // 176. Badge adicional para ventas manuales — distingue del catálogo
+    const manualBadge = v.esManual
+      ? `<span class="badge b-gray" style="margin-left:4px;font-size:10px">Manual</span>`
+      : '';
 
     // 115. Badge de estado de pago con color semántico
     //      Verde = pagado, Amarillo = abono parcial, Rojo = pendiente total
@@ -1649,7 +1678,7 @@ function renderVentas() {
     return `<tr>
       <td style="color:var(--ink-3)">${v.fecha||''}</td>
       <td style="font-weight:500">${v.cliente||'—'}</td>
-      <td>${v.producto||''}</td>
+      <td>${v.producto||''}${manualBadge}</td>
       <td><span class="badge b-${v.canal||'web'}">${v.canal||''}</span></td>
       <td><span class="badge ${tpClass[tp]}">${tpLabel[tp]||tp}</span></td>
       <td style="font-weight:600;color:var(--lime)">${fmt(v.total)}</td>
@@ -1690,11 +1719,13 @@ function renderVentas() {
 
 window.abrirModalVenta = () => {
   document.getElementById('v-fecha').value = today();
-  // 108. Reseteamos los campos de pago al abrir el modal
   document.getElementById('v-pagado').value = '';
   document.getElementById('v-saldo').value = '';
   document.getElementById('v-estado-pago').textContent = 'Completa el total para ver el estado de pago';
   document.getElementById('v-precio-selector').style.display = 'none';
+  document.getElementById('v-prod-manual').value = '';
+  // 169. Reseteamos al modo inventario por defecto al abrir
+  setTipoProducto('inventario');
   const sel = document.getElementById('v-prod');
   sel.innerHTML = '<option value="">— Selecciona un producto —</option>' +
     DATA.inventario.map(p =>
@@ -1702,6 +1733,33 @@ window.abrirModalVenta = () => {
         ${p.nombre} (stock: ${p.stock})
       </option>`).join('');
   openModal('modal-venta');
+};
+
+window.setTipoProducto = (tipo) => {
+  // 170. Alternamos entre modo inventario y modo manual
+  //      En modo inventario: usamos el select del catálogo, descuenta stock
+  //      En modo manual: campo de texto libre, NO descuenta stock
+  const esInv = tipo === 'inventario';
+  document.getElementById('seccion-inventario').style.display = esInv ? 'block' : 'none';
+  document.getElementById('seccion-manual').style.display = esInv ? 'none' : 'block';
+  document.getElementById('v-precio-selector').style.display = 'none';
+
+  // 171. Estilo activo/inactivo de los botones del toggle
+  const btnInv = document.getElementById('btn-tipo-inv');
+  const btnMan = document.getElementById('btn-tipo-manual');
+  btnInv.style.background = esInv ? 'var(--ink)' : 'var(--surface-2)';
+  btnInv.style.color = esInv ? '#fff' : 'var(--ink-2)';
+  btnInv.style.borderColor = esInv ? 'var(--ink)' : 'var(--border)';
+  btnMan.style.background = esInv ? 'var(--surface-2)' : 'var(--ink)';
+  btnMan.style.color = esInv ? 'var(--ink-2)' : '#fff';
+  btnMan.style.borderColor = esInv ? 'var(--border)' : 'var(--ink)';
+
+  // 172. Limpiamos precio y total al cambiar de modo
+  document.getElementById('v-precio').value = '';
+  document.getElementById('v-total').value = '';
+  document.getElementById('v-cant').value = '1';
+  const prevTotal = document.getElementById('prev-vtotal');
+  if(prevTotal) prevTotal.textContent = '';
 };
 
 window.fillVentaPrecio = () => {
@@ -1804,48 +1862,70 @@ window.calcSaldo = () => {
 };
 
 window.guardarVenta = async () => {
-  const prodId = document.getElementById('v-prod').value;
-  const cant = Number(document.getElementById('v-cant').value);
-  const precio = Number(document.getElementById('v-precio').value);
   const fecha = document.getElementById('v-fecha').value;
-  if(!fecha||!prodId||!cant||!precio) { alert('Completa los campos requeridos'); return; }
-  const prod = DATA.inventario.find(p=>p.id===prodId);
-  if(!prod) { alert('Producto no encontrado'); return; }
-  if(prod.stock < cant) { alert(`Stock insuficiente. Disponible: ${prod.stock} uds.`); return; }
+  const canal = document.getElementById('v-canal').value;
+  const precio = Number(document.getElementById('v-precio').value);
+  const cant = Number(document.getElementById('v-cant').value);
   const total = Number(document.getElementById('v-total').value);
   const cliente = document.getElementById('v-cliente').value;
-  const tipoPrecio = document.getElementById('v-precio').dataset.tipoPrecio || 'publico';
-
-  // 112. Calculamos el pago inicial y el saldo pendiente
-  //      pagado = lo que entregó el cliente al momento de la venta
-  //      saldo = lo que queda pendiente por cobrar
-  //      estadoPago: 'pagado' | 'parcial' | 'pendiente'
+  const nota = document.getElementById('v-nota').value;
   const pagado = Number(document.getElementById('v-pagado').value)||0;
   const saldo = Math.max(0, total - pagado);
   const estadoPago = saldo === 0 ? 'pagado' : pagado > 0 ? 'parcial' : 'pendiente';
+  const tipoPrecio = document.getElementById('v-precio').dataset.tipoPrecio || 'publico';
 
-  const nuevoStock = prod.stock - cant;
-  await updateDoc(doc(db,'inventario',prodId), { stock: nuevoStock });
-  await addDoc(collection(db,'ventas'), {
-    fecha, canal:document.getElementById('v-canal').value,
-    producto:prod.nombre, prodId, cant, precio, total,
-    cliente, nota:document.getElementById('v-nota').value,
-    tipoPrecio,
-    pagado,       // Monto pagado al momento
-    saldo,        // Saldo pendiente
-    estadoPago,   // Estado: pagado / parcial / pendiente
-    abonos: [],   // Lista de abonos futuros (inicia vacía)
-    createdAt: serverTimestamp()
-  });
+  // 173. Determinamos el modo: inventario o manual
+  const esManual = document.getElementById('seccion-manual').style.display !== 'none';
 
-  // 113. Si quedó pendiente, enviamos notificación para recordar el cobro
-  if(saldo > 0)
-    await pushNotif('💳 Venta a crédito', `${cliente||'Cliente'} debe ${fmt(saldo)} — ${prod.nombre}`, 'credito');
-  else
-    await pushNotif('💰 Nueva venta', `${prod.nombre}${cliente?' — '+cliente:''} · ${fmt(total)}`, 'venta');
+  if(esManual) {
+    // 174. MODO MANUAL — producto fuera del catálogo
+    //      No descuenta stock, no requiere seleccionar del inventario
+    const nombreManual = document.getElementById('v-prod-manual').value.trim();
+    if(!fecha||!nombreManual||!cant||!precio) {
+      alert('Completa fecha, nombre del producto, cantidad y precio'); return;
+    }
+    await addDoc(collection(db,'ventas'), {
+      fecha, canal,
+      producto: nombreManual,  // Nombre libre escrito por el vendedor
+      prodId: null,            // Sin ID de inventario — no afecta stock
+      esManual: true,          // Marcamos como venta manual
+      cant, precio, total,
+      cliente, nota, tipoPrecio,
+      pagado, saldo, estadoPago,
+      abonos: [],
+      createdAt: serverTimestamp()
+    });
+    await pushNotif('💰 Nueva venta', `${nombreManual}${cliente?' — '+cliente:''} · ${fmt(total)}`, 'venta');
 
-  if(nuevoStock <= (prod.stockMinimo||5))
-    await pushNotif('⚠️ Stock bajo', `${prod.nombre} quedó con ${nuevoStock} unidades`, 'stock');
+  } else {
+    // 175. MODO INVENTARIO — producto del catálogo, descuenta stock
+    const prodId = document.getElementById('v-prod').value;
+    if(!fecha||!prodId||!cant||!precio) {
+      alert('Completa todos los campos requeridos'); return;
+    }
+    const prod = DATA.inventario.find(p=>p.id===prodId);
+    if(!prod) { alert('Producto no encontrado'); return; }
+    if(prod.stock < cant) { alert(`Stock insuficiente. Disponible: ${prod.stock} uds.`); return; }
+    const nuevoStock = prod.stock - cant;
+    await updateDoc(doc(db,'inventario',prodId), { stock: nuevoStock });
+    await addDoc(collection(db,'ventas'), {
+      fecha, canal,
+      producto: prod.nombre, prodId,
+      esManual: false,
+      cant, precio, total,
+      cliente, nota, tipoPrecio,
+      pagado, saldo, estadoPago,
+      abonos: [],
+      createdAt: serverTimestamp()
+    });
+    if(saldo > 0)
+      await pushNotif('💳 Venta a crédito', `${cliente||'Cliente'} debe ${fmt(saldo)} — ${prod.nombre}`, 'credito');
+    else
+      await pushNotif('💰 Nueva venta', `${prod.nombre}${cliente?' — '+cliente:''} · ${fmt(total)}`, 'venta');
+    if(nuevoStock <= (prod.stockMinimo||5))
+      await pushNotif('⚠️ Stock bajo', `${prod.nombre} quedó con ${nuevoStock} unidades`, 'stock');
+  }
+
   closeModal('modal-venta');
 };
 
