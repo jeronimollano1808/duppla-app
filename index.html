@@ -1810,11 +1810,75 @@ function renderDashboard() {
 // Lista de ventas con filtro de búsqueda y exportación CSV
 // ============================================================
 function renderVentas() {
-  // 114. Calculamos la cartera total pendiente
+  // 114. Cartera pendiente
   const carteraPendiente = DATA.ventas.reduce((s,v) => s + Number(v.saldo||0), 0);
 
-  // 158. Ordenamos las ventas por fecha descendente (más reciente primero)
-  //      Si dos ventas tienen la misma fecha, las más nuevas (por createdAt) van primero
+  // 213. Calculamos todas las métricas financieras de ventas
+  const totalIngresos = DATA.ventas.reduce((s,v) => s + Number(v.total||0), 0);
+  const totalCobrado = DATA.ventas.reduce((s,v) => s + Number(v.pagado||v.total||0), 0);
+  const totalVentas = DATA.ventas.length;
+
+  // 214. Ganancia bruta = ingresos de ventas - costo de los productos vendidos
+  //      Solo aplica para ventas del catálogo con producto registrado en inventario
+  let costoVendido = 0;
+  DATA.ventas.forEach(v => {
+    const prod = DATA.inventario.find(p => p.id === v.prodId);
+    if(prod?.costo) costoVendido += Number(prod.costo) * Number(v.cant||1);
+    // Para combos sumamos el costo de cada producto incluido
+    if(v.esCombo && v.productosCombo) {
+      v.productosCombo.forEach(item => {
+        const p = DATA.inventario.find(x => x.id === item.prodId);
+        if(p?.costo) costoVendido += Number(p.costo) * Number(item.cant||1);
+      });
+    }
+  });
+  const gananciaBruta = totalIngresos - costoVendido;
+  const margenPct = totalIngresos > 0 ? Math.round((gananciaBruta/totalIngresos)*100) : 0;
+
+  // 215. Métricas del mes actual para comparar
+  const mesActual = new Date().toISOString().slice(0,7);
+  const ventasMes = DATA.ventas.filter(v => v.fecha?.slice(0,7) === mesActual);
+  const ingresosMes = ventasMes.reduce((s,v) => s + Number(v.total||0), 0);
+
+  // 216. Ticket promedio = total ingresos / número de ventas
+  const ticketProm = totalVentas > 0 ? Math.round(totalIngresos / totalVentas) : 0;
+
+  // 217. HTML del resumen financiero
+  const resumenHtml = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:16px">
+      <div class="metric-card">
+        <div class="metric-label">Total ingresos</div>
+        <div class="metric-value" style="font-size:18px;color:var(--lime)">${fmt(totalIngresos)}</div>
+        <div class="metric-sub">${totalVentas} ventas registradas</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Cobrado efectivo</div>
+        <div class="metric-value" style="font-size:18px;color:var(--green)">${fmt(totalCobrado)}</div>
+        <div class="metric-sub">Dinero en mano</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Cartera pendiente</div>
+        <div class="metric-value" style="font-size:18px;color:${carteraPendiente>0?'var(--red)':'var(--green)'}">${fmt(carteraPendiente)}</div>
+        <div class="metric-sub">${DATA.ventas.filter(v=>v.saldo>0).length} ventas por cobrar</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Ganancia bruta</div>
+        <div class="metric-value" style="font-size:18px;color:${gananciaBruta>=0?'var(--blue)':'var(--red)'}">${fmt(gananciaBruta)}</div>
+        <div class="metric-sub">Margen: ${margenPct}%</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Este mes</div>
+        <div class="metric-value" style="font-size:18px;color:var(--amber)">${fmt(ingresosMes)}</div>
+        <div class="metric-sub">${ventasMes.length} ventas</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Ticket promedio</div>
+        <div class="metric-value" style="font-size:18px">${fmt(ticketProm)}</div>
+        <div class="metric-sub">Por venta</div>
+      </div>
+    </div>`;
+
+  // 158. Ordenamos las ventas por fecha descendente
   const ventasOrdenadas = [...DATA.ventas].sort((a,b) => {
     if(b.fecha !== a.fecha) return b.fecha > a.fecha ? 1 : -1;
     return (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0);
@@ -1869,15 +1933,14 @@ function renderVentas() {
     <div class="page-header">
       <div>
         <div class="page-title">Ventas</div>
-        <div class="page-sub">${DATA.ventas.length} registros
-          ${carteraPendiente > 0 ? `· <span style="color:var(--red);font-weight:600">Cartera pendiente: ${fmt(carteraPendiente)}</span>` : ''}
-        </div>
+        <div class="page-sub">${DATA.ventas.length} registros</div>
       </div>
       <div style="display:flex;gap:8px">
         <button class="btn btn-sm" onclick="exportarCSV()">↓ CSV</button>
         <button class="btn btn-lime btn-sm" onclick="abrirModalVenta()">+ Nueva venta</button>
       </div>
     </div>
+    ${resumenHtml}
     <div class="card">
       ${DATA.ventas.length ?
         `<div class="table-wrap"><table class="tbl">
