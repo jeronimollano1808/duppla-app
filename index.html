@@ -775,10 +775,65 @@ body{
     </div>
     <div class="f-group"><label class="f-label">Total ($)</label><input type="number" id="v-total" class="f-input" readonly style="opacity:.6;cursor:not-allowed"></div>
     <div class="f-group"><label class="f-label">Cliente</label><input type="text" id="v-cliente" class="f-input" placeholder="Nombre del cliente"></div>
+    <!-- 101. Sección de pago — permite registrar cuánto pagó el cliente al momento
+               Si pagó menos que el total, la diferencia queda como saldo pendiente -->
+    <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:14px">
+      <div style="font-size:11px;font-weight:600;color:var(--ink-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px">Pago</div>
+      <div class="f-row">
+        <div class="f-group" style="margin-bottom:0">
+          <label class="f-label">Pagó en este momento ($)</label>
+          <!-- 102. Al cambiar el valor pagado, calculamos automáticamente el saldo pendiente -->
+          <input type="number" id="v-pagado" class="f-input" placeholder="0 si queda todo pendiente" oninput="calcSaldo()">
+        </div>
+        <div class="f-group" style="margin-bottom:0">
+          <label class="f-label">Saldo pendiente ($)</label>
+          <!-- 103. Campo de solo lectura que muestra total - pagado automáticamente -->
+          <input type="number" id="v-saldo" class="f-input" readonly style="opacity:.6;cursor:not-allowed;background:var(--amber-bg)">
+        </div>
+      </div>
+      <!-- 104. Indicador visual del estado de pago que cambia en tiempo real -->
+      <div id="v-estado-pago" style="margin-top:10px;font-size:12px;color:var(--ink-3)">
+        Completa el total para ver el estado de pago
+      </div>
+    </div>
     <div class="f-group"><label class="f-label">Nota (opcional)</label><input type="text" id="v-nota" class="f-input" placeholder="Referencia adicional"></div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('modal-venta')">Cancelar</button>
       <button class="btn btn-lime" onclick="guardarVenta()">Registrar venta</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     105. MODAL: AGREGAR ABONO
+     Se abre desde el historial de ventas para registrar
+     pagos parciales en ventas con saldo pendiente
+     ============================================================ -->
+<div class="modal-bg" id="modal-abono">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-header">
+      <span class="modal-title" id="abono-titulo">Registrar abono</span>
+      <button class="modal-close" onclick="closeModal('modal-abono')">✕</button>
+    </div>
+    <!-- 106. Resumen de la deuda actual antes de registrar el abono -->
+    <div id="abono-resumen" style="background:var(--amber-bg);border:1px solid #FDE68A;border-radius:var(--radius);padding:12px 14px;margin-bottom:16px;font-size:13px;color:#78350F"></div>
+    <div class="f-group">
+      <label class="f-label">Fecha del abono</label>
+      <input type="date" id="ab-fecha" class="f-input">
+    </div>
+    <div class="f-group">
+      <label class="f-label">Valor del abono ($) *</label>
+      <input type="number" id="ab-valor" class="f-input" placeholder="0" oninput="calcNuevoSaldo()">
+    </div>
+    <!-- 107. Muestra el nuevo saldo que quedaría después del abono -->
+    <div id="ab-nuevo-saldo" style="font-size:13px;color:var(--ink-2);margin-bottom:14px"></div>
+    <div class="f-group">
+      <label class="f-label">Nota (opcional)</label>
+      <input type="text" id="ab-nota" class="f-input" placeholder="Ej: Pago por transferencia">
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-abono')">Cancelar</button>
+      <button class="btn btn-lime" onclick="guardarAbono()">Registrar abono</button>
     </div>
   </div>
 </div>
@@ -1403,6 +1458,14 @@ function renderDashboard() {
         <div class="metric-value">${wv.length}</div>
         <div class="metric-sub">Hoy: ${hoyV.length}</div>
       </div>
+      <!-- 127. Nueva métrica: cartera pendiente total de todas las ventas -->
+      <div class="metric-card">
+        <div class="metric-label">Cartera pendiente</div>
+        <div class="metric-value" style="color:${DATA.ventas.reduce((s,v)=>s+Number(v.saldo||0),0)>0?'var(--red)':'var(--green)'}">
+          ${fmt(DATA.ventas.reduce((s,v)=>s+Number(v.saldo||0),0))}
+        </div>
+        <div class="metric-sub">${DATA.ventas.filter(v=>v.saldo>0).length} venta(s) pendiente(s)</div>
+      </div>
     </div>
     ${metaHtml}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px" class="dash-grid">
@@ -1429,44 +1492,79 @@ function renderDashboard() {
 // Lista de ventas con filtro de búsqueda y exportación CSV
 // ============================================================
 function renderVentas() {
+  // 114. Calculamos la cartera total pendiente para mostrar en el header
+  const carteraPendiente = DATA.ventas.reduce((s,v) => s + Number(v.saldo||0), 0);
+
   const rows = DATA.ventas.map(v => {
-    // 79. Mostramos el tipo de precio como badge de color para identificar rápido
-    //     el tipo de cliente en cada venta del historial
+    // 79. Badge de tipo de precio
     const tpLabel = { publico:'Público', distribuidor:'Dist.', especial:'Especial' };
     const tpClass = { publico:'b-info', distribuidor:'b-warning', especial:'b-success' };
     const tp = v.tipoPrecio || 'publico';
+
+    // 115. Badge de estado de pago con color semántico
+    //      Verde = pagado, Amarillo = abono parcial, Rojo = pendiente total
+    const epLabel = { pagado:'✅ Pagado', parcial:'⚡ Parcial', pendiente:'⚠️ Pendiente' };
+    const epClass = { pagado:'b-success', parcial:'b-warning', pendiente:'b-danger' };
+    const ep = v.estadoPago || (v.saldo > 0 ? (v.pagado > 0 ? 'parcial' : 'pendiente') : 'pagado');
+
+    // 116. Botón de abono solo visible en ventas con saldo pendiente
+    const btnAbono = (v.saldo > 0)
+      ? `<button class="btn btn-xs" style="color:var(--amber);border-color:#FDE68A" onclick="abrirAbono('${v.id}')">+ Abono</button>`
+      : '';
+
+    // 117. Mostramos el saldo pendiente si existe
+    const saldoCell = v.saldo > 0
+      ? `<td style="color:var(--red);font-size:12px">${fmt(v.saldo)}</td>`
+      : `<td style="color:var(--ink-3);font-size:12px">—</td>`;
+
     return `<tr>
       <td style="color:var(--ink-3)">${v.fecha||''}</td>
       <td style="font-weight:500">${v.cliente||'—'}</td>
       <td>${v.producto||''}</td>
       <td><span class="badge b-${v.canal||'web'}">${v.canal||''}</span></td>
       <td><span class="badge ${tpClass[tp]}">${tpLabel[tp]||tp}</span></td>
-      <td style="color:var(--ink-2)">${v.cant||1}</td>
       <td style="font-weight:600;color:var(--lime)">${fmt(v.total)}</td>
-      <td><button class="btn btn-xs btn-danger" onclick="eliminarDoc('ventas','${v.id}')">✕</button></td>
+      ${saldoCell}
+      <td><span class="badge ${epClass[ep]}">${epLabel[ep]||ep}</span></td>
+      <td>
+        <div style="display:flex;gap:4px">
+          ${btnAbono}
+          <button class="btn btn-xs btn-danger" onclick="eliminarDoc('ventas','${v.id}')">✕</button>
+        </div>
+      </td>
     </tr>`;
   }).join('');
 
   document.getElementById('page-ventas').innerHTML = `
     <div class="page-header">
-      <div><div class="page-title">Ventas</div><div class="page-sub">${DATA.ventas.length} registros</div></div>
+      <div>
+        <div class="page-title">Ventas</div>
+        <div class="page-sub">${DATA.ventas.length} registros
+          ${carteraPendiente > 0 ? `· <span style="color:var(--red);font-weight:600">Cartera pendiente: ${fmt(carteraPendiente)}</span>` : ''}
+        </div>
+      </div>
       <div style="display:flex;gap:8px">
-        <button class="btn btn-sm" onclick="exportarCSV()">↓ Exportar CSV</button>
+        <button class="btn btn-sm" onclick="exportarCSV()">↓ CSV</button>
         <button class="btn btn-lime btn-sm" onclick="abrirModalVenta()">+ Nueva venta</button>
       </div>
     </div>
     <div class="card">
       ${DATA.ventas.length ?
         `<div class="table-wrap"><table class="tbl">
-          <thead><tr><th>Fecha</th><th>Cliente</th><th>Producto</th><th>Canal</th><th>Precio</th><th>Cant.</th><th>Total</th><th></th></tr></thead>
+          <thead><tr><th>Fecha</th><th>Cliente</th><th>Producto</th><th>Canal</th><th>Precio</th><th>Total</th><th>Saldo</th><th>Estado</th><th></th></tr></thead>
           <tbody>${rows}</tbody>
         </table></div>`
-        : `<div class="empty-state"><div class="empty-state-icon">🛒</div><div class="empty-state-text">Sin ventas registradas</div><div class="empty-state-sub">Registra tu primera venta con el botón de arriba</div></div>`}
+        : `<div class="empty-state"><div class="empty-state-icon">🛒</div><div class="empty-state-text">Sin ventas registradas</div></div>`}
     </div>`;
 }
 
 window.abrirModalVenta = () => {
   document.getElementById('v-fecha').value = today();
+  // 108. Reseteamos los campos de pago al abrir el modal
+  document.getElementById('v-pagado').value = '';
+  document.getElementById('v-saldo').value = '';
+  document.getElementById('v-estado-pago').textContent = 'Completa el total para ver el estado de pago';
+  document.getElementById('v-precio-selector').style.display = 'none';
   const sel = document.getElementById('v-prod');
   sel.innerHTML = '<option value="">— Selecciona un producto —</option>' +
     DATA.inventario.map(p =>
@@ -1542,7 +1640,35 @@ window.seleccionarPrecio = (tipo) => {
 window.calcVentaTotal = () => {
   const c = Number(document.getElementById('v-cant').value)||0;
   const p = Number(document.getElementById('v-precio').value)||0;
-  document.getElementById('v-total').value = c * p;
+  const total = c * p;
+  document.getElementById('v-total').value = total;
+  // 109. Cada vez que cambia el total, recalculamos el saldo
+  calcSaldo();
+};
+
+window.calcSaldo = () => {
+  // 110. Saldo = Total - Pagado
+  //      Si pagado > total, el saldo es 0 (no puede quedar en negativo)
+  const total = Number(document.getElementById('v-total').value)||0;
+  const pagado = Number(document.getElementById('v-pagado').value)||0;
+  const saldo = Math.max(0, total - pagado);
+  document.getElementById('v-saldo').value = saldo > 0 ? saldo : '';
+
+  // 111. Actualizamos el indicador visual del estado de pago
+  const estadoEl = document.getElementById('v-estado-pago');
+  if(total === 0) {
+    estadoEl.textContent = 'Completa el total para ver el estado de pago';
+    estadoEl.style.color = 'var(--ink-3)';
+  } else if(saldo === 0 && pagado >= total) {
+    estadoEl.innerHTML = '✅ <strong>Pagado completo</strong> — no queda saldo pendiente';
+    estadoEl.style.color = 'var(--green)';
+  } else if(pagado > 0 && saldo > 0) {
+    estadoEl.innerHTML = `⚡ <strong>Abono parcial</strong> — queda pendiente ${fmt(saldo)}`;
+    estadoEl.style.color = 'var(--amber)';
+  } else {
+    estadoEl.innerHTML = `⚠️ <strong>Pendiente total</strong> — ${fmt(total)} por cobrar`;
+    estadoEl.style.color = 'var(--red)';
+  }
 };
 
 window.guardarVenta = async () => {
@@ -1556,22 +1682,126 @@ window.guardarVenta = async () => {
   if(prod.stock < cant) { alert(`Stock insuficiente. Disponible: ${prod.stock} uds.`); return; }
   const total = Number(document.getElementById('v-total').value);
   const cliente = document.getElementById('v-cliente').value;
-  // 78. tipoPrecio registra qué precio se aplicó (publico/distribuidor/especial)
-  //     Esto permite analizar después cuánto vendemos a cada tipo de cliente
   const tipoPrecio = document.getElementById('v-precio').dataset.tipoPrecio || 'publico';
+
+  // 112. Calculamos el pago inicial y el saldo pendiente
+  //      pagado = lo que entregó el cliente al momento de la venta
+  //      saldo = lo que queda pendiente por cobrar
+  //      estadoPago: 'pagado' | 'parcial' | 'pendiente'
+  const pagado = Number(document.getElementById('v-pagado').value)||0;
+  const saldo = Math.max(0, total - pagado);
+  const estadoPago = saldo === 0 ? 'pagado' : pagado > 0 ? 'parcial' : 'pendiente';
+
   const nuevoStock = prod.stock - cant;
   await updateDoc(doc(db,'inventario',prodId), { stock: nuevoStock });
   await addDoc(collection(db,'ventas'), {
     fecha, canal:document.getElementById('v-canal').value,
     producto:prod.nombre, prodId, cant, precio, total,
     cliente, nota:document.getElementById('v-nota').value,
-    tipoPrecio,   // Guardamos el tipo de precio aplicado
-    createdAt:serverTimestamp()
+    tipoPrecio,
+    pagado,       // Monto pagado al momento
+    saldo,        // Saldo pendiente
+    estadoPago,   // Estado: pagado / parcial / pendiente
+    abonos: [],   // Lista de abonos futuros (inicia vacía)
+    createdAt: serverTimestamp()
   });
-  await pushNotif('💰 Nueva venta', `${prod.nombre}${cliente?' — '+cliente:''} · ${fmt(total)}`, 'venta');
+
+  // 113. Si quedó pendiente, enviamos notificación para recordar el cobro
+  if(saldo > 0)
+    await pushNotif('💳 Venta a crédito', `${cliente||'Cliente'} debe ${fmt(saldo)} — ${prod.nombre}`, 'credito');
+  else
+    await pushNotif('💰 Nueva venta', `${prod.nombre}${cliente?' — '+cliente:''} · ${fmt(total)}`, 'venta');
+
   if(nuevoStock <= (prod.stockMinimo||5))
     await pushNotif('⚠️ Stock bajo', `${prod.nombre} quedó con ${nuevoStock} unidades`, 'stock');
   closeModal('modal-venta');
+};
+
+// ============================================================
+// 118. SISTEMA DE ABONOS
+// abrirAbono: carga la venta en el modal de abono
+// calcNuevoSaldo: calcula el saldo restante tras el abono
+// guardarAbono: registra el abono y actualiza el saldo en Firebase
+// ============================================================
+
+let abonoVentaId = null; // 119. ID de la venta que se está abonando
+
+window.abrirAbono = (ventaId) => {
+  // 120. Buscamos la venta en DATA para mostrar el resumen de la deuda
+  const venta = DATA.ventas.find(v => v.id === ventaId);
+  if(!venta) return;
+  abonoVentaId = ventaId;
+
+  // 121. Mostramos el resumen: producto, cliente, total, pagado y saldo
+  document.getElementById('abono-titulo').textContent =
+    `Abono — ${venta.cliente || 'Cliente'}`;
+  document.getElementById('abono-resumen').innerHTML = `
+    <strong>${venta.producto}</strong><br>
+    Total: ${fmt(venta.total)} · Pagado: ${fmt(venta.pagado||0)}<br>
+    <span style="font-size:15px;font-weight:700">Saldo pendiente: ${fmt(venta.saldo||0)}</span>
+    ${venta.abonos?.length ? `<br><span style="font-size:11px;color:#92400E">${venta.abonos.length} abono(s) registrado(s)</span>` : ''}
+  `;
+  document.getElementById('ab-fecha').value = today();
+  document.getElementById('ab-valor').value = '';
+  document.getElementById('ab-nota').value = '';
+  document.getElementById('ab-nuevo-saldo').textContent = '';
+  openModal('modal-abono');
+};
+
+window.calcNuevoSaldo = () => {
+  // 122. Calculamos el nuevo saldo que quedaría después del abono
+  const venta = DATA.ventas.find(v => v.id === abonoVentaId);
+  if(!venta) return;
+  const abono = Number(document.getElementById('ab-valor').value)||0;
+  const nuevoSaldo = Math.max(0, (venta.saldo||0) - abono);
+  const el = document.getElementById('ab-nuevo-saldo');
+  if(abono > (venta.saldo||0)) {
+    el.innerHTML = `⚠️ El abono supera el saldo. Máximo: ${fmt(venta.saldo||0)}`;
+    el.style.color = 'var(--red)';
+  } else if(nuevoSaldo === 0) {
+    el.innerHTML = `✅ Con este abono queda <strong>saldado completamente</strong>`;
+    el.style.color = 'var(--green)';
+  } else {
+    el.innerHTML = `Nuevo saldo pendiente: <strong>${fmt(nuevoSaldo)}</strong>`;
+    el.style.color = 'var(--amber)';
+  }
+};
+
+window.guardarAbono = async () => {
+  const venta = DATA.ventas.find(v => v.id === abonoVentaId);
+  if(!venta) return;
+  const valor = Number(document.getElementById('ab-valor').value);
+  if(!valor || valor <= 0) { alert('Ingresa un valor de abono válido'); return; }
+  if(valor > (venta.saldo||0)) { alert(`El abono no puede superar el saldo de ${fmt(venta.saldo||0)}`); return; }
+
+  // 123. Calculamos los nuevos valores tras el abono
+  const nuevoPagado = (venta.pagado||0) + valor;
+  const nuevoSaldo = Math.max(0, (venta.saldo||0) - valor);
+  const nuevoEstado = nuevoSaldo === 0 ? 'pagado' : 'parcial';
+
+  // 124. Registramos el abono en el array de abonos de la venta
+  //      Cada abono guarda: fecha, valor y nota
+  const abonos = [...(venta.abonos||[]), {
+    fecha: document.getElementById('ab-fecha').value,
+    valor,
+    nota: document.getElementById('ab-nota').value || ''
+  }];
+
+  // 125. Actualizamos la venta en Firebase con el nuevo saldo y lista de abonos
+  await updateDoc(doc(db,'ventas',abonoVentaId), {
+    pagado: nuevoPagado,
+    saldo: nuevoSaldo,
+    estadoPago: nuevoEstado,
+    abonos
+  });
+
+  // 126. Notificamos al otro socio del abono recibido
+  await pushNotif('💳 Abono recibido',
+    `${venta.cliente||'Cliente'} abonó ${fmt(valor)} — saldo: ${fmt(nuevoSaldo)}`,
+    'abono');
+
+  closeModal('modal-abono');
+  abonoVentaId = null;
 };
 
 window.exportarCSV = () => {
