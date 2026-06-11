@@ -723,6 +723,8 @@ body{
     <div class="page" id="page-proveedores"></div>
     <div class="page" id="page-pedidos"></div>
     <div class="page" id="page-metas"></div>
+    <!-- 178. Página de combos -->
+    <div class="page" id="page-combos"></div>
   </div>
 </div>
 
@@ -748,8 +750,7 @@ body{
         </select>
       </div>
     </div>
-    <!-- 166. Selector de tipo de producto: del inventario o producto manual
-               Permite registrar ventas de productos que no están en el catálogo -->
+    <!-- 166. Selector de tipo de producto: del inventario, manual o combo -->
     <div style="display:flex;gap:8px;margin-bottom:12px">
       <button type="button" id="btn-tipo-inv" onclick="setTipoProducto('inventario')"
         style="flex:1;padding:8px;border-radius:var(--radius);border:2px solid var(--ink);background:var(--ink);color:#fff;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">
@@ -758,6 +759,10 @@ body{
       <button type="button" id="btn-tipo-manual" onclick="setTipoProducto('manual')"
         style="flex:1;padding:8px;border-radius:var(--radius);border:2px solid var(--border);background:var(--surface-2);color:var(--ink-2);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">
         ✏️ Producto manual
+      </button>
+      <button type="button" onclick="closeModal('modal-venta');abrirVenderCombo()"
+        style="flex:1;padding:8px;border-radius:var(--radius);border:2px solid var(--border);background:var(--surface-2);color:var(--ink-2);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">
+        🎁 Combo
       </button>
     </div>
 
@@ -1120,6 +1125,143 @@ body{
   </div>
 </div>
 
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-meta')">Cancelar</button>
+      <button class="btn btn-lime" onclick="guardarMeta()">Guardar meta</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     180. MODAL: NUEVO COMBO FIJO
+     Permite crear un combo reutilizable con nombre, productos y precio especial
+     ============================================================ -->
+<div class="modal-bg" id="modal-combo">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="modal-combo-title">Nuevo combo</span>
+      <button class="modal-close" onclick="closeModal('modal-combo')">✕</button>
+    </div>
+    <input type="hidden" id="combo-id" value="">
+    <div class="f-group">
+      <label class="f-label">Nombre del combo *</label>
+      <input type="text" id="combo-nombre" class="f-input" placeholder="Ej: Combo Fuerza, Pack Recuperación...">
+    </div>
+    <div class="f-group">
+      <label class="f-label">Descripción (opcional)</label>
+      <input type="text" id="combo-desc" class="f-input" placeholder="Ej: Proteína + Creatina + Multivitamínico">
+    </div>
+    <!-- 181. Lista de productos del combo con cantidad por producto -->
+    <div class="f-group">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <label class="f-label" style="margin:0">Productos incluidos *</label>
+        <button type="button" class="btn btn-sm" onclick="agregarLineaCombo()">+ Agregar producto</button>
+      </div>
+      <div id="combo-lineas"></div>
+    </div>
+    <!-- 182. Precio especial del combo vs suma individual -->
+    <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <span style="font-size:12px;color:var(--ink-2);font-weight:500">Suma de precios individuales</span>
+        <span id="combo-suma-ind" style="font-size:13px;font-weight:600;color:var(--ink-3)">$0</span>
+      </div>
+      <div class="f-group" style="margin-bottom:0">
+        <label class="f-label">Precio especial del combo ($) *</label>
+        <input type="number" id="combo-precio" class="f-input" placeholder="Precio con descuento"
+          oninput="previoCOP('combo-precio','prev-combo-precio');calcDescuentoCombo()">
+        <div id="prev-combo-precio" style="font-size:11px;margin-top:4px;font-weight:600"></div>
+        <div id="combo-descuento" style="font-size:12px;margin-top:4px;color:var(--green)"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-combo')">Cancelar</button>
+      <button class="btn btn-lime" onclick="guardarCombo()" id="btn-guardar-combo">Guardar combo</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     183. MODAL: VENDER COMBO
+     Se abre al registrar una venta de tipo combo
+     Permite elegir combo fijo o armar uno variable en el momento
+     ============================================================ -->
+<div class="modal-bg" id="modal-vender-combo">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Vender combo</span>
+      <button class="modal-close" onclick="closeModal('modal-vender-combo')">✕</button>
+    </div>
+    <div class="f-row">
+      <div class="f-group"><label class="f-label">Fecha</label><input type="date" id="vc-fecha" class="f-input"></div>
+      <div class="f-group"><label class="f-label">Canal</label>
+        <select id="vc-canal" class="f-input">
+          <option value="web">Página web</option>
+          <option value="directo">Venta directa</option>
+          <option value="distribuidor">Distribuidor</option>
+        </select>
+      </div>
+    </div>
+    <!-- 184. Toggle: combo fijo guardado o armar en el momento -->
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <button type="button" id="btn-combo-fijo" onclick="setTipoCombo('fijo')"
+        style="flex:1;padding:8px;border-radius:var(--radius);border:2px solid var(--ink);background:var(--ink);color:#fff;font-size:12px;font-weight:600;cursor:pointer">
+        🎁 Combo guardado
+      </button>
+      <button type="button" id="btn-combo-var" onclick="setTipoCombo('variable')"
+        style="flex:1;padding:8px;border-radius:var(--radius);border:2px solid var(--border);background:var(--surface-2);color:var(--ink-2);font-size:12px;font-weight:600;cursor:pointer">
+        ✏️ Armar ahora
+      </button>
+    </div>
+    <!-- Sección combo fijo -->
+    <div id="vc-seccion-fijo">
+      <div class="f-group"><label class="f-label">Selecciona el combo</label>
+        <select id="vc-combo-sel" class="f-input" onchange="cargarComboFijo()">
+          <option value="">— Selecciona un combo —</option>
+        </select>
+      </div>
+      <div id="vc-combo-detalle" style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:12px;display:none;font-size:13px"></div>
+    </div>
+    <!-- Sección combo variable -->
+    <div id="vc-seccion-variable" style="display:none">
+      <div class="f-group">
+        <label class="f-label">Nombre del combo</label>
+        <input type="text" id="vc-nombre" class="f-input" placeholder="Ej: Combo semana proteína">
+      </div>
+      <div class="f-group">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <label class="f-label" style="margin:0">Productos</label>
+          <button type="button" class="btn btn-sm" onclick="agregarLineaVentaCombo()">+ Producto</button>
+        </div>
+        <div id="vc-lineas"></div>
+      </div>
+    </div>
+    <div class="f-group">
+      <label class="f-label">Precio del combo ($)</label>
+      <input type="number" id="vc-precio" class="f-input"
+        oninput="previoCOP('vc-precio','prev-vc-precio')">
+      <div id="prev-vc-precio" style="font-size:11px;margin-top:4px;font-weight:600"></div>
+    </div>
+    <div class="f-group"><label class="f-label">Cliente</label>
+      <input type="text" id="vc-cliente" class="f-input" placeholder="Nombre del cliente">
+    </div>
+    <div class="f-row">
+      <div class="f-group">
+        <label class="f-label">Pagó ahora ($)</label>
+        <input type="number" id="vc-pagado" class="f-input" placeholder="0"
+          oninput="calcSaldoCombo()">
+      </div>
+      <div class="f-group">
+        <label class="f-label">Saldo pendiente ($)</label>
+        <input type="number" id="vc-saldo" class="f-input" readonly style="opacity:.6">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-vender-combo')">Cancelar</button>
+      <button class="btn btn-lime" onclick="guardarVentaCombo()">Registrar venta</button>
+    </div>
+  </div>
+</div>
+
 <!-- Modal: Ajuste de stock -->
 <div class="modal-bg" id="modal-ajuste">
   <div class="modal" style="max-width:340px">
@@ -1185,7 +1327,8 @@ const auth = getAuth(app);
 // ============================================================
 let DATA = {
   ventas:[], inventario:[], gastos:[],
-  proveedores:[], pedidos:[], metas:[], notificaciones:[]
+  proveedores:[], pedidos:[], metas:[],
+  notificaciones:[], combos:[]  // 179. combos: lista de combos fijos guardados
 };
 let currentPage = 'dashboard';  // Página activa
 let ajusteProductoId = null;    // ID del producto que se está ajustando
@@ -1234,6 +1377,8 @@ const MENU = [
   { id:'proveedores', label:'Proveedores', ico:'🚚', group:'Operaciones' },
   { id:'pedidos', label:'Pedidos', ico:'📋', group:'Operaciones' },
   { id:'metas', label:'Metas', ico:'🎯', group:'Operaciones' },
+  // 177. Combos — sección para crear y gestionar combos de productos
+  { id:'combos', label:'Combos', ico:'🎁', group:'Operaciones' },
 ];
 
 // ============================================================
@@ -1296,7 +1441,7 @@ document.getElementById('li-pass')?.addEventListener('keydown', e => {
 // Cada cambio en Firebase actualiza DATA y redibuja la página
 // ============================================================
 function startListeners() {
-  const cols = ['ventas','inventario','gastos','proveedores','pedidos','metas'];
+  const cols = ['ventas','inventario','gastos','proveedores','pedidos','metas','combos'];
   cols.forEach(col => {
     const q = query(collection(db, col), orderBy('createdAt','desc'));
     onSnapshot(q, snap => {
@@ -1364,7 +1509,7 @@ function renderPage(id) {
     dashboard:renderDashboard, ventas:renderVentas,
     inventario:renderInventario, clientes:renderClientes,
     gastos:renderGastos, proveedores:renderProveedores,
-    pedidos:renderPedidos, metas:renderMetas
+    pedidos:renderPedidos, metas:renderMetas, combos:renderCombos
   };
   if(renders[id]) renders[id]();
 }
@@ -2791,6 +2936,349 @@ window.guardarMeta = async () => {
 // Función genérica para eliminar cualquier registro de Firebase
 // col = nombre de la colección, id = ID del documento
 // ============================================================
+// ============================================================
+// 185. PÁGINA: COMBOS
+// Muestra los combos guardados y permite crear nuevos
+// ============================================================
+
+function renderCombos() {
+  const cards = DATA.combos.map(c => {
+    const prods = (c.productos||[]).map(p => {
+      const prod = DATA.inventario.find(x => x.id === p.prodId);
+      return `<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--ink-2);margin-bottom:3px">
+        <span>${prod?.nombre || p.nombre || 'Producto'}</span>
+        <span>${p.cant} uds.</span>
+      </div>`;
+    }).join('');
+    const sumaInd = (c.productos||[]).reduce((s,p) => {
+      const prod = DATA.inventario.find(x => x.id === p.prodId);
+      return s + (Number(prod?.pventa||0) * Number(p.cant||1));
+    }, 0);
+    const descuento = sumaInd > 0 ? Math.round(((sumaInd - c.precio) / sumaInd) * 100) : 0;
+    return `<div class="list-card">
+      <div class="list-card-header">
+        <div>
+          <div class="list-card-title">🎁 ${c.nombre}</div>
+          ${c.desc ? `<div class="list-card-sub">${c.desc}</div>` : ''}
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:18px;font-weight:700;color:var(--lime)">${fmt(c.precio)}</div>
+          ${descuento > 0 ? `<div style="font-size:11px;color:var(--green)">-${descuento}% vs individual</div>` : ''}
+        </div>
+      </div>
+      <div class="list-card-body">
+        <div style="font-size:11px;font-weight:600;color:var(--ink-3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Productos incluidos</div>
+        ${prods}
+        ${sumaInd > 0 ? `<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--ink-3);margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">
+          <span>Suma individual</span><span>${fmt(sumaInd)}</span>
+        </div>` : ''}
+      </div>
+      <div class="list-card-actions">
+        <button class="btn btn-sm btn-lime" onclick="abrirVenderComboFijo('${c.id}')">Vender este combo</button>
+        <button class="btn btn-sm" onclick="editarCombo('${c.id}')">✏️ Editar</button>
+        <button class="btn btn-sm btn-danger" onclick="eliminarDoc('combos','${c.id}')">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('page-combos').innerHTML = `
+    <div class="page-header">
+      <div><div class="page-title">Combos</div><div class="page-sub">${DATA.combos.length} combos guardados</div></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-sm" onclick="abrirVenderCombo()">🎁 Vender combo</button>
+        <button class="btn btn-lime btn-sm" onclick="abrirNuevoCombo()">+ Nuevo combo</button>
+      </div>
+    </div>
+    ${DATA.combos.length ?
+      `<div class="list-cards">${cards}</div>`
+      : `<div class="card"><div class="empty-state"><div class="empty-state-icon">🎁</div>
+          <div class="empty-state-text">Sin combos guardados</div>
+          <div class="empty-state-sub">Crea combos fijos para reusar o véndelos en el momento</div>
+        </div></div>`}`;
+}
+
+// 186. Líneas de productos en el formulario de combo
+let comboLineas = [];
+let vcLineas = [];
+
+window.abrirNuevoCombo = () => {
+  document.getElementById('combo-id').value = '';
+  document.getElementById('combo-nombre').value = '';
+  document.getElementById('combo-desc').value = '';
+  document.getElementById('combo-precio').value = '';
+  document.getElementById('prev-combo-precio').textContent = '';
+  document.getElementById('combo-descuento').textContent = '';
+  document.getElementById('combo-suma-ind').textContent = '$0';
+  document.getElementById('modal-combo-title').textContent = 'Nuevo combo';
+  document.getElementById('btn-guardar-combo').textContent = 'Guardar combo';
+  comboLineas = [{ prodId:'', cant:1 }];
+  renderLineasCombo();
+  openModal('modal-combo');
+};
+
+window.editarCombo = (id) => {
+  const combo = DATA.combos.find(c => c.id === id);
+  if(!combo) return;
+  document.getElementById('combo-id').value = id;
+  document.getElementById('combo-nombre').value = combo.nombre || '';
+  document.getElementById('combo-desc').value = combo.desc || '';
+  document.getElementById('combo-precio').value = combo.precio || '';
+  document.getElementById('modal-combo-title').textContent = `Editar — ${combo.nombre}`;
+  document.getElementById('btn-guardar-combo').textContent = 'Guardar cambios';
+  comboLineas = (combo.productos||[]).map(p => ({...p}));
+  if(!comboLineas.length) comboLineas = [{ prodId:'', cant:1 }];
+  renderLineasCombo();
+  previoCOP('combo-precio','prev-combo-precio');
+  calcDescuentoCombo();
+  openModal('modal-combo');
+};
+
+function renderLineasCombo() {
+  // 187. Renderiza las filas de productos del combo con select + cantidad
+  const html = comboLineas.map((l,i) => `
+    <div style="display:grid;grid-template-columns:1fr 80px 32px;gap:8px;margin-bottom:8px;align-items:center">
+      <select class="f-input" style="font-size:13px" onchange="comboLineas[${i}].prodId=this.value;calcSumaIndividual()"
+        value="${l.prodId}">
+        <option value="">— Producto —</option>
+        ${DATA.inventario.map(p =>
+          `<option value="${p.id}" ${p.id===l.prodId?'selected':''}>${p.nombre}</option>`
+        ).join('')}
+      </select>
+      <input type="number" class="f-input" value="${l.cant}" min="1" style="font-size:13px;text-align:center"
+        oninput="comboLineas[${i}].cant=Number(this.value)||1;calcSumaIndividual()">
+      <button type="button" onclick="quitarLineaCombo(${i})"
+        style="width:32px;height:38px;border:1px solid #FECACA;border-radius:8px;background:var(--red-bg);color:var(--red);cursor:pointer;font-size:14px">✕</button>
+    </div>`).join('');
+  document.getElementById('combo-lineas').innerHTML = html;
+}
+
+window.agregarLineaCombo = () => {
+  comboLineas.push({ prodId:'', cant:1 });
+  renderLineasCombo();
+};
+
+window.quitarLineaCombo = (i) => {
+  comboLineas.splice(i, 1);
+  if(!comboLineas.length) comboLineas = [{ prodId:'', cant:1 }];
+  renderLineasCombo();
+  calcSumaIndividual();
+};
+
+window.calcSumaIndividual = () => {
+  // 188. Calcula la suma de precios individuales para mostrar el ahorro del combo
+  const suma = comboLineas.reduce((s,l) => {
+    const prod = DATA.inventario.find(p => p.id === l.prodId);
+    return s + (Number(prod?.pventa||0) * Number(l.cant||1));
+  }, 0);
+  document.getElementById('combo-suma-ind').textContent = fmt(suma);
+  calcDescuentoCombo();
+};
+
+window.calcDescuentoCombo = () => {
+  const suma = comboLineas.reduce((s,l) => {
+    const prod = DATA.inventario.find(p => p.id === l.prodId);
+    return s + (Number(prod?.pventa||0) * Number(l.cant||1));
+  }, 0);
+  const precio = Number(document.getElementById('combo-precio').value)||0;
+  const el = document.getElementById('combo-descuento');
+  if(precio > 0 && suma > 0) {
+    const desc = Math.round(((suma-precio)/suma)*100);
+    el.textContent = desc > 0 ? `✅ Descuento del ${desc}% vs precio individual` : desc < 0 ? `⚠️ El precio del combo supera la suma individual` : '';
+    el.style.color = desc > 0 ? 'var(--green)' : 'var(--red)';
+  } else { el.textContent = ''; }
+};
+
+window.guardarCombo = async () => {
+  const nombre = document.getElementById('combo-nombre').value.trim();
+  const precio = Number(document.getElementById('combo-precio').value);
+  const productos = comboLineas.filter(l => l.prodId);
+  if(!nombre||!precio||!productos.length) {
+    alert('Completa nombre, al menos un producto y el precio del combo'); return;
+  }
+  // 189. Guardamos el nombre del producto también para referencia histórica
+  const productosConNombre = productos.map(l => ({
+    prodId: l.prodId,
+    nombre: DATA.inventario.find(p=>p.id===l.prodId)?.nombre || '',
+    cant: l.cant
+  }));
+  const datos = { nombre, desc:document.getElementById('combo-desc').value, precio, productos:productosConNombre };
+  const comboId = document.getElementById('combo-id').value;
+  if(comboId) {
+    await updateDoc(doc(db,'combos',comboId), datos);
+    toast('✅ Combo actualizado');
+  } else {
+    datos.createdAt = serverTimestamp();
+    await addDoc(collection(db,'combos'), datos);
+    toast('✅ Combo creado');
+  }
+  closeModal('modal-combo');
+};
+
+// ============================================================
+// 190. VENDER COMBO
+// ============================================================
+
+window.abrirVenderCombo = () => {
+  document.getElementById('vc-fecha').value = today();
+  document.getElementById('vc-precio').value = '';
+  document.getElementById('vc-cliente').value = '';
+  document.getElementById('vc-pagado').value = '';
+  document.getElementById('vc-saldo').value = '';
+  document.getElementById('vc-nombre').value = '';
+  document.getElementById('prev-vc-precio').textContent = '';
+  // Cargamos combos fijos en el select
+  const sel = document.getElementById('vc-combo-sel');
+  sel.innerHTML = '<option value="">— Selecciona un combo —</option>' +
+    DATA.combos.map(c => `<option value="${c.id}">${c.nombre} · ${fmt(c.precio)}</option>`).join('');
+  document.getElementById('vc-combo-detalle').style.display = 'none';
+  setTipoCombo('fijo');
+  vcLineas = [{ prodId:'', cant:1 }];
+  renderLineasVentaCombo();
+  openModal('modal-vender-combo');
+};
+
+window.abrirVenderComboFijo = (comboId) => {
+  abrirVenderCombo();
+  setTimeout(() => {
+    document.getElementById('vc-combo-sel').value = comboId;
+    cargarComboFijo();
+  }, 100);
+};
+
+window.setTipoCombo = (tipo) => {
+  const esFijo = tipo === 'fijo';
+  document.getElementById('vc-seccion-fijo').style.display = esFijo ? 'block' : 'none';
+  document.getElementById('vc-seccion-variable').style.display = esFijo ? 'none' : 'block';
+  const btnF = document.getElementById('btn-combo-fijo');
+  const btnV = document.getElementById('btn-combo-var');
+  btnF.style.background = esFijo ? 'var(--ink)' : 'var(--surface-2)';
+  btnF.style.color = esFijo ? '#fff' : 'var(--ink-2)';
+  btnF.style.borderColor = esFijo ? 'var(--ink)' : 'var(--border)';
+  btnV.style.background = esFijo ? 'var(--surface-2)' : 'var(--ink)';
+  btnV.style.color = esFijo ? 'var(--ink-2)' : '#fff';
+  btnV.style.borderColor = esFijo ? 'var(--border)' : 'var(--ink)';
+};
+
+window.cargarComboFijo = () => {
+  const sel = document.getElementById('vc-combo-sel');
+  const combo = DATA.combos.find(c => c.id === sel.value);
+  const det = document.getElementById('vc-combo-detalle');
+  if(!combo) { det.style.display = 'none'; return; }
+  // Mostramos el detalle y llenamos el precio
+  det.style.display = 'block';
+  det.innerHTML = (combo.productos||[]).map(p =>
+    `<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--ink-2);margin-bottom:3px">
+      <span>${p.nombre}</span><span>${p.cant} uds.</span>
+    </div>`).join('') +
+    `<div style="font-size:13px;font-weight:700;color:var(--lime);margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
+      Precio combo: ${fmt(combo.precio)}
+    </div>`;
+  document.getElementById('vc-precio').value = combo.precio;
+  previoCOP('vc-precio','prev-vc-precio');
+};
+
+function renderLineasVentaCombo() {
+  const html = vcLineas.map((l,i) => `
+    <div style="display:grid;grid-template-columns:1fr 80px 32px;gap:8px;margin-bottom:8px;align-items:center">
+      <select class="f-input" style="font-size:13px" onchange="vcLineas[${i}].prodId=this.value">
+        <option value="">— Producto —</option>
+        ${DATA.inventario.map(p =>
+          `<option value="${p.id}" ${p.id===l.prodId?'selected':''}>${p.nombre} (${p.stock})</option>`
+        ).join('')}
+      </select>
+      <input type="number" class="f-input" value="${l.cant}" min="1" style="font-size:13px;text-align:center"
+        oninput="vcLineas[${i}].cant=Number(this.value)||1">
+      <button type="button" onclick="quitarLineaVentaCombo(${i})"
+        style="width:32px;height:38px;border:1px solid #FECACA;border-radius:8px;background:var(--red-bg);color:var(--red);cursor:pointer;font-size:14px">✕</button>
+    </div>`).join('');
+  document.getElementById('vc-lineas').innerHTML = html;
+}
+
+window.agregarLineaVentaCombo = () => {
+  vcLineas.push({ prodId:'', cant:1 });
+  renderLineasVentaCombo();
+};
+
+window.quitarLineaVentaCombo = (i) => {
+  vcLineas.splice(i, 1);
+  if(!vcLineas.length) vcLineas = [{ prodId:'', cant:1 }];
+  renderLineasVentaCombo();
+};
+
+window.calcSaldoCombo = () => {
+  const precio = Number(document.getElementById('vc-precio').value)||0;
+  const pagado = Number(document.getElementById('vc-pagado').value)||0;
+  document.getElementById('vc-saldo').value = Math.max(0, precio - pagado) || '';
+};
+
+window.guardarVentaCombo = async () => {
+  const fecha = document.getElementById('vc-fecha').value;
+  const canal = document.getElementById('vc-canal').value;
+  const precio = Number(document.getElementById('vc-precio').value);
+  const cliente = document.getElementById('vc-cliente').value;
+  const pagado = Number(document.getElementById('vc-pagado').value)||0;
+  const saldo = Math.max(0, precio - pagado);
+  const estadoPago = saldo===0?'pagado':pagado>0?'parcial':'pendiente';
+
+  if(!fecha||!precio) { alert('Completa fecha y precio del combo'); return; }
+
+  const esFijo = document.getElementById('vc-seccion-fijo').style.display !== 'none';
+  let nombreCombo = '', productosCombo = [];
+
+  if(esFijo) {
+    // 191. Combo fijo: usamos los productos del combo guardado
+    const combo = DATA.combos.find(c => c.id === document.getElementById('vc-combo-sel').value);
+    if(!combo) { alert('Selecciona un combo'); return; }
+    nombreCombo = combo.nombre;
+    productosCombo = combo.productos || [];
+  } else {
+    // 192. Combo variable: usamos las líneas armadas en el momento
+    nombreCombo = document.getElementById('vc-nombre').value.trim() || 'Combo';
+    productosCombo = vcLineas.filter(l => l.prodId).map(l => ({
+      prodId: l.prodId,
+      nombre: DATA.inventario.find(p=>p.id===l.prodId)?.nombre || '',
+      cant: l.cant
+    }));
+    if(!productosCombo.length) { alert('Agrega al menos un producto al combo'); return; }
+  }
+
+  // 193. Verificamos stock de todos los productos antes de descontar
+  for(const item of productosCombo) {
+    const prod = DATA.inventario.find(p => p.id === item.prodId);
+    if(!prod) continue;
+    if(prod.stock < item.cant) {
+      alert(`Stock insuficiente para ${prod.nombre}. Disponible: ${prod.stock} uds.`); return;
+    }
+  }
+
+  // 194. Descontamos el stock de cada producto del combo
+  for(const item of productosCombo) {
+    const prod = DATA.inventario.find(p => p.id === item.prodId);
+    if(!prod) continue;
+    await updateDoc(doc(db,'inventario',item.prodId), { stock: prod.stock - item.cant });
+    if(prod.stock - item.cant <= (prod.stockMinimo||5))
+      await pushNotif('⚠️ Stock bajo', `${prod.nombre} quedó con ${prod.stock-item.cant} uds`, 'stock');
+  }
+
+  // 195. Registramos la venta del combo como una sola entrada
+  await addDoc(collection(db,'ventas'), {
+    fecha, canal,
+    producto: nombreCombo,
+    esCombo: true,
+    productosCombo,      // Detalle de los productos incluidos
+    cant: 1,
+    precio, total: precio,
+    cliente, tipoPrecio: 'especial',
+    pagado, saldo, estadoPago,
+    abonos: [],
+    createdAt: serverTimestamp()
+  });
+
+  await pushNotif('🎁 Combo vendido', `${nombreCombo}${cliente?' — '+cliente:''} · ${fmt(precio)}`, 'venta');
+  closeModal('modal-vender-combo');
+  toast('✅ Combo registrado correctamente');
+};
+
 window.eliminarDoc = async (col, id) => {
   if(!confirm('¿Eliminar este registro? Esta acción no se puede deshacer.')) return;
 
