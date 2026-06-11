@@ -786,9 +786,14 @@ body{
 <div class="modal-bg" id="modal-producto">
   <div class="modal">
     <div class="modal-header">
-      <span class="modal-title">Agregar producto</span>
+      <!-- 81. El título cambia dinámicamente: "Agregar producto" o "Editar producto"
+                según si estamos creando uno nuevo o editando uno existente -->
+      <span class="modal-title" id="modal-producto-title">Agregar producto</span>
       <button class="modal-close" onclick="closeModal('modal-producto')">✕</button>
     </div>
+    <!-- 82. Campo oculto que guarda el ID del producto cuando estamos en modo edición
+              Si está vacío = modo creación, si tiene valor = modo edición -->
+    <input type="hidden" id="p-id" value="">
     <div class="f-group"><label class="f-label">Nombre del producto *</label><input type="text" id="p-nombre" class="f-input" placeholder="Ej: Omega 3 Integral Médica"></div>
     <div class="f-row">
       <div class="f-group"><label class="f-label">Marca</label>
@@ -798,7 +803,7 @@ body{
           <option>Smart Nutrition</option><option>Insane Labz</option><option>Youtheory</option><option>Otra</option>
         </select>
       </div>
-      <div class="f-group"><label class="f-label">Stock inicial</label><input type="number" id="p-stock" class="f-input" value="0" min="0"></div>
+      <div class="f-group"><label class="f-label">Stock</label><input type="number" id="p-stock" class="f-input" value="0" min="0"></div>
     </div>
     <!-- 63. Precio de costo: lo que pagamos al proveedor, sirve para calcular margen -->
     <div class="f-group"><label class="f-label">Precio de costo ($)</label><input type="number" id="p-costo" class="f-input" value="0"></div>
@@ -835,7 +840,7 @@ body{
     <div class="f-group"><label class="f-label">Stock mínimo para alerta</label><input type="number" id="p-minimo" class="f-input" value="5" min="0"></div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('modal-producto')">Cancelar</button>
-      <button class="btn btn-lime" onclick="guardarProducto()">Guardar producto</button>
+      <button class="btn btn-lime" onclick="guardarProducto()" id="btn-guardar-producto">Guardar producto</button>
     </div>
   </div>
 </div>
@@ -844,9 +849,11 @@ body{
 <div class="modal-bg" id="modal-gasto">
   <div class="modal">
     <div class="modal-header">
-      <span class="modal-title">Registrar gasto</span>
+      <span class="modal-title" id="modal-gasto-title">Registrar gasto</span>
       <button class="modal-close" onclick="closeModal('modal-gasto')">✕</button>
     </div>
+    <!-- 93. Campo oculto para el ID del gasto en modo edición -->
+    <input type="hidden" id="g-id" value="">
     <div class="f-row">
       <div class="f-group"><label class="f-label">Fecha *</label><input type="date" id="g-fecha" class="f-input"></div>
       <div class="f-group"><label class="f-label">Categoría</label>
@@ -1601,7 +1608,9 @@ function renderInventario() {
       <td style="color:${margen>=30?'var(--green)':margen>=15?'var(--amber)':'var(--red)'}">${margen!==null?margen+'%':'—'}</td>
       <td>
         <div style="display:flex;gap:5px">
-          <button class="btn btn-xs" onclick="abrirAjuste('${p.id}','${p.nombre.replace(/'/g,"\\'")}',${p.stock})">Ajustar</button>
+          <!-- 83. Botón editar: carga los datos del producto en el formulario para modificarlos -->
+          <button class="btn btn-xs" onclick="editarProducto('${p.id}')">✏️ Editar</button>
+          <button class="btn btn-xs" onclick="abrirAjuste('${p.id}','${p.nombre.replace(/'/g,"\\'")}',${p.stock})">± Stock</button>
           <button class="btn btn-xs btn-danger" onclick="eliminarDoc('inventario','${p.id}')">✕</button>
         </div>
       </td>
@@ -1625,28 +1634,80 @@ function renderInventario() {
 }
 
 window.guardarProducto = async () => {
-  // 66. Validamos que los campos obligatorios tengan valor
+  // 84. Validamos campos obligatorios
   const nombre = document.getElementById('p-nombre').value.trim();
   const pventa = Number(document.getElementById('p-pventa').value);
   if(!nombre||!pventa) { alert('Nombre y precio público son requeridos'); return; }
 
-  // 67. Guardamos los 3 precios en Firebase junto con los demás datos del producto
-  //     pdist = precio distribuidor, pesp = precio especial
-  await addDoc(collection(db,'inventario'), {
-    nombre, marca:document.getElementById('p-marca').value,
-    stock:Number(document.getElementById('p-stock').value)||0,
-    costo:Number(document.getElementById('p-costo').value)||0,
-    pventa,                                                        // Precio público
-    pdist:Number(document.getElementById('p-pdist').value)||0,    // Precio distribuidor
-    pesp:Number(document.getElementById('p-pesp').value)||0,      // Precio especial
-    stockMinimo:Number(document.getElementById('p-minimo').value)||5,
-    createdAt:serverTimestamp()
-  });
+  // 85. Construimos el objeto con todos los datos del formulario
+  const datos = {
+    nombre,
+    marca: document.getElementById('p-marca').value,
+    stock: Number(document.getElementById('p-stock').value)||0,
+    costo: Number(document.getElementById('p-costo').value)||0,
+    pventa,                                                       // Precio público
+    pdist: Number(document.getElementById('p-pdist').value)||0,  // Precio distribuidor
+    pesp:  Number(document.getElementById('p-pesp').value)||0,   // Precio especial
+    stockMinimo: Number(document.getElementById('p-minimo').value)||5,
+  };
+
+  // 86. Verificamos si hay un ID guardado en el campo oculto
+  //     Si hay ID = estamos editando un producto existente → usamos updateDoc
+  //     Si no hay ID = estamos creando uno nuevo → usamos addDoc
+  const prodId = document.getElementById('p-id').value;
+  if(prodId) {
+    // Modo edición: actualizamos el documento existente en Firebase
+    await updateDoc(doc(db,'inventario',prodId), datos);
+  } else {
+    // Modo creación: agregamos un documento nuevo a Firebase
+    datos.createdAt = serverTimestamp();
+    await addDoc(collection(db,'inventario'), datos);
+  }
+
   closeModal('modal-producto');
-  // 68. Limpiamos el formulario para la próxima entrada
-  ['p-nombre','p-stock','p-costo','p-pventa','p-pdist','p-pesp'].forEach(id => {
-    document.getElementById(id).value = id.includes('stock')||id.includes('costo')||id.includes('p-p') ? '0' : '';
-  });
+  // 87. Limpiamos el formulario y reseteamos a modo creación
+  document.getElementById('p-id').value = '';
+  document.getElementById('p-nombre').value = '';
+  document.getElementById('p-stock').value = '0';
+  document.getElementById('p-costo').value = '0';
+  document.getElementById('p-pventa').value = '0';
+  document.getElementById('p-pdist').value = '0';
+  document.getElementById('p-pesp').value = '0';
+  document.getElementById('modal-producto-title').textContent = 'Agregar producto';
+  document.getElementById('btn-guardar-producto').textContent = 'Guardar producto';
+};
+
+window.editarProducto = (id) => {
+  // 88. Buscamos el producto en DATA.inventario por su ID
+  const prod = DATA.inventario.find(p => p.id === id);
+  if(!prod) return;
+
+  // 89. Cargamos todos los datos del producto en el formulario
+  //     Esto convierte el modal de "agregar" en "editar" sin necesitar otro modal
+  document.getElementById('p-id').value = id;           // Guardamos el ID para el guardado
+  document.getElementById('p-nombre').value = prod.nombre;
+  document.getElementById('p-stock').value = prod.stock;
+  document.getElementById('p-costo').value = prod.costo || 0;
+  document.getElementById('p-pventa').value = prod.pventa || 0;
+  document.getElementById('p-pdist').value = prod.pdist || 0;
+  document.getElementById('p-pesp').value = prod.pesp || 0;
+  document.getElementById('p-minimo').value = prod.stockMinimo || 5;
+
+  // 90. Seleccionamos la marca correcta en el select
+  const marcaSelect = document.getElementById('p-marca');
+  for(let i = 0; i < marcaSelect.options.length; i++) {
+    if(marcaSelect.options[i].value === prod.marca) {
+      marcaSelect.selectedIndex = i;
+      break;
+    }
+  }
+
+  // 91. Cambiamos el título y el botón para indicar que estamos en modo edición
+  document.getElementById('modal-producto-title').textContent = `Editar — ${prod.nombre}`;
+  document.getElementById('btn-guardar-producto').textContent = 'Guardar cambios';
+
+  // 92. Abrimos el modal ya cargado con los datos
+  openModal('modal-producto');
 };
 
 window.abrirAjuste = (id, nombre, stock) => {
@@ -1741,7 +1802,12 @@ function renderGastos() {
       <td><span class="badge b-warning">${CATS[g.cat]||g.cat}</span></td>
       <td style="font-weight:500">${g.desc||''}</td>
       <td style="font-weight:600;color:var(--red)">${fmt(g.valor)}</td>
-      <td><button class="btn btn-xs btn-danger" onclick="eliminarDoc('gastos','${g.id}')">✕</button></td>
+      <td>
+        <div style="display:flex;gap:5px">
+          <button class="btn btn-xs" onclick="editarGasto('${g.id}')">✏️</button>
+          <button class="btn btn-xs btn-danger" onclick="eliminarDoc('gastos','${g.id}')">✕</button>
+        </div>
+      </td>
     </tr>`).join('');
 
   document.getElementById('page-gastos').innerHTML = `
@@ -1761,7 +1827,12 @@ function renderGastos() {
 }
 
 window.abrirModalGasto = () => {
+  // 94. Al abrir para crear nuevo, reseteamos el formulario y el modo
+  document.getElementById('g-id').value = '';
   document.getElementById('g-fecha').value = today();
+  document.getElementById('g-desc').value = '';
+  document.getElementById('g-valor').value = '';
+  document.getElementById('modal-gasto-title').textContent = 'Registrar gasto';
   openModal('modal-gasto');
 };
 
@@ -1770,13 +1841,35 @@ window.guardarGasto = async () => {
   const desc = document.getElementById('g-desc').value.trim();
   const valor = Number(document.getElementById('g-valor').value);
   if(!fecha||!desc||!valor) { alert('Completa todos los campos'); return; }
-  await addDoc(collection(db,'gastos'), {
-    fecha, cat:document.getElementById('g-cat').value,
-    desc, valor, createdAt:serverTimestamp()
-  });
+
+  // 95. Si hay ID guardado = modo edición, si no = modo creación
+  const gastoId = document.getElementById('g-id').value;
+  const datos = { fecha, cat:document.getElementById('g-cat').value, desc, valor };
+
+  if(gastoId) {
+    await updateDoc(doc(db,'gastos',gastoId), datos);
+  } else {
+    datos.createdAt = serverTimestamp();
+    await addDoc(collection(db,'gastos'), datos);
+  }
   closeModal('modal-gasto');
-  document.getElementById('g-desc').value='';
-  document.getElementById('g-valor').value='';
+  document.getElementById('g-id').value = '';
+  document.getElementById('g-desc').value = '';
+  document.getElementById('g-valor').value = '';
+};
+
+window.editarGasto = (id) => {
+  // 96. Buscamos el gasto y cargamos sus datos en el formulario
+  const gasto = DATA.gastos.find(g => g.id === id);
+  if(!gasto) return;
+  document.getElementById('g-id').value = id;
+  document.getElementById('g-fecha').value = gasto.fecha;
+  document.getElementById('g-desc').value = gasto.desc;
+  document.getElementById('g-valor').value = gasto.valor;
+  // Seleccionamos la categoría correcta
+  document.getElementById('g-cat').value = gasto.cat;
+  document.getElementById('modal-gasto-title').textContent = 'Editar gasto';
+  openModal('modal-gasto');
 };
 
 // ============================================================
