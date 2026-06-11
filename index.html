@@ -753,18 +753,19 @@ body{
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
         <button type="button" class="precio-btn active" id="btn-publico" onclick="seleccionarPrecio('publico')"
           style="padding:10px 8px;border-radius:var(--radius);border:2px solid #2563EB;background:#EFF6FF;cursor:pointer;text-align:center;transition:all .15s">
+          <!-- 97. Cada botón muestra el tipo de precio arriba y el valor formateado en COP abajo -->
           <div style="font-size:10px;font-weight:600;color:#1D4ED8;text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px">Público</div>
-          <div id="lbl-publico" style="font-size:14px;font-weight:700;color:#1D4ED8">$0</div>
+          <div id="lbl-publico" style="font-size:13px;font-weight:700;color:#1D4ED8">$0</div>
         </button>
         <button type="button" class="precio-btn" id="btn-distribuidor" onclick="seleccionarPrecio('distribuidor')"
           style="padding:10px 8px;border-radius:var(--radius);border:2px solid var(--border);background:var(--surface-2);cursor:pointer;text-align:center;transition:all .15s">
           <div style="font-size:10px;font-weight:600;color:var(--ink-3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px">Distribuidor</div>
-          <div id="lbl-distribuidor" style="font-size:14px;font-weight:700;color:var(--ink-2)">$0</div>
+          <div id="lbl-distribuidor" style="font-size:13px;font-weight:700;color:var(--ink-2)">$0</div>
         </button>
         <button type="button" class="precio-btn" id="btn-especial" onclick="seleccionarPrecio('especial')"
           style="padding:10px 8px;border-radius:var(--radius);border:2px solid var(--border);background:var(--surface-2);cursor:pointer;text-align:center;transition:all .15s">
           <div style="font-size:10px;font-weight:600;color:var(--ink-3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px">Especial</div>
-          <div id="lbl-especial" style="font-size:14px;font-weight:700;color:var(--ink-2)">$0</div>
+          <div id="lbl-especial" style="font-size:13px;font-weight:700;color:var(--ink-2)">$0</div>
         </button>
       </div>
     </div>
@@ -1021,7 +1022,14 @@ let ajusteProductoId = null;    // ID del producto que se está ajustando
 // fmt: formatea números como moneda colombiana ($1.234.567)
 // today: retorna la fecha de hoy en formato YYYY-MM-DD
 // ============================================================
+// 98. fmt formatea números como pesos colombianos con separador de miles
+//     Ejemplos: 110000 → $110.000 | 1500000 → $1.500.000
+//     toLocaleString('es-CO') usa el formato colombiano: punto para miles, coma para decimales
 const fmt = n => '$' + Number(n||0).toLocaleString('es-CO');
+
+// 99. fmtCOP igual que fmt pero agrega la etiqueta COP al final
+//     Se usa en los botones de tipo de precio para máxima claridad
+const fmtCOP = n => n > 0 ? '$' + Number(n).toLocaleString('es-CO') + ' COP' : 'N/D';
 const today = () => new Date().toISOString().slice(0,10);
 
 // ============================================================
@@ -1486,9 +1494,9 @@ window.fillVentaPrecio = () => {
 
   // 72. Mostramos los precios disponibles en los 3 botones
   //     Si un precio es 0 o no existe, mostramos "N/D" (no disponible)
-  document.getElementById('lbl-publico').textContent = prod.pventa > 0 ? fmt(prod.pventa) : 'N/D';
-  document.getElementById('lbl-distribuidor').textContent = prod.pdist > 0 ? fmt(prod.pdist) : 'N/D';
-  document.getElementById('lbl-especial').textContent = prod.pesp > 0 ? fmt(prod.pesp) : 'N/D';
+  document.getElementById('lbl-publico').textContent = fmtCOP(prod.pventa);
+  document.getElementById('lbl-distribuidor').textContent = fmtCOP(prod.pdist);
+  document.getElementById('lbl-especial').textContent = fmtCOP(prod.pesp);
 
   // 73. Mostramos el selector y seleccionamos precio público por defecto
   selector.style.display = 'block';
