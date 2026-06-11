@@ -745,6 +745,29 @@ body{
         <option value="">— Selecciona un producto —</option>
       </select>
     </div>
+    <!-- 65. Selector de tipo de precio — aparece al seleccionar un producto
+              Muestra los 3 precios disponibles para que el vendedor elija cuál aplica
+              El precio se llena automáticamente pero puede editarse manualmente -->
+    <div id="v-precio-selector" style="display:none;margin-bottom:14px">
+      <label class="f-label">Tipo de precio</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+        <button type="button" class="precio-btn active" id="btn-publico" onclick="seleccionarPrecio('publico')"
+          style="padding:10px 8px;border-radius:var(--radius);border:2px solid #2563EB;background:#EFF6FF;cursor:pointer;text-align:center;transition:all .15s">
+          <div style="font-size:10px;font-weight:600;color:#1D4ED8;text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px">Público</div>
+          <div id="lbl-publico" style="font-size:14px;font-weight:700;color:#1D4ED8">$0</div>
+        </button>
+        <button type="button" class="precio-btn" id="btn-distribuidor" onclick="seleccionarPrecio('distribuidor')"
+          style="padding:10px 8px;border-radius:var(--radius);border:2px solid var(--border);background:var(--surface-2);cursor:pointer;text-align:center;transition:all .15s">
+          <div style="font-size:10px;font-weight:600;color:var(--ink-3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px">Distribuidor</div>
+          <div id="lbl-distribuidor" style="font-size:14px;font-weight:700;color:var(--ink-2)">$0</div>
+        </button>
+        <button type="button" class="precio-btn" id="btn-especial" onclick="seleccionarPrecio('especial')"
+          style="padding:10px 8px;border-radius:var(--radius);border:2px solid var(--border);background:var(--surface-2);cursor:pointer;text-align:center;transition:all .15s">
+          <div style="font-size:10px;font-weight:600;color:var(--ink-3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px">Especial</div>
+          <div id="lbl-especial" style="font-size:14px;font-weight:700;color:var(--ink-2)">$0</div>
+        </button>
+      </div>
+    </div>
     <div class="f-row">
       <div class="f-group"><label class="f-label">Cantidad</label><input type="number" id="v-cant" class="f-input" value="1" min="1" oninput="calcVentaTotal()"></div>
       <div class="f-group"><label class="f-label">Precio unitario ($)</label><input type="number" id="v-precio" class="f-input" oninput="calcVentaTotal()"></div>
@@ -777,9 +800,37 @@ body{
       </div>
       <div class="f-group"><label class="f-label">Stock inicial</label><input type="number" id="p-stock" class="f-input" value="0" min="0"></div>
     </div>
-    <div class="f-row">
-      <div class="f-group"><label class="f-label">Precio de costo ($)</label><input type="number" id="p-costo" class="f-input" value="0"></div>
-      <div class="f-group"><label class="f-label">Precio de venta ($)</label><input type="number" id="p-pventa" class="f-input" value="0"></div>
+    <!-- 63. Precio de costo: lo que pagamos al proveedor, sirve para calcular margen -->
+    <div class="f-group"><label class="f-label">Precio de costo ($)</label><input type="number" id="p-costo" class="f-input" value="0"></div>
+    <!-- 64. Los 3 precios de venta — cada uno aplica según el tipo de cliente:
+              Público = precio estándar para cualquier comprador
+              Distribuidor = precio mayorista para revendedores
+              Especial = precio con descuento para clientes frecuentes -->
+    <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:14px">
+      <div style="font-size:11px;font-weight:600;color:var(--ink-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px">Precios de venta</div>
+      <div class="f-row trio">
+        <div class="f-group" style="margin-bottom:0">
+          <label class="f-label" style="display:flex;align-items:center;gap:5px">
+            <span style="width:8px;height:8px;border-radius:50%;background:#2563EB;display:inline-block"></span>
+            Precio público ($)
+          </label>
+          <input type="number" id="p-pventa" class="f-input" value="0" placeholder="0">
+        </div>
+        <div class="f-group" style="margin-bottom:0">
+          <label class="f-label" style="display:flex;align-items:center;gap:5px">
+            <span style="width:8px;height:8px;border-radius:50%;background:#D97706;display:inline-block"></span>
+            Precio distribuidor ($)
+          </label>
+          <input type="number" id="p-pdist" class="f-input" value="0" placeholder="0">
+        </div>
+        <div class="f-group" style="margin-bottom:0">
+          <label class="f-label" style="display:flex;align-items:center;gap:5px">
+            <span style="width:8px;height:8px;border-radius:50%;background:#16A34A;display:inline-block"></span>
+            Precio especial ($)
+          </label>
+          <input type="number" id="p-pesp" class="f-input" value="0" placeholder="0">
+        </div>
+      </div>
     </div>
     <div class="f-group"><label class="f-label">Stock mínimo para alerta</label><input type="number" id="p-minimo" class="f-input" value="5" min="0"></div>
     <div class="modal-footer">
@@ -1363,16 +1414,23 @@ function renderDashboard() {
 // Lista de ventas con filtro de búsqueda y exportación CSV
 // ============================================================
 function renderVentas() {
-  const rows = DATA.ventas.map(v => `
-    <tr>
+  const rows = DATA.ventas.map(v => {
+    // 79. Mostramos el tipo de precio como badge de color para identificar rápido
+    //     el tipo de cliente en cada venta del historial
+    const tpLabel = { publico:'Público', distribuidor:'Dist.', especial:'Especial' };
+    const tpClass = { publico:'b-info', distribuidor:'b-warning', especial:'b-success' };
+    const tp = v.tipoPrecio || 'publico';
+    return `<tr>
       <td style="color:var(--ink-3)">${v.fecha||''}</td>
       <td style="font-weight:500">${v.cliente||'—'}</td>
       <td>${v.producto||''}</td>
       <td><span class="badge b-${v.canal||'web'}">${v.canal||''}</span></td>
+      <td><span class="badge ${tpClass[tp]}">${tpLabel[tp]||tp}</span></td>
       <td style="color:var(--ink-2)">${v.cant||1}</td>
       <td style="font-weight:600;color:var(--lime)">${fmt(v.total)}</td>
       <td><button class="btn btn-xs btn-danger" onclick="eliminarDoc('ventas','${v.id}')">✕</button></td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
 
   document.getElementById('page-ventas').innerHTML = `
     <div class="page-header">
@@ -1385,7 +1443,7 @@ function renderVentas() {
     <div class="card">
       ${DATA.ventas.length ?
         `<div class="table-wrap"><table class="tbl">
-          <thead><tr><th>Fecha</th><th>Cliente</th><th>Producto</th><th>Canal</th><th>Cant.</th><th>Total</th><th></th></tr></thead>
+          <thead><tr><th>Fecha</th><th>Cliente</th><th>Producto</th><th>Canal</th><th>Precio</th><th>Cant.</th><th>Total</th><th></th></tr></thead>
           <tbody>${rows}</tbody>
         </table></div>`
         : `<div class="empty-state"><div class="empty-state-icon">🛒</div><div class="empty-state-text">Sin ventas registradas</div><div class="empty-state-sub">Registra tu primera venta con el botón de arriba</div></div>`}
@@ -1404,12 +1462,66 @@ window.abrirModalVenta = () => {
 };
 
 window.fillVentaPrecio = () => {
+  // 69. Cuando el vendedor selecciona un producto, buscamos sus 3 precios en DATA
   const sel = document.getElementById('v-prod');
-  const opt = sel.options[sel.selectedIndex];
-  if(opt?.dataset.pventa) {
-    document.getElementById('v-precio').value = opt.dataset.pventa;
-    calcVentaTotal();
+  const prodId = sel.value;
+  const selector = document.getElementById('v-precio-selector');
+
+  if(!prodId) {
+    // 70. Si no hay producto seleccionado, ocultamos el selector de precios
+    selector.style.display = 'none';
+    return;
   }
+
+  // 71. Encontramos el producto en el estado global DATA.inventario
+  const prod = DATA.inventario.find(p => p.id === prodId);
+  if(!prod) return;
+
+  // 72. Mostramos los precios disponibles en los 3 botones
+  //     Si un precio es 0 o no existe, mostramos "N/D" (no disponible)
+  document.getElementById('lbl-publico').textContent = prod.pventa > 0 ? fmt(prod.pventa) : 'N/D';
+  document.getElementById('lbl-distribuidor').textContent = prod.pdist > 0 ? fmt(prod.pdist) : 'N/D';
+  document.getElementById('lbl-especial').textContent = prod.pesp > 0 ? fmt(prod.pesp) : 'N/D';
+
+  // 73. Mostramos el selector y seleccionamos precio público por defecto
+  selector.style.display = 'block';
+  seleccionarPrecio('publico');
+};
+
+window.seleccionarPrecio = (tipo) => {
+  // 74. Reseteamos los estilos de los 3 botones al estado inactivo
+  const btns = { publico:'btn-publico', distribuidor:'btn-distribuidor', especial:'btn-especial' };
+  Object.values(btns).forEach(id => {
+    const btn = document.getElementById(id);
+    btn.style.border = '2px solid var(--border)';
+    btn.style.background = 'var(--surface-2)';
+    btn.querySelector('div:first-child').style.color = 'var(--ink-3)';
+    btn.querySelector('div:last-child').style.color = 'var(--ink-2)';
+  });
+
+  // 75. Aplicamos el estilo activo al botón seleccionado según el tipo
+  const colores = {
+    publico: { border:'#2563EB', bg:'#EFF6FF', color:'#1D4ED8' },
+    distribuidor: { border:'#D97706', bg:'#FFFBEB', color:'#92400E' },
+    especial: { border:'#16A34A', bg:'#F0FDF4', color:'#166534' }
+  };
+  const c = colores[tipo];
+  const btnActivo = document.getElementById(btns[tipo]);
+  btnActivo.style.border = `2px solid ${c.border}`;
+  btnActivo.style.background = c.bg;
+  btnActivo.querySelector('div:first-child').style.color = c.color;
+  btnActivo.querySelector('div:last-child').style.color = c.color;
+
+  // 76. Llenamos el campo de precio con el valor correspondiente al tipo seleccionado
+  const prod = DATA.inventario.find(p => p.id === document.getElementById('v-prod').value);
+  if(!prod) return;
+  const precios = { publico: prod.pventa, distribuidor: prod.pdist||0, especial: prod.pesp||0 };
+  const precio = precios[tipo];
+
+  // 77. Guardamos el tipo de precio seleccionado en el input oculto para registrarlo en la venta
+  document.getElementById('v-precio').value = precio > 0 ? precio : '';
+  document.getElementById('v-precio').dataset.tipoPrecio = tipo;
+  calcVentaTotal();
 };
 
 window.calcVentaTotal = () => {
@@ -1429,12 +1541,16 @@ window.guardarVenta = async () => {
   if(prod.stock < cant) { alert(`Stock insuficiente. Disponible: ${prod.stock} uds.`); return; }
   const total = Number(document.getElementById('v-total').value);
   const cliente = document.getElementById('v-cliente').value;
+  // 78. tipoPrecio registra qué precio se aplicó (publico/distribuidor/especial)
+  //     Esto permite analizar después cuánto vendemos a cada tipo de cliente
+  const tipoPrecio = document.getElementById('v-precio').dataset.tipoPrecio || 'publico';
   const nuevoStock = prod.stock - cant;
   await updateDoc(doc(db,'inventario',prodId), { stock: nuevoStock });
   await addDoc(collection(db,'ventas'), {
     fecha, canal:document.getElementById('v-canal').value,
     producto:prod.nombre, prodId, cant, precio, total,
     cliente, nota:document.getElementById('v-nota').value,
+    tipoPrecio,   // Guardamos el tipo de precio aplicado
     createdAt:serverTimestamp()
   });
   await pushNotif('💰 Nueva venta', `${prod.nombre}${cliente?' — '+cliente:''} · ${fmt(total)}`, 'venta');
@@ -1469,11 +1585,19 @@ function renderInventario() {
     const margen = p.costo > 0 ? Math.round(((p.pventa-p.costo)/p.costo)*100) : null;
     const sc = p.stock===0 ? 'badge b-danger' : p.stock<=(p.stockMinimo||5) ? 'badge b-warning' : 'badge b-success';
     const sl = p.stock===0 ? 'Agotado' : p.stock<=(p.stockMinimo||5) ? `Bajo (${p.stock})` : `OK (${p.stock})`;
+    // 80. Mostramos los 3 precios en columnas separadas con punto de color identificador
+    //     Si un precio no está configurado mostramos "—"
     return `<tr>
       <td style="font-weight:500">${p.nombre}</td>
       <td style="color:var(--ink-3)">${p.marca||''}</td>
       <td><span class="${sc}">${sl}</span></td>
-      <td>${fmt(p.pventa)}</td>
+      <td>
+        <div style="display:flex;flex-direction:column;gap:3px;font-size:12px">
+          <span><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#2563EB;margin-right:4px"></span>${p.pventa>0?fmt(p.pventa):'—'}</span>
+          <span><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#D97706;margin-right:4px"></span>${p.pdist>0?fmt(p.pdist):'—'}</span>
+          <span><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#16A34A;margin-right:4px"></span>${p.pesp>0?fmt(p.pesp):'—'}</span>
+        </div>
+      </td>
       <td style="color:${margen>=30?'var(--green)':margen>=15?'var(--amber)':'var(--red)'}">${margen!==null?margen+'%':'—'}</td>
       <td>
         <div style="display:flex;gap:5px">
@@ -1493,7 +1617,7 @@ function renderInventario() {
     <div class="card">
       ${DATA.inventario.length ?
         `<div class="table-wrap"><table class="tbl">
-          <thead><tr><th>Producto</th><th>Marca</th><th>Stock</th><th>P. Venta</th><th>Margen</th><th></th></tr></thead>
+          <thead><tr><th>Producto</th><th>Marca</th><th>Stock</th><th>Precios 🔵Púb 🟠Dist 🟢Esp</th><th>Margen</th><th></th></tr></thead>
           <tbody>${rows}</tbody>
         </table></div>`
         : `<div class="empty-state"><div class="empty-state-icon">📦</div><div class="empty-state-text">Sin productos en inventario</div><div class="empty-state-sub">Agrega tu primer producto con el botón de arriba</div></div>`}
@@ -1501,21 +1625,28 @@ function renderInventario() {
 }
 
 window.guardarProducto = async () => {
+  // 66. Validamos que los campos obligatorios tengan valor
   const nombre = document.getElementById('p-nombre').value.trim();
   const pventa = Number(document.getElementById('p-pventa').value);
-  if(!nombre||!pventa) { alert('Nombre y precio de venta son requeridos'); return; }
+  if(!nombre||!pventa) { alert('Nombre y precio público son requeridos'); return; }
+
+  // 67. Guardamos los 3 precios en Firebase junto con los demás datos del producto
+  //     pdist = precio distribuidor, pesp = precio especial
   await addDoc(collection(db,'inventario'), {
     nombre, marca:document.getElementById('p-marca').value,
     stock:Number(document.getElementById('p-stock').value)||0,
     costo:Number(document.getElementById('p-costo').value)||0,
-    pventa, stockMinimo:Number(document.getElementById('p-minimo').value)||5,
+    pventa,                                                        // Precio público
+    pdist:Number(document.getElementById('p-pdist').value)||0,    // Precio distribuidor
+    pesp:Number(document.getElementById('p-pesp').value)||0,      // Precio especial
+    stockMinimo:Number(document.getElementById('p-minimo').value)||5,
     createdAt:serverTimestamp()
   });
   closeModal('modal-producto');
-  document.getElementById('p-nombre').value='';
-  document.getElementById('p-stock').value='0';
-  document.getElementById('p-costo').value='0';
-  document.getElementById('p-pventa').value='0';
+  // 68. Limpiamos el formulario para la próxima entrada
+  ['p-nombre','p-stock','p-costo','p-pventa','p-pdist','p-pesp'].forEach(id => {
+    document.getElementById(id).value = id.includes('stock')||id.includes('costo')||id.includes('p-p') ? '0' : '';
+  });
 };
 
 window.abrirAjuste = (id, nombre, stock) => {
