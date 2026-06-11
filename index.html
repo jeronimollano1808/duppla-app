@@ -866,7 +866,7 @@ body{
   <div class="modal">
     <div class="modal-header">
       <span class="modal-title">Editar venta</span>
-      <button class="modal-close" onclick="closeModal('modal-editar-venta')">✕</button>
+      <button class="modal-close" onclick="document.getElementById('ev-cant').disabled=false;document.getElementById('ev-prod').disabled=false;closeModal('modal-editar-venta')">✕</button>
     </div>
     <!-- 142. Campo oculto con el ID de la venta que se está editando -->
     <input type="hidden" id="ev-id" value="">
@@ -2177,26 +2177,27 @@ window.guardarAbono = async () => {
 // ============================================================
 
 window.editarVenta = (id) => {
-  // 145. Buscamos la venta y cargamos todos sus datos en el formulario
   const venta = DATA.ventas.find(v => v.id === id);
   if(!venta) return;
 
-  // Guardamos los campos ocultos para calcular ajuste de stock al guardar
+  // 200. Si es una venta de combo, abrimos el modal de combo en vez del de venta normal
+  if(venta.esCombo) {
+    abrirEditarComboVenta(id);
+    return;
+  }
+
+  // 145. Para ventas normales cargamos el formulario estándar
   document.getElementById('ev-id').value = id;
   document.getElementById('ev-cant-original').value = venta.cant || 1;
   document.getElementById('ev-prod-original').value = venta.prodId || '';
 
-  // Cargamos el selector de productos
   const sel = document.getElementById('ev-prod');
   sel.innerHTML = '<option value="">— Selecciona —</option>' +
     DATA.inventario.map(p =>
       `<option value="${p.id}" data-pventa="${p.pventa}" data-pdist="${p.pdist||0}" data-pesp="${p.pesp||0}">${p.nombre}</option>`
     ).join('');
 
-  // Seleccionamos el producto actual
   if(venta.prodId) sel.value = venta.prodId;
-
-  // Cargamos los demás campos
   document.getElementById('ev-fecha').value = venta.fecha || '';
   document.getElementById('ev-canal').value = venta.canal || 'directo';
   document.getElementById('ev-cant').value = venta.cant || 1;
@@ -2206,10 +2207,45 @@ window.editarVenta = (id) => {
   document.getElementById('ev-tipo-precio').value = venta.tipoPrecio || 'publico';
   document.getElementById('ev-nota').value = venta.nota || '';
 
-  // Mostramos previews de precios
   previoCOP('ev-precio', 'prev-ev-precio');
   const prevTotal = document.getElementById('prev-ev-total');
   if(prevTotal && venta.total > 0) prevTotal.textContent = '→ ' + fmt(venta.total) + ' COP';
+
+  openModal('modal-editar-venta');
+};
+
+// 201. Modal especial para editar ventas de combo
+//      Solo permite cambiar fecha, canal, cliente, precio y nota
+//      No se pueden cambiar los productos (afectaría stock ya descontado)
+window.abrirEditarComboVenta = (id) => {
+  const venta = DATA.ventas.find(v => v.id === id);
+  if(!venta) return;
+
+  // Reutilizamos el modal de editar venta con campos relevantes
+  document.getElementById('ev-id').value = id;
+  document.getElementById('ev-cant-original').value = 0; // No ajustar stock
+  document.getElementById('ev-prod-original').value = ''; // No cambiar producto
+
+  // Llenamos el select con el combo como opción fija
+  const sel = document.getElementById('ev-prod');
+  sel.innerHTML = `<option value="combo" selected>🎁 ${venta.producto} (combo)</option>`;
+
+  document.getElementById('ev-fecha').value = venta.fecha || '';
+  document.getElementById('ev-canal').value = venta.canal || 'directo';
+  document.getElementById('ev-cant').value = 1;
+  document.getElementById('ev-precio').value = venta.precio || 0;
+  document.getElementById('ev-total').value = venta.total || 0;
+  document.getElementById('ev-cliente').value = venta.cliente || '';
+  document.getElementById('ev-tipo-precio').value = venta.tipoPrecio || 'especial';
+  document.getElementById('ev-nota').value = venta.nota || '';
+
+  previoCOP('ev-precio', 'prev-ev-precio');
+  const prevTotal = document.getElementById('prev-ev-total');
+  if(prevTotal && venta.total > 0) prevTotal.textContent = '→ ' + fmt(venta.total) + ' COP';
+
+  // Deshabilitamos cantidad y producto (no se pueden cambiar en combo)
+  document.getElementById('ev-cant').disabled = true;
+  document.getElementById('ev-prod').disabled = true;
 
   openModal('modal-editar-venta');
 };
@@ -2285,6 +2321,9 @@ window.guardarEditarVenta = async () => {
   });
 
   closeModal('modal-editar-venta');
+  // 202. Rehabilitamos campos por si venían deshabilitados de una edición de combo
+  document.getElementById('ev-cant').disabled = false;
+  document.getElementById('ev-prod').disabled = false;
   toast('✅ Venta actualizada correctamente');
 };
 
