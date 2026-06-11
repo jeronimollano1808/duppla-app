@@ -1892,7 +1892,7 @@ function renderInventario() {
   document.getElementById('page-inventario').innerHTML = `
     <div class="page-header">
       <div><div class="page-title">Inventario</div><div class="page-sub">${DATA.inventario.length} productos</div></div>
-      <button class="btn btn-lime btn-sm" onclick="openModal('modal-producto')">+ Agregar producto</button>
+      <button class="btn btn-lime btn-sm" onclick="abrirNuevoProducto()">+ Agregar producto</button>
     </div>
     ${alertHtml}
     <div class="card">
@@ -1903,6 +1903,51 @@ function renderInventario() {
         </table></div>`
         : `<div class="empty-state"><div class="empty-state-icon">📦</div><div class="empty-state-text">Sin productos en inventario</div><div class="empty-state-sub">Agrega tu primer producto con el botón de arriba</div></div>`}
     </div>`;
+}
+
+window.abrirNuevoProducto = () => {
+  // 133. Reseteamos el formulario completamente antes de abrir para agregar
+  //      Si no se hace esto y antes se editó un producto, el ID queda guardado
+  //      y el siguiente "agregar" intentaría actualizar ese producto
+  document.getElementById('p-id').value = '';
+  document.getElementById('p-nombre').value = '';
+  document.getElementById('p-stock').value = '0';
+  document.getElementById('p-costo').value = '0';
+  document.getElementById('p-pventa').value = '0';
+  document.getElementById('p-pdist').value = '0';
+  document.getElementById('p-pesp').value = '0';
+  document.getElementById('p-minimo').value = '5';
+  // Limpiamos previews
+  ['prev-costo','prev-pventa','prev-pdist','prev-pesp'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.textContent = '';
+  });
+  document.getElementById('modal-producto-title').textContent = 'Agregar producto';
+  document.getElementById('btn-guardar-producto').textContent = 'Guardar producto';
+  openModal('modal-producto');
+};
+
+// 134. Toast de confirmación — muestra mensaje temporal en la esquina inferior
+//      Dura 2.5 segundos y desaparece automáticamente
+function toast(msg, tipo='success') {
+  // Creamos el elemento si no existe
+  let el = document.getElementById('toast-notif');
+  if(!el) {
+    el = document.createElement('div');
+    el.id = 'toast-notif';
+    el.style.cssText = 'position:fixed;bottom:20px;right:20px;padding:12px 18px;border-radius:10px;font-size:13px;font-weight:500;z-index:9999;opacity:0;transition:opacity .2s;max-width:280px;box-shadow:0 4px 12px rgba(0,0,0,.15)';
+    document.body.appendChild(el);
+  }
+  const estilos = {
+    success: 'background:#F0FDF4;color:#166534;border:1px solid #BBF7D0',
+    error:   'background:#FEF2F2;color:#991B1B;border:1px solid #FECACA',
+    info:    'background:#EFF6FF;color:#1E40AF;border:1px solid #BFDBFE'
+  };
+  el.style.cssText += ';' + estilos[tipo] || estilos.success;
+  el.textContent = msg;
+  el.style.opacity = '1';
+  clearTimeout(el._timeout);
+  el._timeout = setTimeout(() => { el.style.opacity = '0'; }, 2500);
 }
 
 window.guardarProducto = async () => {
@@ -1917,23 +1962,21 @@ window.guardarProducto = async () => {
     marca: document.getElementById('p-marca').value,
     stock: Number(document.getElementById('p-stock').value)||0,
     costo: Number(document.getElementById('p-costo').value)||0,
-    pventa,                                                       // Precio público
-    pdist: Number(document.getElementById('p-pdist').value)||0,  // Precio distribuidor
-    pesp:  Number(document.getElementById('p-pesp').value)||0,   // Precio especial
+    pventa,
+    pdist: Number(document.getElementById('p-pdist').value)||0,
+    pesp:  Number(document.getElementById('p-pesp').value)||0,
     stockMinimo: Number(document.getElementById('p-minimo').value)||5,
   };
 
-  // 86. Verificamos si hay un ID guardado en el campo oculto
-  //     Si hay ID = estamos editando un producto existente → usamos updateDoc
-  //     Si no hay ID = estamos creando uno nuevo → usamos addDoc
+  // 86. Si hay ID = editar, si no = crear nuevo
   const prodId = document.getElementById('p-id').value;
   if(prodId) {
-    // Modo edición: actualizamos el documento existente en Firebase
     await updateDoc(doc(db,'inventario',prodId), datos);
+    toast('✅ Producto actualizado correctamente');
   } else {
-    // Modo creación: agregamos un documento nuevo a Firebase
     datos.createdAt = serverTimestamp();
     await addDoc(collection(db,'inventario'), datos);
+    toast('✅ Producto agregado al inventario');
   }
 
   closeModal('modal-producto');
@@ -1952,23 +1995,31 @@ window.guardarProducto = async () => {
 window.editarProducto = (id) => {
   // 88. Buscamos el producto en DATA.inventario por su ID
   const prod = DATA.inventario.find(p => p.id === id);
-  if(!prod) return;
+  if(!prod) { alert('Producto no encontrado'); return; }
 
   // 89. Cargamos todos los datos del producto en el formulario
-  //     Esto convierte el modal de "agregar" en "editar" sin necesitar otro modal
-  document.getElementById('p-id').value = id;           // Guardamos el ID para el guardado
-  document.getElementById('p-nombre').value = prod.nombre;
-  document.getElementById('p-stock').value = prod.stock;
+  document.getElementById('p-id').value = id;
+  document.getElementById('p-nombre').value = prod.nombre || '';
+  document.getElementById('p-stock').value = prod.stock || 0;
   document.getElementById('p-costo').value = prod.costo || 0;
   document.getElementById('p-pventa').value = prod.pventa || 0;
   document.getElementById('p-pdist').value = prod.pdist || 0;
   document.getElementById('p-pesp').value = prod.pesp || 0;
   document.getElementById('p-minimo').value = prod.stockMinimo || 5;
 
+  // 132. Disparamos las previews para que muestren el valor formateado
+  //      al abrir el modal con datos existentes
+  previoCOP('p-costo','prev-costo');
+  previoCOP('p-pventa','prev-pventa');
+  previoCOP('p-pdist','prev-pdist');
+  previoCOP('p-pesp','prev-pesp');
+
   // 90. Seleccionamos la marca correcta en el select
+  //     Comparamos con el texto de la opción (no el value) porque así están definidas
   const marcaSelect = document.getElementById('p-marca');
   for(let i = 0; i < marcaSelect.options.length; i++) {
-    if(marcaSelect.options[i].value === prod.marca) {
+    if(marcaSelect.options[i].text === prod.marca ||
+       marcaSelect.options[i].value === prod.marca) {
       marcaSelect.selectedIndex = i;
       break;
     }
