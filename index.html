@@ -827,19 +827,34 @@ body{
                Si pagó menos que el total, la diferencia queda como saldo pendiente -->
     <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:14px">
       <div style="font-size:11px;font-weight:600;color:var(--ink-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px">Pago</div>
+      <!-- 218. Método de pago — efectivo, transferencia o mixto -->
+      <div class="f-group">
+        <label class="f-label">Método de pago</label>
+        <div style="display:flex;gap:8px">
+          <button type="button" id="mp-efectivo" onclick="setMetodoPago('efectivo')"
+            style="flex:1;padding:8px;border-radius:var(--radius);border:2px solid var(--ink);background:var(--ink);color:#fff;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">
+            💵 Efectivo
+          </button>
+          <button type="button" id="mp-transferencia" onclick="setMetodoPago('transferencia')"
+            style="flex:1;padding:8px;border-radius:var(--radius);border:2px solid var(--border);background:var(--surface-2);color:var(--ink-2);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">
+            📲 Transferencia
+          </button>
+          <button type="button" id="mp-mixto" onclick="setMetodoPago('mixto')"
+            style="flex:1;padding:8px;border-radius:var(--radius);border:2px solid var(--border);background:var(--surface-2);color:var(--ink-2);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">
+            🔀 Mixto
+          </button>
+        </div>
+      </div>
       <div class="f-row">
         <div class="f-group" style="margin-bottom:0">
           <label class="f-label">Pagó en este momento ($)</label>
-          <!-- 102. Al cambiar el valor pagado, calculamos automáticamente el saldo pendiente -->
           <input type="number" id="v-pagado" class="f-input" placeholder="0 si queda todo pendiente" oninput="calcSaldo()">
         </div>
         <div class="f-group" style="margin-bottom:0">
           <label class="f-label">Saldo pendiente ($)</label>
-          <!-- 103. Campo de solo lectura que muestra total - pagado automáticamente -->
           <input type="number" id="v-saldo" class="f-input" readonly style="opacity:.6;cursor:not-allowed;background:var(--amber-bg)">
         </div>
       </div>
-      <!-- 104. Indicador visual del estado de pago que cambia en tiempo real -->
       <div id="v-estado-pago" style="margin-top:10px;font-size:12px;color:var(--ink-3)">
         Completa el total para ver el estado de pago
       </div>
@@ -945,7 +960,21 @@ body{
     <div id="ab-nuevo-saldo" style="font-size:13px;color:var(--ink-2);margin-bottom:14px"></div>
     <div class="f-group">
       <label class="f-label">Nota (opcional)</label>
-      <input type="text" id="ab-nota" class="f-input" placeholder="Ej: Pago por transferencia">
+      <input type="text" id="ab-nota" class="f-input" placeholder="Referencia adicional">
+    </div>
+    <!-- 219. Método de pago del abono -->
+    <div class="f-group">
+      <label class="f-label">Método de pago</label>
+      <div style="display:flex;gap:8px">
+        <button type="button" id="ab-mp-efectivo" onclick="setMetodoPagoAbono('efectivo')"
+          style="flex:1;padding:7px;border-radius:var(--radius);border:2px solid var(--ink);background:var(--ink);color:#fff;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">
+          💵 Efectivo
+        </button>
+        <button type="button" id="ab-mp-transferencia" onclick="setMetodoPagoAbono('transferencia')"
+          style="flex:1;padding:7px;border-radius:var(--radius);border:2px solid var(--border);background:var(--surface-2);color:var(--ink-2);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">
+          📲 Transferencia
+        </button>
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('modal-abono')">Cancelar</button>
@@ -1893,6 +1922,11 @@ function renderVentas() {
     const manualBadge = v.esManual
       ? `<span class="badge b-gray" style="margin-left:4px;font-size:10px">Manual</span>`
       : '';
+    // 229. Badge del método de pago con ícono
+    const mpIco = { efectivo:'💵', transferencia:'📲', mixto:'🔀' };
+    const mpLabel = { efectivo:'Efectivo', transferencia:'Transfer.', mixto:'Mixto' };
+    const mp = v.metodoPago || 'efectivo';
+    const mpBadge = `<span style="font-size:11px;color:var(--ink-3)">${mpIco[mp]||'💵'} ${mpLabel[mp]||mp}</span>`;
 
     // 115. Badge de estado de pago con color semántico
     //      Verde = pagado, Amarillo = abono parcial, Rojo = pendiente total
@@ -1917,6 +1951,7 @@ function renderVentas() {
       <td><span class="badge b-${v.canal||'web'}">${v.canal||''}</span></td>
       <td><span class="badge ${tpClass[tp]}">${tpLabel[tp]||tp}</span></td>
       <td style="font-weight:600;color:var(--lime)">${fmt(v.total)}</td>
+      <td>${mpBadge}</td>
       ${saldoCell}
       <td><span class="badge ${epClass[ep]}">${epLabel[ep]||ep}</span></td>
       <td>
@@ -1944,7 +1979,7 @@ function renderVentas() {
     <div class="card">
       ${DATA.ventas.length ?
         `<div class="table-wrap"><table class="tbl">
-          <thead><tr><th>Fecha</th><th>Cliente</th><th>Producto</th><th>Canal</th><th>Precio</th><th>Total</th><th>Saldo</th><th>Estado</th><th></th></tr></thead>
+          <thead><tr><th>Fecha</th><th>Cliente</th><th>Producto</th><th>Canal</th><th>Precio</th><th>Total</th><th>Método</th><th>Saldo</th><th>Estado</th><th></th></tr></thead>
           <tbody>${rows}</tbody>
         </table></div>`
         : `<div class="empty-state"><div class="empty-state-icon">🛒</div><div class="empty-state-text">Sin ventas registradas</div></div>`}
@@ -1958,8 +1993,9 @@ window.abrirModalVenta = () => {
   document.getElementById('v-estado-pago').textContent = 'Completa el total para ver el estado de pago';
   document.getElementById('v-precio-selector').style.display = 'none';
   document.getElementById('v-prod-manual').value = '';
-  // 169. Reseteamos al modo inventario por defecto al abrir
+  // 224. Reseteamos al modo inventario y método de pago por defecto al abrir
   setTipoProducto('inventario');
+  setMetodoPago('efectivo');
   const sel = document.getElementById('v-prod');
   sel.innerHTML = '<option value="">— Selecciona un producto —</option>' +
     DATA.inventario.map(p =>
@@ -1967,6 +2003,41 @@ window.abrirModalVenta = () => {
         ${p.nombre} (stock: ${p.stock})
       </option>`).join('');
   openModal('modal-venta');
+};
+
+// 220. setMetodoPago — actualiza el estilo visual de los botones de método de pago
+//      tipo: 'efectivo' | 'transferencia' | 'mixto'
+window.setMetodoPago = (tipo) => {
+  const btns = {
+    efectivo:      document.getElementById('mp-efectivo'),
+    transferencia: document.getElementById('mp-transferencia'),
+    mixto:         document.getElementById('mp-mixto')
+  };
+  Object.entries(btns).forEach(([k,btn]) => {
+    if(!btn) return;
+    const activo = k === tipo;
+    btn.style.background = activo ? 'var(--ink)' : 'var(--surface-2)';
+    btn.style.color = activo ? '#fff' : 'var(--ink-2)';
+    btn.style.borderColor = activo ? 'var(--ink)' : 'var(--border)';
+  });
+  // 221. Guardamos el método en un dataset del primer botón para leerlo al guardar
+  if(btns.efectivo) btns.efectivo.dataset.selected = tipo;
+};
+
+// 222. setMetodoPagoAbono — igual pero para el modal de abono (solo efectivo/transferencia)
+window.setMetodoPagoAbono = (tipo) => {
+  const btns = {
+    efectivo:      document.getElementById('ab-mp-efectivo'),
+    transferencia: document.getElementById('ab-mp-transferencia')
+  };
+  Object.entries(btns).forEach(([k,btn]) => {
+    if(!btn) return;
+    const activo = k === tipo;
+    btn.style.background = activo ? 'var(--ink)' : 'var(--surface-2)';
+    btn.style.color = activo ? '#fff' : 'var(--ink-2)';
+    btn.style.borderColor = activo ? 'var(--ink)' : 'var(--border)';
+  });
+  if(btns.efectivo) btns.efectivo.dataset.selected = tipo;
 };
 
 window.setTipoProducto = (tipo) => {
@@ -2107,6 +2178,8 @@ window.guardarVenta = async () => {
   const saldo = Math.max(0, total - pagado);
   const estadoPago = saldo === 0 ? 'pagado' : pagado > 0 ? 'parcial' : 'pendiente';
   const tipoPrecio = document.getElementById('v-precio').dataset.tipoPrecio || 'publico';
+  // 225. Leemos el método de pago seleccionado (efectivo/transferencia/mixto)
+  const metodoPago = document.getElementById('mp-efectivo')?.dataset.selected || 'efectivo';
 
   // 173. Determinamos el modo: inventario o manual
   const esManual = document.getElementById('seccion-manual').style.display !== 'none';
@@ -2120,11 +2193,12 @@ window.guardarVenta = async () => {
     }
     await addDoc(collection(db,'ventas'), {
       fecha, canal,
-      producto: nombreManual,  // Nombre libre escrito por el vendedor
-      prodId: null,            // Sin ID de inventario — no afecta stock
-      esManual: true,          // Marcamos como venta manual
+      producto: nombreManual,
+      prodId: null,
+      esManual: true,
       cant, precio, total,
       cliente, nota, tipoPrecio,
+      metodoPago,   // 226. Guardamos el método de pago
       pagado, saldo, estadoPago,
       abonos: [],
       createdAt: serverTimestamp()
@@ -2148,6 +2222,7 @@ window.guardarVenta = async () => {
       esManual: false,
       cant, precio, total,
       cliente, nota, tipoPrecio,
+      metodoPago,   // Método de pago registrado
       pagado, saldo, estadoPago,
       abonos: [],
       createdAt: serverTimestamp()
@@ -2190,9 +2265,10 @@ window.abrirAbono = (ventaId) => {
   document.getElementById('ab-fecha').value = today();
   document.getElementById('ab-valor').value = '';
   document.getElementById('ab-nota').value = '';
-  // 152. Limpiamos la preview y el indicador de nuevo saldo al abrir
   document.getElementById('prev-ab-valor').textContent = '';
   document.getElementById('ab-nuevo-saldo').textContent = '';
+  // 228. Reseteamos método de pago del abono a efectivo por defecto
+  setMetodoPagoAbono('efectivo');
   openModal('modal-abono');
 };
 
@@ -2239,7 +2315,9 @@ window.guardarAbono = async () => {
   const abonos = [...(venta.abonos||[]), {
     fecha: document.getElementById('ab-fecha').value,
     valor,
-    nota: document.getElementById('ab-nota').value || ''
+    nota: document.getElementById('ab-nota').value || '',
+    // 227. Guardamos el método de pago del abono
+    metodoPago: document.getElementById('ab-mp-efectivo')?.dataset.selected || 'efectivo'
   }];
 
   // 125. Actualizamos la venta en Firebase con el nuevo saldo y lista de abonos
