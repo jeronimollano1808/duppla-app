@@ -1196,14 +1196,24 @@ body{
       <button class="modal-close" onclick="closeModal('modal-pedido')">✕</button>
     </div>
     <div class="f-row">
-      <div class="f-group"><label class="f-label">Proveedor *</label>
+      <!-- 267. Proveedor: select si hay proveedores, campo de texto si no hay ninguno -->
+      <div class="f-group" id="pe-prov-grupo"><label class="f-label">Proveedor *</label>
         <select id="pe-prov" class="f-input"><option value="">— Selecciona —</option></select>
+      </div>
+      <div class="f-group" id="pe-prov-manual-grupo" style="display:none">
+        <label class="f-label">Nombre del proveedor *</label>
+        <input type="text" id="pe-prov-manual" class="f-input" placeholder="Ej: NutritionFirst USA">
+        <div style="font-size:11px;color:var(--ink-3);margin-top:4px">
+          💡 <a href="#" onclick="showPage('proveedores');closeModal('modal-pedido')" style="color:var(--blue)">Crear proveedor</a> para tenerlo en el catálogo
+        </div>
       </div>
       <div class="f-group"><label class="f-label">Fecha</label><input type="date" id="pe-fecha" class="f-input"></div>
     </div>
     <div class="f-group"><label class="f-label">Productos (descripción)</label><input type="text" id="pe-prods" class="f-input" placeholder="Ej: 20x Omega 3, 10x Proteína BSN"></div>
     <div class="f-row">
-      <div class="f-group"><label class="f-label">Total del pedido ($)</label><input type="number" id="pe-total" class="f-input"></div>
+      <div class="f-group"><label class="f-label">Total del pedido ($)</label><input type="number" id="pe-total" class="f-input" oninput="previoCOP('pe-total','prev-pe-total')">
+        <div id="prev-pe-total" style="font-size:11px;margin-top:4px;font-weight:600"></div>
+      </div>
       <div class="f-group"><label class="f-label">Costo de flete ($)</label><input type="number" id="pe-flete" class="f-input" value="0"></div>
     </div>
     <div class="f-group"><label class="f-label">Notas</label><input type="text" id="pe-notas" class="f-input" placeholder="Observaciones, fechas estimadas..."></div>
@@ -3469,26 +3479,54 @@ function renderPedidos() {
 
 window.abrirModalPedido = () => {
   document.getElementById('pe-fecha').value = today();
+  document.getElementById('pe-prods').value = '';
+  document.getElementById('pe-total').value = '';
+  document.getElementById('pe-flete').value = '0';
+  document.getElementById('pe-notas').value = '';
+  document.getElementById('prev-pe-total').textContent = '';
+
   const sel = document.getElementById('pe-prov');
-  sel.innerHTML = '<option value="">— Selecciona —</option>' +
-    DATA.proveedores.map(p=>`<option value="${p.id}" data-nombre="${p.nombre}">${p.nombre}</option>`).join('');
+
+  // 268. Si hay proveedores mostramos el select, si no mostramos campo de texto libre
+  if(DATA.proveedores.length > 0) {
+    document.getElementById('pe-prov-grupo').style.display = 'block';
+    document.getElementById('pe-prov-manual-grupo').style.display = 'none';
+    sel.innerHTML = '<option value="">— Selecciona —</option>' +
+      DATA.proveedores.map(p=>`<option value="${p.id}" data-nombre="${p.nombre}">${p.nombre}</option>`).join('');
+  } else {
+    // 269. Sin proveedores: campo de texto para escribir el nombre directamente
+    document.getElementById('pe-prov-grupo').style.display = 'none';
+    document.getElementById('pe-prov-manual-grupo').style.display = 'block';
+    document.getElementById('pe-prov-manual').value = '';
+  }
   openModal('modal-pedido');
 };
 
 window.guardarPedido = async () => {
-  const sel = document.getElementById('pe-prov');
-  const opt = sel.options[sel.selectedIndex];
-  if(!opt?.value) { alert('Selecciona un proveedor'); return; }
+  // 270. Obtenemos el nombre del proveedor según el modo activo
+  let proveedorId = null, proveedorNombre = '';
+
+  if(DATA.proveedores.length > 0) {
+    const sel = document.getElementById('pe-prov');
+    const opt = sel.options[sel.selectedIndex];
+    if(!opt?.value) { alert('Selecciona un proveedor'); return; }
+    proveedorId = opt.value;
+    proveedorNombre = opt.dataset.nombre || opt.text;
+  } else {
+    proveedorNombre = document.getElementById('pe-prov-manual').value.trim();
+    if(!proveedorNombre) { alert('Ingresa el nombre del proveedor'); return; }
+  }
+
   const total = Number(document.getElementById('pe-total').value)||0;
   await addDoc(collection(db,'pedidos'), {
-    proveedorId:opt.value, proveedorNombre:opt.dataset.nombre||opt.text,
-    fecha:document.getElementById('pe-fecha').value,
-    prods:document.getElementById('pe-prods').value,
-    total, flete:Number(document.getElementById('pe-flete').value)||0,
-    notas:document.getElementById('pe-notas').value,
-    estado:'pendiente', createdAt:serverTimestamp()
+    proveedorId, proveedorNombre,
+    fecha: document.getElementById('pe-fecha').value,
+    prods: document.getElementById('pe-prods').value,
+    total, flete: Number(document.getElementById('pe-flete').value)||0,
+    notas: document.getElementById('pe-notas').value,
+    estado: 'pendiente', createdAt: serverTimestamp()
   });
-  await pushNotif('📋 Nuevo pedido', `${opt.dataset.nombre} · ${fmt(total)}`, 'pedido');
+  await pushNotif('📋 Nuevo pedido', `${proveedorNombre} · ${fmt(total)}`, 'pedido');
   closeModal('modal-pedido');
 };
 
