@@ -8,6 +8,13 @@
 <title>DUPPLA</title>
 <style>
 /* ============================================================
+   253. FUENTES — Inter desde Google Fonts
+   Inter es la fuente estándar de apps deportivas y dashboards modernos
+   Carga solo los pesos que usamos: 400, 500, 600, 700, 800
+   ============================================================ */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+
+/* ============================================================
    1. RESET Y BASE
    Eliminamos márgenes y paddings por defecto del navegador
    y establecemos box-sizing para que el tamaño de elementos
@@ -65,7 +72,7 @@
    y mejor rendimiento en todos los dispositivos
    ============================================================ */
 body{
-  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Inter',sans-serif;
+  font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
   background:var(--surface-2);
   color:var(--ink);
   min-height:100vh;
@@ -87,7 +94,7 @@ body{
   gap:12px;
   background:var(--surface);
 }
-.loading-logo{font-size:24px;font-weight:800;color:var(--lime);letter-spacing:1px}
+.loading-logo{font-size:28px;font-weight:900;color:#111827;letter-spacing:2px;font-family:'Inter',sans-serif}
 .loading-dot{width:6px;height:6px;border-radius:50%;background:var(--lime-accent);display:inline-block;animation:bounce 1.2s infinite}
 .loading-dot:nth-child(2){animation-delay:.2s}
 .loading-dot:nth-child(3){animation-delay:.4s}
@@ -122,12 +129,14 @@ body{
 }
 .login-logo-mark{
   width:36px;height:36px;
-  background:var(--lime-accent);
+  /* 262. Login logo con gradiente lime deportivo */
+  background:linear-gradient(135deg,#C8E05A 0%,#9CB83A 100%);
   border-radius:9px;
   display:flex;align-items:center;justify-content:center;
-  font-weight:900;font-size:16px;color:var(--ink);
+  font-weight:900;font-size:16px;color:#0F1117;
+  box-shadow:0 3px 10px rgba(200,224,90,.3);
 }
-.login-logo-text{font-size:20px;font-weight:800;color:var(--ink);letter-spacing:.5px}
+.login-logo-text{font-size:20px;font-weight:900;color:var(--ink);letter-spacing:.5px;font-family:'Inter',sans-serif}
 .login-subtitle{font-size:13px;color:var(--ink-2);margin-bottom:28px}
 .login-label{font-size:12px;font-weight:500;color:var(--ink-2);display:block;margin-bottom:5px}
 .login-input{
@@ -170,80 +179,87 @@ body{
    ============================================================ */
 .sidebar{
   width:240px;
-  background:var(--surface);
-  border-right:1px solid var(--border);
+  /* 254. Sidebar oscuro — contraste deportivo con el contenido blanco */
+  background:#0F1117;
+  border-right:none;
   display:flex;flex-direction:column;
   position:fixed;top:0;left:0;height:100vh;
   z-index:100;
   transition:transform .25s cubic-bezier(.4,0,.2,1);
+  box-shadow:4px 0 24px rgba(0,0,0,.15);
 }
 .sidebar-header{
-  padding:20px 16px 14px;
-  border-bottom:1px solid var(--border);
+  padding:20px 16px 16px;
+  border-bottom:1px solid rgba(255,255,255,.06);
   display:flex;align-items:center;gap:10px;
 }
 .sidebar-logo-mark{
-  width:32px;height:32px;
-  background:var(--lime-accent);
-  border-radius:8px;
+  width:34px;height:34px;
+  /* 255. Logo mark con gradiente verde lima — identidad DUPPLA */
+  background:linear-gradient(135deg,#C8E05A 0%,#9CB83A 100%);
+  border-radius:9px;
   display:flex;align-items:center;justify-content:center;
-  font-weight:900;font-size:14px;color:var(--ink);flex-shrink:0;
+  font-weight:900;font-size:15px;color:#0F1117;flex-shrink:0;
+  box-shadow:0 2px 8px rgba(200,224,90,.3);
 }
-.sidebar-logo-text{font-size:16px;font-weight:800;color:var(--ink);letter-spacing:.3px}
-.sidebar-logo-sub{font-size:10px;color:var(--ink-3);margin-top:1px}
+.sidebar-logo-text{font-size:17px;font-weight:800;color:#FFFFFF;letter-spacing:.5px}
+.sidebar-logo-sub{font-size:10px;color:rgba(255,255,255,.35);margin-top:1px;letter-spacing:.03em}
 
 /* ============================================================
    8. NAVEGACIÓN DEL SIDEBAR
    Botones de menú con estado activo e ícono + texto
    ============================================================ */
 .sidebar-nav{flex:1;padding:10px 8px;overflow-y:auto}
+/* 256. Títulos de sección del nav — blancos con baja opacidad en sidebar oscuro */
 .nav-section-title{
-  font-size:10px;font-weight:600;color:var(--ink-3);
-  text-transform:uppercase;letter-spacing:.08em;
-  padding:6px 10px 4px;
+  font-size:9px;font-weight:700;color:rgba(255,255,255,.25);
+  text-transform:uppercase;letter-spacing:.12em;
+  padding:8px 10px 4px;
 }
 .nav-btn{
   width:100%;display:flex;align-items:center;gap:9px;
-  padding:8px 10px;border-radius:8px;border:none;
-  background:transparent;color:var(--ink-2);
+  padding:8px 10px;border-radius:9px;border:none;
+  background:transparent;color:rgba(255,255,255,.45);
   cursor:pointer;font-size:13px;font-weight:500;
   margin-bottom:1px;text-align:left;
   transition:all .12s;
 }
-.nav-btn:hover{background:var(--surface-3);color:var(--ink)}
-.nav-btn.active{background:var(--lime-bg);color:var(--lime)}
+.nav-btn:hover{background:rgba(255,255,255,.07);color:rgba(255,255,255,.85)}
+/* 257. Estado activo: fondo lima translúcido + texto verde lima */
+.nav-btn.active{background:rgba(200,224,90,.12);color:#C8E05A}
 .nav-btn .ico{
   width:28px;height:28px;border-radius:7px;
   display:flex;align-items:center;justify-content:center;
   font-size:14px;flex-shrink:0;
-  background:var(--surface-3);
+  background:rgba(255,255,255,.06);
   transition:background .12s;
 }
-.nav-btn.active .ico{background:var(--lime-accent);}
-.nav-btn:hover:not(.active) .ico{background:var(--border)}
+.nav-btn.active .ico{background:rgba(200,224,90,.2);}
+.nav-btn:hover:not(.active) .ico{background:rgba(255,255,255,.1)}
 
 /* ============================================================
    9. FOOTER DEL SIDEBAR
    Muestra el email del usuario y el botón de logout
    ============================================================ */
-.sidebar-footer{padding:12px 16px;border-top:1px solid var(--border)}
+.sidebar-footer{padding:12px 16px;border-top:1px solid rgba(255,255,255,.06)}
+/* 258. Footer del sidebar — colores adaptados al fondo oscuro */
 .sidebar-user{
   display:flex;align-items:center;gap:9px;margin-bottom:10px;
 }
 .sidebar-avatar{
   width:30px;height:30px;border-radius:50%;
-  background:var(--lime-accent);
+  background:linear-gradient(135deg,#C8E05A,#9CB83A);
   display:flex;align-items:center;justify-content:center;
-  font-size:11px;font-weight:700;color:var(--ink);flex-shrink:0;
+  font-size:11px;font-weight:700;color:#0F1117;flex-shrink:0;
 }
-.sidebar-email{font-size:11px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.sidebar-email{font-size:11px;color:rgba(255,255,255,.35);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
 .btn-logout{
   width:100%;padding:7px;background:transparent;
-  border:1px solid var(--border);border-radius:8px;
-  color:var(--ink-2);cursor:pointer;font-size:12px;
+  border:1px solid rgba(255,255,255,.1);border-radius:8px;
+  color:rgba(255,255,255,.35);cursor:pointer;font-size:12px;
   transition:all .12s;
 }
-.btn-logout:hover{background:var(--red-bg);color:var(--red);border-color:#FECACA}
+.btn-logout:hover{background:rgba(220,38,38,.15);color:#FCA5A5;border-color:rgba(220,38,38,.3)}
 
 /* ============================================================
    10. HEADER MÓVIL
@@ -259,7 +275,7 @@ body{
   box-shadow:var(--shadow-sm);
 }
 .mobile-logo{display:flex;align-items:center;gap:8px}
-.mobile-logo-mark{width:26px;height:26px;background:var(--lime-accent);border-radius:6px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:12px;color:var(--ink)}
+.mobile-logo-mark{width:26px;height:26px;background:linear-gradient(135deg,#C8E05A,#9CB83A);border-radius:6px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:12px;color:#0F1117}
 .mobile-logo-text{font-size:15px;font-weight:800;color:var(--ink)}
 .hamburger{background:none;border:none;color:var(--ink-2);font-size:20px;cursor:pointer;padding:4px;border-radius:6px}
 .hamburger:hover{background:var(--surface-3)}
@@ -282,7 +298,7 @@ body{
   justify-content:space-between;
   margin-bottom:24px;flex-wrap:wrap;gap:12px;
 }
-.page-title{font-size:20px;font-weight:700;color:var(--ink)}
+.page-title{font-size:22px;font-weight:800;color:var(--ink);letter-spacing:-.02em}
 .page-sub{font-size:13px;color:var(--ink-3);margin-top:2px}
 
 /* ============================================================
@@ -297,7 +313,7 @@ body{
   margin-bottom:16px;
   box-shadow:var(--shadow-sm);
 }
-.card-title{font-size:13px;font-weight:600;color:var(--ink-2);margin-bottom:14px;text-transform:uppercase;letter-spacing:.04em}
+.card-title{font-size:11px;font-weight:700;color:var(--ink-3);margin-bottom:14px;text-transform:uppercase;letter-spacing:.08em}
 
 /* ============================================================
    14. MÉTRICAS / KPI CARDS
@@ -311,15 +327,17 @@ body{
 .metric-card{
   background:var(--surface);
   border:1px solid var(--border);
+  /* 259. Borde izquierdo como acento deportivo — identidad visual fuerte */
+  border-left:3px solid var(--lime-accent);
   border-radius:var(--radius-lg);
   padding:16px 18px;
   box-shadow:var(--shadow-sm);
-  transition:box-shadow .15s;
+  transition:all .15s;
 }
-.metric-card:hover{box-shadow:var(--shadow)}
-.metric-label{font-size:11px;font-weight:600;color:var(--ink-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px}
-.metric-value{font-size:24px;font-weight:700;color:var(--ink);line-height:1}
-.metric-sub{font-size:11px;color:var(--ink-3);margin-top:4px}
+.metric-card:hover{box-shadow:var(--shadow);transform:translateY(-1px)}
+.metric-label{font-size:10px;font-weight:700;color:var(--ink-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px}
+.metric-value{font-size:26px;font-weight:800;color:var(--ink);line-height:1;font-family:'Inter',sans-serif}
+.metric-sub{font-size:11px;color:var(--ink-3);margin-top:5px}
 .metric-badge{
   display:inline-flex;align-items:center;gap:3px;
   font-size:11px;font-weight:500;padding:2px 7px;
@@ -390,11 +408,16 @@ body{
   border-color:var(--ink);
 }
 .btn-primary:hover{opacity:.85}
+/* 260. Botón lime — acción principal con verde DUPPLA y tipografía bold */
 .btn-lime{
-  background:var(--lime-accent);color:var(--ink);
-  border-color:var(--lime-accent);font-weight:600;
+  background:linear-gradient(135deg,#C8E05A 0%,#B0CB40 100%);
+  color:#0F1117;
+  border-color:var(--lime-accent);
+  font-weight:700;
+  letter-spacing:.02em;
+  box-shadow:0 2px 8px rgba(200,224,90,.25);
 }
-.btn-lime:hover{opacity:.85}
+.btn-lime:hover{opacity:.9;box-shadow:0 4px 12px rgba(200,224,90,.35)}
 .btn-danger{color:var(--red);border-color:#FECACA;background:var(--surface)}
 .btn-danger:hover{background:var(--red-bg)}
 .btn-sm{padding:5px 10px;font-size:12px;border-radius:8px}
@@ -508,13 +531,15 @@ body{
    ============================================================ */
 .notif-wrap{position:relative}
 .notif-btn{
-  position:relative;background:var(--surface-2);
-  border:1px solid var(--border);border-radius:var(--radius);
-  padding:7px 10px;color:var(--ink-2);cursor:pointer;
+  position:relative;
+  /* 261. Botón de notificaciones adaptado al sidebar oscuro */
+  background:rgba(255,255,255,.06);
+  border:1px solid rgba(255,255,255,.08);border-radius:var(--radius);
+  padding:7px 10px;color:rgba(255,255,255,.5);cursor:pointer;
   font-size:15px;display:flex;align-items:center;
   transition:all .12s;
 }
-.notif-btn:hover{background:var(--surface-3)}
+.notif-btn:hover{background:rgba(255,255,255,.1);color:rgba(255,255,255,.8)}
 .notif-dot{
   position:absolute;top:-4px;right:-4px;
   background:var(--red);color:#fff;
