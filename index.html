@@ -2898,36 +2898,36 @@ window.exportarCSV = () => {
 // ============================================================
 function renderInventario() {
   const low = DATA.inventario.filter(p => p.stock <= (p.stockMinimo||5));
-  // 265. Alertas de stock bajo en tarjetas individuales — más legibles y accionables
-  const alertHtml = low.length ? `
-    <div style="margin-bottom:16px">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-        <span style="font-size:13px">⚠️</span>
-        <span style="font-size:11px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:.07em">
-          ${low.length} producto${low.length>1?'s':''} con stock bajo
-        </span>
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px">
-        ${low.map(p => {
-          const esAgotado = p.stock === 0;
-          const bg = esAgotado ? 'var(--red-bg)' : 'var(--amber-bg)';
-          const border = esAgotado ? '#FECACA' : '#FDE68A';
-          const color = esAgotado ? 'var(--red)' : 'var(--amber)';
-          const ico = esAgotado ? '🚫' : '⚠️';
-          const label = esAgotado ? 'AGOTADO' : \`\${p.stock} uds.\`;
-          return \`<div style="background:\${bg};border:1px solid \${border};border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:4px">
-            <div style="font-size:10px;font-weight:700;color:\${color};text-transform:uppercase;letter-spacing:.05em">\${ico} \${label}</div>
-            <div style="font-size:12px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">\${p.nombre}</div>
-            <div style="font-size:10px;color:var(--ink-3)">\${p.marca||''}</div>
-            <button onclick="abrirAjuste('\${p.id}','\${p.nombre.replace(/'/g,"\\'")}',\${p.stock})"
-              style="margin-top:4px;padding:4px 8px;border-radius:6px;border:1px solid \${border};background:transparent;color:\${color};font-size:10px;font-weight:600;cursor:pointer;text-align:center;transition:all .12s"
-              onmouseover="this.style.background='\${bg}'" onmouseout="this.style.background='transparent'">
-              + Ajustar stock
-            </button>
-          </div>\`;
-        }).join('')}
-      </div>
-    </div>` : '';
+  // 265. Alertas de stock bajo en tarjetas individuales
+  function tarjetaStock(p) {
+    const esAgotado = p.stock === 0;
+    const bg = esAgotado ? 'var(--red-bg)' : 'var(--amber-bg)';
+    const border = esAgotado ? '#FECACA' : '#FDE68A';
+    const color = esAgotado ? 'var(--red)' : 'var(--amber)';
+    const ico = esAgotado ? '🚫' : '⚠️';
+    const label = esAgotado ? 'AGOTADO' : p.stock + ' uds.';
+    const nombreSeg = p.nombre.replace(/'/g, "\'");
+    return '<div style="background:' + bg + ';border:1px solid ' + border + ';border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:4px">'
+      + '<div style="font-size:10px;font-weight:700;color:' + color + ';text-transform:uppercase;letter-spacing:.05em">' + ico + ' ' + label + '</div>'
+      + '<div style="font-size:12px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + p.nombre + '</div>'
+      + '<div style="font-size:10px;color:var(--ink-3)">' + (p.marca||'') + '</div>'
+      + '<button onclick="abrirAjuste(\'' + p.id + '\',\'' + nombreSeg + '\',' + p.stock + ')" style="margin-top:4px;padding:4px 8px;border-radius:6px;border:1px solid ' + border + ';background:transparent;color:' + color + ';font-size:10px;font-weight:600;cursor:pointer">+ Ajustar stock</button>'
+      + '</div>';
+  }
+  const alertHtml = low.length
+    ? '<div style="margin-bottom:16px">'
+      + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">'
+        + '<span>⚠️</span>'
+        + '<span style="font-size:11px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:.07em">'
+          + low.length + ' producto' + (low.length>1?'s':'') + ' con stock bajo'
+        + '</span>'
+      + '</div>'
+      + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px">'
+        + low.map(tarjetaStock).join('')
+      + '</div>'
+    + '</div>'
+    : '';
+
 
   // 160. Calculamos el resumen de capital invertido en inventario
   //      capitalCosto = suma de (costo × stock) de todos los productos
