@@ -1687,24 +1687,105 @@ function checkStockAlerts() {
 // Muestra métricas de la semana, gráfico por canal,
 // top productos más vendidos y últimas ventas
 // ============================================================
-function getWeek() {
-  const now = new Date(), day = now.getDay();
-  const mon = new Date(now);
-  mon.setDate(now.getDate() - (day===0?6:day-1));
-  mon.setHours(0,0,0,0);
-  const sun = new Date(mon); sun.setDate(mon.getDate()+6); sun.setHours(23,59,59,999);
-  return { start:mon, end:sun };
+// ============================================================
+// 54. PÁGINA: DASHBOARD
+// Métricas filtradas por período seleccionado
+// ============================================================
+
+// 230. Estado del filtro de período del dashboard
+// 'semana' | 'mes' | 'personalizado' — persiste mientras la app está abierta
+let dashPeriodo = 'mes';
+let dashFechaInicio = '';
+let dashFechaFin = '';
+
+function getPeriodoFechas() {
+  // 231. Calcula el rango de fechas según el período seleccionado
+  const now = new Date();
+  if(dashPeriodo === 'hoy') {
+    const t = today();
+    return { label: 'Hoy', inicio: t, fin: t };
+  }
+  if(dashPeriodo === 'semana') {
+    const day = now.getDay();
+    const mon = new Date(now);
+    mon.setDate(now.getDate() - (day===0?6:day-1));
+    mon.setHours(0,0,0,0);
+    const sun = new Date(mon); sun.setDate(mon.getDate()+6);
+    const i = mon.toISOString().slice(0,10);
+    const f = sun.toISOString().slice(0,10);
+    return { label: `${mon.toLocaleDateString('es-CO',{day:'numeric',month:'short'})} – ${sun.toLocaleDateString('es-CO',{day:'numeric',month:'short'})}`, inicio:i, fin:f };
+  }
+  if(dashPeriodo === 'mes') {
+    const i = now.toISOString().slice(0,7) + '-01';
+    const f = new Date(now.getFullYear(), now.getMonth()+1, 0).toISOString().slice(0,10);
+    return { label: now.toLocaleDateString('es-CO',{month:'long',year:'numeric'}), inicio:i, fin:f };
+  }
+  if(dashPeriodo === 'mes_anterior') {
+    const d = new Date(now.getFullYear(), now.getMonth()-1, 1);
+    const i = d.toISOString().slice(0,7) + '-01';
+    const f = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().slice(0,10);
+    return { label: d.toLocaleDateString('es-CO',{month:'long',year:'numeric'}), inicio:i, fin:f };
+  }
+  if(dashPeriodo === 'anio') {
+    const i = now.getFullYear() + '-01-01';
+    const f = now.getFullYear() + '-12-31';
+    return { label: String(now.getFullYear()), inicio:i, fin:f };
+  }
+  if(dashPeriodo === 'personalizado' && dashFechaInicio && dashFechaFin) {
+    return { label: `${dashFechaInicio} → ${dashFechaFin}`, inicio:dashFechaInicio, fin:dashFechaFin };
+  }
+  // Default: mes actual
+  const i = now.toISOString().slice(0,7) + '-01';
+  const f = new Date(now.getFullYear(), now.getMonth()+1, 0).toISOString().slice(0,10);
+  return { label: now.toLocaleDateString('es-CO',{month:'long',year:'numeric'}), inicio:i, fin:f };
 }
 
+window.setDashPeriodo = (p) => {
+  // 232. Cambia el período y redibuja el dashboard
+  dashPeriodo = p;
+  if(p === 'personalizado') {
+    document.getElementById('dash-personalizado')?.style && (document.getElementById('dash-personalizado').style.display = 'flex');
+  } else {
+    const el = document.getElementById('dash-personalizado');
+    if(el) el.style.display = 'none';
+    renderDashboard();
+  }
+};
+
+window.aplicarFechasPersonalizadas = () => {
+  dashFechaInicio = document.getElementById('dash-fecha-ini').value;
+  dashFechaFin = document.getElementById('dash-fecha-fin').value;
+  if(!dashFechaInicio || !dashFechaFin) { alert('Selecciona ambas fechas'); return; }
+  renderDashboard();
+};
+
 function renderDashboard() {
-  const { start, end } = getWeek();
-  const wv = DATA.ventas.filter(v => { const d=new Date(v.fecha); return d>=start&&d<=end; });
-  const wg = DATA.gastos.filter(g => { const d=new Date(g.fecha); return d>=start&&d<=end; });
-  const tv = wv.reduce((s,v)=>s+Number(v.total||0),0);
-  const tg = wg.reduce((s,g)=>s+Number(g.valor||0),0);
+  const { label, inicio, fin } = getPeriodoFechas();
+
+  // 233. Filtramos ventas y gastos por el período seleccionado
+  const pv = DATA.ventas.filter(v => v.fecha >= inicio && v.fecha <= fin);
+  const pg = DATA.gastos.filter(g => g.fecha >= inicio && g.fecha <= fin);
+
+  const tv = pv.reduce((s,v)=>s+Number(v.total||0),0);
+  const tg = pg.reduce((s,g)=>s+Number(g.valor||0),0);
   const util = tv - tg;
   const hoyV = DATA.ventas.filter(v => v.fecha === today());
   const totalHoy = hoyV.reduce((s,v)=>s+Number(v.total||0),0);
+  const carteraPeriodo = pv.reduce((s,v)=>s+Number(v.saldo||0),0);
+
+  // 234. Ganancia bruta del período
+  let costoVendidoPeriodo = 0;
+  pv.forEach(v => {
+    const prod = DATA.inventario.find(p => p.id === v.prodId);
+    if(prod?.costo) costoVendidoPeriodo += Number(prod.costo) * Number(v.cant||1);
+    if(v.esCombo && v.productosCombo) {
+      v.productosCombo.forEach(item => {
+        const p = DATA.inventario.find(x => x.id === item.prodId);
+        if(p?.costo) costoVendidoPeriodo += Number(p.costo) * Number(item.cant||1);
+      });
+    }
+  });
+  const gananciaBruta = tv - costoVendidoPeriodo;
 
   // Alerta de stock bajo
   const low = DATA.inventario.filter(p => p.stock <= (p.stockMinimo||5));
@@ -1714,9 +1795,36 @@ function renderDashboard() {
       <div><strong>Stock bajo:</strong> ${low.map(p=>`${p.nombre} (${p.stock} uds.)`).join(' · ')}</div>
     </div>` : '';
 
+  // 235. Botones del selector de período
+  const periodos = [
+    { id:'hoy', label:'Hoy' },
+    { id:'semana', label:'Semana' },
+    { id:'mes', label:'Este mes' },
+    { id:'mes_anterior', label:'Mes anterior' },
+    { id:'anio', label:'Este año' },
+    { id:'personalizado', label:'Personalizado' },
+  ];
+  const filtroHtml = `
+    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:16px">
+      ${periodos.map(p => `
+        <button onclick="setDashPeriodo('${p.id}')"
+          style="padding:5px 12px;border-radius:20px;border:1.5px solid ${dashPeriodo===p.id?'var(--ink)':'var(--border)'};
+          background:${dashPeriodo===p.id?'var(--ink)':'var(--surface)'};
+          color:${dashPeriodo===p.id?'#fff':'var(--ink-2)'};
+          font-size:12px;font-weight:${dashPeriodo===p.id?'600':'400'};cursor:pointer;transition:all .15s">
+          ${p.label}
+        </button>`).join('')}
+      <div id="dash-personalizado" style="display:${dashPeriodo==='personalizado'?'flex':'none'};align-items:center;gap:6px;flex-wrap:wrap">
+        <input type="date" id="dash-fecha-ini" value="${dashFechaInicio}" class="f-input" style="width:140px;padding:5px 8px;font-size:12px">
+        <span style="font-size:12px;color:var(--ink-3)">→</span>
+        <input type="date" id="dash-fecha-fin" value="${dashFechaFin}" class="f-input" style="width:140px;padding:5px 8px;font-size:12px">
+        <button class="btn btn-sm btn-lime" onclick="aplicarFechasPersonalizadas()">Aplicar</button>
+      </div>
+    </div>`;
+
   // Gráfico de barras por canal
   const canales = { web:0, directo:0, distribuidor:0 };
-  wv.forEach(v => { if(canales[v.canal]!==undefined) canales[v.canal]+=Number(v.total||0); });
+  pv.forEach(v => { if(canales[v.canal]!==undefined) canales[v.canal]+=Number(v.total||0); });
   const maxC = Math.max(...Object.values(canales), 1);
   const cNames = { web:'Web', directo:'Directo', distribuidor:'Dist.' };
   const cColors = { web:'#BFDBFE', directo:'var(--lime-accent)', distribuidor:'#FDE68A' };
@@ -1727,91 +1835,99 @@ function renderDashboard() {
       <div class="bar-lbl">${cNames[k]}</div>
     </div>`).join('');
 
-  // Top productos
+  // 236. Top productos del período seleccionado
   const pm={};
-  DATA.ventas.forEach(v=>{
+  pv.forEach(v=>{
     if(!pm[v.producto]) pm[v.producto]={cant:0,total:0};
     pm[v.producto].cant+=Number(v.cant||0);
     pm[v.producto].total+=Number(v.total||0);
   });
-  const top = Object.entries(pm).sort((a,b)=>b[1].cant-a[1].cant).slice(0,5);
-  const maxT = top.length ? top[0][1].cant : 1;
+  const top = Object.entries(pm).sort((a,b)=>b[1].total-a[1].total).slice(0,5);
+  const maxT = top.length ? top[0][1].total : 1;
   const topHtml = top.length ? top.map(([n,d],i) => `
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
       <span style="width:20px;height:20px;border-radius:50%;background:var(--surface-3);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--ink-2);flex-shrink:0">${i+1}</span>
       <div style="flex:1;min-width:0">
         <div style="font-size:12px;font-weight:500;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:4px">${n}</div>
-        <div class="prog"><div class="prog-fill prog-lime" style="width:${Math.round((d.cant/maxT)*100)}%"></div></div>
+        <div class="prog"><div class="prog-fill prog-lime" style="width:${Math.round((d.total/maxT)*100)}%"></div></div>
       </div>
-      <span style="font-size:11px;color:var(--ink-3);white-space:nowrap">${d.cant} uds</span>
+      <span style="font-size:11px;color:var(--ink-3);white-space:nowrap">${fmt(d.total)}</span>
     </div>`).join('')
-    : '<div class="empty-state" style="padding:16px"><div class="empty-state-text">Sin ventas aún</div></div>';
+    : '<div class="empty-state" style="padding:16px"><div class="empty-state-text">Sin ventas en este período</div></div>';
 
-  // Meta del mes actual
+  // Meta del mes
   const mesActual = new Date().toISOString().slice(0,7);
   const metaActual = DATA.metas.find(m => m.mes === mesActual);
+  const tvMesActual = DATA.ventas.filter(v=>v.fecha?.slice(0,7)===mesActual).reduce((s,v)=>s+Number(v.total||0),0);
   const metaHtml = metaActual ? `
     <div class="card" style="margin-bottom:16px">
-      <div class="card-title">Meta del mes</div>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <span style="font-size:13px;color:var(--ink)">${fmt(tv)} de ${fmt(metaActual.ventasMeta)}</span>
-        <span style="font-size:14px;font-weight:700;color:var(--lime)">${Math.min(100,Math.round((tv/metaActual.ventasMeta)*100))}%</span>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div class="card-title" style="margin:0">Meta del mes</div>
+        <span style="font-size:14px;font-weight:700;color:var(--lime)">${Math.min(100,Math.round((tvMesActual/metaActual.ventasMeta)*100))}%</span>
       </div>
-      <div class="prog"><div class="prog-fill prog-lime" style="width:${Math.min(100,Math.round((tv/metaActual.ventasMeta)*100))}%"></div></div>
+      <div style="font-size:12px;color:var(--ink-2);margin-bottom:8px">${fmt(tvMesActual)} de ${fmt(metaActual.ventasMeta)}</div>
+      <div class="prog"><div class="prog-fill prog-lime" style="width:${Math.min(100,Math.round((tvMesActual/metaActual.ventasMeta)*100))}%"></div></div>
     </div>` : '';
 
-  // Tabla de últimas ventas
-  const lastV = DATA.ventas.slice(0,8);
+  // Últimas ventas del período
+  const lastV = pv.slice(0,8);
   const tblHtml = lastV.length ? `
     <div class="table-wrap">
       <table class="tbl">
-        <thead><tr><th>Fecha</th><th>Cliente</th><th>Producto</th><th>Canal</th><th>Total</th></tr></thead>
-        <tbody>${lastV.map(v=>`
-          <tr>
+        <thead><tr><th>Fecha</th><th>Cliente</th><th>Producto</th><th>Método</th><th>Total</th></tr></thead>
+        <tbody>${lastV.map(v=>{
+          const mpIco = { efectivo:'💵', transferencia:'📲', mixto:'🔀' };
+          return `<tr>
             <td style="color:var(--ink-3)">${v.fecha||''}</td>
             <td style="font-weight:500">${v.cliente||'—'}</td>
             <td>${v.producto||''}</td>
-            <td><span class="badge b-${v.canal||'web'}">${v.canal||''}</span></td>
+            <td style="font-size:12px">${mpIco[v.metodoPago||'efectivo']||'💵'} ${v.metodoPago||'Efectivo'}</td>
             <td style="font-weight:600;color:var(--lime)">${fmt(v.total)}</td>
-          </tr>`).join('')}
+          </tr>`;
+        }).join('')}
         </tbody>
       </table>
-    </div>` : '<div class="empty-state"><div class="empty-state-icon">🛒</div><div class="empty-state-text">Sin ventas registradas</div></div>';
+    </div>` : '<div class="empty-state"><div class="empty-state-icon">🛒</div><div class="empty-state-text">Sin ventas en este período</div></div>';
 
   document.getElementById('page-dashboard').innerHTML = `
     <div class="page-header">
       <div>
         <div class="page-title">Dashboard</div>
-        <div class="page-sub">Semana del ${start.toLocaleDateString('es-CO',{day:'numeric',month:'short'})} al ${end.toLocaleDateString('es-CO',{day:'numeric',month:'short'})}</div>
+        <div class="page-sub" style="font-weight:500;color:var(--ink-2)">${label}</div>
       </div>
     </div>
     ${alertHtml}
+    ${filtroHtml}
     <div class="metrics-grid">
       <div class="metric-card">
-        <div class="metric-label">Ingresos semana</div>
+        <div class="metric-label">Ingresos</div>
         <div class="metric-value" style="color:var(--lime)">${fmt(tv)}</div>
         <div class="metric-sub">Hoy: ${fmt(totalHoy)}</div>
       </div>
       <div class="metric-card">
-        <div class="metric-label">Gastos semana</div>
+        <div class="metric-label">Gastos</div>
         <div class="metric-value" style="color:var(--red)">${fmt(tg)}</div>
+        <div class="metric-sub">${pg.length} registros</div>
       </div>
       <div class="metric-card">
-        <div class="metric-label">Utilidad</div>
+        <div class="metric-label">Utilidad neta</div>
         <div class="metric-value" style="color:${util>=0?'var(--green)':'var(--red)'}">${fmt(util)}</div>
+        <div class="metric-sub">${util>=0?'Positivo ✅':'Negativo ⚠️'}</div>
       </div>
       <div class="metric-card">
-        <div class="metric-label">Ventas realizadas</div>
-        <div class="metric-value">${wv.length}</div>
+        <div class="metric-label">Ganancia bruta</div>
+        <div class="metric-value" style="color:var(--blue)">${fmt(gananciaBruta)}</div>
+        <div class="metric-sub">Sin contar gastos</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Ventas</div>
+        <div class="metric-value">${pv.length}</div>
         <div class="metric-sub">Hoy: ${hoyV.length}</div>
       </div>
-      <!-- 127. Nueva métrica: cartera pendiente total de todas las ventas -->
       <div class="metric-card">
         <div class="metric-label">Cartera pendiente</div>
-        <div class="metric-value" style="color:${DATA.ventas.reduce((s,v)=>s+Number(v.saldo||0),0)>0?'var(--red)':'var(--green)'}">
-          ${fmt(DATA.ventas.reduce((s,v)=>s+Number(v.saldo||0),0))}
-        </div>
-        <div class="metric-sub">${DATA.ventas.filter(v=>v.saldo>0).length} venta(s) pendiente(s)</div>
+        <div class="metric-value" style="color:${carteraPeriodo>0?'var(--red)':'var(--green)'}">${fmt(carteraPeriodo)}</div>
+        <div class="metric-sub">${pv.filter(v=>v.saldo>0).length} por cobrar</div>
       </div>
     </div>
     ${metaHtml}
@@ -1821,19 +1937,18 @@ function renderDashboard() {
         <div class="bar-chart">${barHtml}</div>
       </div>
       <div class="card">
-        <div class="card-title">Productos más vendidos</div>
+        <div class="card-title">Top productos — ${label}</div>
         ${topHtml}
       </div>
     </div>
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-        <div class="card-title" style="margin:0">Últimas ventas</div>
+        <div class="card-title" style="margin:0">Ventas del período</div>
         <button class="btn btn-sm" onclick="showPage('ventas')">Ver todas →</button>
       </div>
       ${tblHtml}
     </div>`;
 }
-
 // ============================================================
 // 55. PÁGINA: VENTAS
 // Lista de ventas con filtro de búsqueda y exportación CSV
