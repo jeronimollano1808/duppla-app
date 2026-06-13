@@ -179,19 +179,22 @@ body{
    ============================================================ */
 .sidebar{
   width:240px;
-  /* 254. Sidebar oscuro — contraste deportivo con el contenido blanco */
-  background:#0F1117;
-  border-right:none;
+  /* 263. Sidebar con gradiente sutil — más profundidad visual */
+  background:linear-gradient(180deg,#16181F 0%,#0F1117 60%,#0C0E14 100%);
+  border-right:1px solid rgba(200,224,90,.08);
   display:flex;flex-direction:column;
   position:fixed;top:0;left:0;height:100vh;
   z-index:100;
   transition:transform .25s cubic-bezier(.4,0,.2,1);
-  box-shadow:4px 0 24px rgba(0,0,0,.15);
+  box-shadow:4px 0 32px rgba(0,0,0,.25),inset -1px 0 0 rgba(200,224,90,.05);
 }
 .sidebar-header{
   padding:20px 16px 16px;
+  /* 264. Línea de acento verde lima arriba del header — detalle deportivo */
+  border-top:2px solid #C8E05A;
   border-bottom:1px solid rgba(255,255,255,.06);
   display:flex;align-items:center;gap:10px;
+  background:rgba(200,224,90,.03);
 }
 .sidebar-logo-mark{
   width:34px;height:34px;
@@ -200,7 +203,7 @@ body{
   border-radius:9px;
   display:flex;align-items:center;justify-content:center;
   font-weight:900;font-size:15px;color:#0F1117;flex-shrink:0;
-  box-shadow:0 2px 8px rgba(200,224,90,.3);
+  box-shadow:0 2px 12px rgba(200,224,90,.4),0 0 0 1px rgba(200,224,90,.1);
 }
 .sidebar-logo-text{font-size:17px;font-weight:800;color:#FFFFFF;letter-spacing:.5px}
 .sidebar-logo-sub{font-size:10px;color:rgba(255,255,255,.35);margin-top:1px;letter-spacing:.03em}
@@ -225,8 +228,12 @@ body{
   transition:all .12s;
 }
 .nav-btn:hover{background:rgba(255,255,255,.07);color:rgba(255,255,255,.85)}
-/* 257. Estado activo: fondo lima translúcido + texto verde lima */
-.nav-btn.active{background:rgba(200,224,90,.12);color:#C8E05A}
+/* 257. Estado activo: barra izquierda lima + fondo translúcido */
+.nav-btn.active{
+  background:rgba(200,224,90,.1);
+  color:#C8E05A;
+  box-shadow:inset 3px 0 0 #C8E05A;
+}
 .nav-btn .ico{
   width:28px;height:28px;border-radius:7px;
   display:flex;align-items:center;justify-content:center;
@@ -1865,10 +1872,19 @@ function renderDashboard() {
 
   // Alerta de stock bajo
   const low = DATA.inventario.filter(p => p.stock <= (p.stockMinimo||5));
+  // 266. Alerta de stock bajo en dashboard — versión compacta con chips
   const alertHtml = low.length ? `
-    <div class="alert alert-warn">
-      <span class="alert-icon">⚠️</span>
-      <div><strong>Stock bajo:</strong> ${low.map(p=>`${p.nombre} (${p.stock} uds.)`).join(' · ')}</div>
+    <div style="background:var(--amber-bg);border:1px solid #FDE68A;border-radius:var(--radius-lg);padding:12px 16px;margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <span>⚠️</span>
+        <span style="font-size:12px;font-weight:700;color:var(--amber)">STOCK BAJO — ${low.length} producto${low.length>1?'s':''}</span>
+        <button onclick="showPage('inventario')" style="margin-left:auto;font-size:11px;background:none;border:none;color:var(--amber);cursor:pointer;font-weight:600;text-decoration:underline">Ver inventario →</button>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        ${low.map(p => `<span style="background:${p.stock===0?'var(--red-bg)':'#fff'};border:1px solid ${p.stock===0?'#FECACA':'#FDE68A'};border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;color:${p.stock===0?'var(--red)':'#92400E'}">
+          ${p.stock===0?'🚫':'⚠️'} ${p.nombre.split(' ').slice(0,3).join(' ')} (${p.stock})
+        </span>`).join('')}
+      </div>
     </div>` : '';
 
   // 235. Botones del selector de período
@@ -2882,10 +2898,35 @@ window.exportarCSV = () => {
 // ============================================================
 function renderInventario() {
   const low = DATA.inventario.filter(p => p.stock <= (p.stockMinimo||5));
+  // 265. Alertas de stock bajo en tarjetas individuales — más legibles y accionables
   const alertHtml = low.length ? `
-    <div class="alert alert-warn">
-      <span class="alert-icon">⚠️</span>
-      <div><strong>Stock bajo:</strong> ${low.map(p=>`${p.nombre} (${p.stock})`).join(', ')}</div>
+    <div style="margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <span style="font-size:13px">⚠️</span>
+        <span style="font-size:11px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:.07em">
+          ${low.length} producto${low.length>1?'s':''} con stock bajo
+        </span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px">
+        ${low.map(p => {
+          const esAgotado = p.stock === 0;
+          const bg = esAgotado ? 'var(--red-bg)' : 'var(--amber-bg)';
+          const border = esAgotado ? '#FECACA' : '#FDE68A';
+          const color = esAgotado ? 'var(--red)' : 'var(--amber)';
+          const ico = esAgotado ? '🚫' : '⚠️';
+          const label = esAgotado ? 'AGOTADO' : \`\${p.stock} uds.\`;
+          return \`<div style="background:\${bg};border:1px solid \${border};border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:4px">
+            <div style="font-size:10px;font-weight:700;color:\${color};text-transform:uppercase;letter-spacing:.05em">\${ico} \${label}</div>
+            <div style="font-size:12px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">\${p.nombre}</div>
+            <div style="font-size:10px;color:var(--ink-3)">\${p.marca||''}</div>
+            <button onclick="abrirAjuste('\${p.id}','\${p.nombre.replace(/'/g,"\\'")}',\${p.stock})"
+              style="margin-top:4px;padding:4px 8px;border-radius:6px;border:1px solid \${border};background:transparent;color:\${color};font-size:10px;font-weight:600;cursor:pointer;text-align:center;transition:all .12s"
+              onmouseover="this.style.background='\${bg}'" onmouseout="this.style.background='transparent'">
+              + Ajustar stock
+            </button>
+          </div>\`;
+        }).join('')}
+      </div>
     </div>` : '';
 
   // 160. Calculamos el resumen de capital invertido en inventario
