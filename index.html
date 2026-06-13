@@ -929,6 +929,35 @@ body{
       </select>
     </div>
     <div class="f-group"><label class="f-label">Nota</label><input type="text" id="ev-nota" class="f-input" placeholder="Referencia adicional"></div>
+    <!-- 237. Método de pago editable en ventas existentes -->
+    <div class="f-group">
+      <label class="f-label">Método de pago</label>
+      <div style="display:flex;gap:8px">
+        <button type="button" id="ev-mp-efectivo" onclick="setMetodoPagoEdit('efectivo')"
+          style="flex:1;padding:7px;border-radius:var(--radius);border:2px solid var(--ink);background:var(--ink);color:#fff;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">
+          💵 Efectivo
+        </button>
+        <button type="button" id="ev-mp-transferencia" onclick="setMetodoPagoEdit('transferencia')"
+          style="flex:1;padding:7px;border-radius:var(--radius);border:2px solid var(--border);background:var(--surface-2);color:var(--ink-2);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">
+          📲 Transferencia
+        </button>
+        <button type="button" id="ev-mp-mixto" onclick="setMetodoPagoEdit('mixto')"
+          style="flex:1;padding:7px;border-radius:var(--radius);border:2px solid var(--border);background:var(--surface-2);color:var(--ink-2);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">
+          🔀 Mixto
+        </button>
+      </div>
+    </div>
+    <!-- 238. Saldo editable para corregir errores o ajustes manuales -->
+    <div class="f-row">
+      <div class="f-group">
+        <label class="f-label">Pagado ($)</label>
+        <input type="number" id="ev-pagado" class="f-input" placeholder="0">
+      </div>
+      <div class="f-group">
+        <label class="f-label">Saldo pendiente ($)</label>
+        <input type="number" id="ev-saldo" class="f-input" placeholder="0">
+      </div>
+    </div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('modal-editar-venta')">Cancelar</button>
       <button class="btn btn-lime" onclick="guardarEditarVenta()">Guardar cambios</button>
@@ -2122,6 +2151,20 @@ window.abrirModalVenta = () => {
 
 // 220. setMetodoPago — actualiza el estilo visual de los botones de método de pago
 //      tipo: 'efectivo' | 'transferencia' | 'mixto'
+// 239. setMetodoPagoEdit — toggle de método de pago en modal de edición
+window.setMetodoPagoEdit = (tipo) => {
+  ['efectivo','transferencia','mixto'].forEach(k => {
+    const btn = document.getElementById(`ev-mp-${k}`);
+    if(!btn) return;
+    const activo = k === tipo;
+    btn.style.background = activo ? 'var(--ink)' : 'var(--surface-2)';
+    btn.style.color = activo ? '#fff' : 'var(--ink-2)';
+    btn.style.borderColor = activo ? 'var(--ink)' : 'var(--border)';
+  });
+  const btn = document.getElementById('ev-mp-efectivo');
+  if(btn) btn.dataset.selected = tipo;
+};
+
 window.setMetodoPago = (tipo) => {
   const btns = {
     efectivo:      document.getElementById('mp-efectivo'),
@@ -2496,6 +2539,10 @@ window.editarVenta = (id) => {
   document.getElementById('ev-cliente').value = venta.cliente || '';
   document.getElementById('ev-tipo-precio').value = venta.tipoPrecio || 'publico';
   document.getElementById('ev-nota').value = venta.nota || '';
+  // 240. Cargamos método de pago y saldo actuales
+  setMetodoPagoEdit(venta.metodoPago || 'efectivo');
+  document.getElementById('ev-pagado').value = venta.pagado || 0;
+  document.getElementById('ev-saldo').value = venta.saldo || 0;
 
   previoCOP('ev-precio', 'prev-ev-precio');
   const prevTotal = document.getElementById('prev-ev-total');
@@ -2572,11 +2619,14 @@ window.guardarEditarVenta = async () => {
   // 203. Si es combo solo actualizamos campos básicos sin tocar stock
   if(venta?.esCombo) {
     await updateDoc(doc(db,'ventas',id), {
-      fecha:   document.getElementById('ev-fecha').value,
-      canal:   document.getElementById('ev-canal').value,
-      cliente: document.getElementById('ev-cliente').value,
+      fecha:       document.getElementById('ev-fecha').value,
+      canal:       document.getElementById('ev-canal').value,
+      cliente:     document.getElementById('ev-cliente').value,
       precio, total: precio,
-      nota:    document.getElementById('ev-nota').value,
+      nota:        document.getElementById('ev-nota').value,
+      metodoPago:  document.getElementById('ev-mp-efectivo')?.dataset.selected || 'efectivo',
+      pagado:      Number(document.getElementById('ev-pagado').value)||0,
+      saldo:       Number(document.getElementById('ev-saldo').value)||0,
     });
     document.getElementById('ev-cant').disabled = false;
     document.getElementById('ev-prod').disabled = false;
@@ -2596,6 +2646,9 @@ window.guardarEditarVenta = async () => {
       cant:       Number(document.getElementById('ev-cant').value)||1,
       tipoPrecio: document.getElementById('ev-tipo-precio').value,
       nota:       document.getElementById('ev-nota').value,
+      metodoPago: document.getElementById('ev-mp-efectivo')?.dataset.selected || 'efectivo',
+      pagado:     Number(document.getElementById('ev-pagado').value)||0,
+      saldo:      Number(document.getElementById('ev-saldo').value)||0,
     });
     document.getElementById('ev-cant').disabled = false;
     closeModal('modal-editar-venta');
@@ -2637,6 +2690,9 @@ window.guardarEditarVenta = async () => {
     cliente:    document.getElementById('ev-cliente').value,
     tipoPrecio: document.getElementById('ev-tipo-precio').value,
     nota:       document.getElementById('ev-nota').value,
+    metodoPago: document.getElementById('ev-mp-efectivo')?.dataset.selected || 'efectivo',
+    pagado:     Number(document.getElementById('ev-pagado').value)||0,
+    saldo:      Number(document.getElementById('ev-saldo').value)||0,
   });
 
   document.getElementById('ev-cant').disabled = false;
