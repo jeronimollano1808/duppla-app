@@ -2131,6 +2131,17 @@ function renderVentas() {
     return (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0);
   });
 
+  // 242. Filtramos ventas según la búsqueda activa — debe ir ANTES de usarse en rows
+  const ventasFiltradas = busquedaVentas
+    ? ventasOrdenadas.filter(v =>
+        (v.cliente||'').toLowerCase().includes(busquedaVentas) ||
+        (v.producto||'').toLowerCase().includes(busquedaVentas) ||
+        (v.canal||'').toLowerCase().includes(busquedaVentas) ||
+        (v.fecha||'').includes(busquedaVentas) ||
+        String(v.total||'').includes(busquedaVentas)
+      )
+    : ventasOrdenadas;
+
   const rows = ventasFiltradas.map(v => {
     // 79. Badge de tipo de precio
     const tpLabel = { publico:'Público', distribuidor:'Dist.', especial:'Especial' };
@@ -2186,17 +2197,6 @@ function renderVentas() {
       </td>
     </tr>`;
   }).join('');
-
-  // 242. Filtramos ventas según la búsqueda activa
-  const ventasFiltradas = busquedaVentas
-    ? ventasOrdenadas.filter(v =>
-        (v.cliente||'').toLowerCase().includes(busquedaVentas) ||
-        (v.producto||'').toLowerCase().includes(busquedaVentas) ||
-        (v.canal||'').toLowerCase().includes(busquedaVentas) ||
-        (v.fecha||'').includes(busquedaVentas) ||
-        String(v.total||'').includes(busquedaVentas)
-      )
-    : ventasOrdenadas;
 
   document.getElementById('page-ventas').innerHTML = `
     <div class="page-header">
