@@ -1764,6 +1764,10 @@ function checkStockAlerts() {
 // 241. Estado de búsqueda para ventas e inventario
 let busquedaVentas = '';
 let busquedaInventario = '';
+// 302. Variables globales para métodos de pago — más confiables que dataset
+let metodoPagoVenta = 'efectivo';
+let metodoPagoAbono = 'efectivo';
+let metodoPagoEdit  = 'efectivo';
 
 let dashPeriodo = 'mes';
 let dashFechaInicio = '';
@@ -2223,6 +2227,7 @@ let ventaLineas = [];
 window.abrirModalVenta = () => {
   // 293. Abrimos el modal primero para que el DOM exista antes de renderizar
   ventaLineas = [{ prodId:'', nombre:'', cant:1, precio:0, tipoPrecio:'publico', busqueda:'' }];
+  metodoPagoVenta = 'efectivo'; // Reset variable global
   openModal('modal-venta');
 
   setTimeout(() => {
@@ -2245,6 +2250,7 @@ window.abrirModalVenta = () => {
 
 // 294. setMetodoPago — toggle método de pago en modal de nueva venta
 window.setMetodoPago = (tipo) => {
+  metodoPagoVenta = tipo; // 303. Guardamos en variable global
   ['efectivo','transferencia','mixto'].forEach(k => {
     const btn = document.getElementById('mp-' + k);
     if(!btn) return;
@@ -2253,13 +2259,11 @@ window.setMetodoPago = (tipo) => {
     btn.style.color = activo ? '#fff' : 'var(--ink-2)';
     btn.style.borderColor = activo ? 'var(--ink)' : 'var(--border)';
   });
-  // Guardamos el método seleccionado en dataset para leerlo al guardar
-  const ref = document.getElementById('mp-efectivo');
-  if(ref) ref.dataset.selected = tipo;
 };
 
 // 295. setMetodoPagoAbono — toggle en modal de abono
 window.setMetodoPagoAbono = (tipo) => {
+  metodoPagoAbono = tipo;
   ['efectivo','transferencia'].forEach(k => {
     const btn = document.getElementById('ab-mp-' + k);
     if(!btn) return;
@@ -2268,12 +2272,11 @@ window.setMetodoPagoAbono = (tipo) => {
     btn.style.color = activo ? '#fff' : 'var(--ink-2)';
     btn.style.borderColor = activo ? 'var(--ink)' : 'var(--border)';
   });
-  const ref = document.getElementById('ab-mp-efectivo');
-  if(ref) ref.dataset.selected = tipo;
 };
 
 // 296. setMetodoPagoEdit — toggle en modal de editar venta
 window.setMetodoPagoEdit = (tipo) => {
+  metodoPagoEdit = tipo;
   ['efectivo','transferencia','mixto'].forEach(k => {
     const btn = document.getElementById('ev-mp-' + k);
     if(!btn) return;
@@ -2282,8 +2285,6 @@ window.setMetodoPagoEdit = (tipo) => {
     btn.style.color = activo ? '#fff' : 'var(--ink-2)';
     btn.style.borderColor = activo ? 'var(--ink)' : 'var(--border)';
   });
-  const ref = document.getElementById('ev-mp-efectivo');
-  if(ref) ref.dataset.selected = tipo;
 };
 
 window.setTipoProducto = (tipo) => {
@@ -2495,7 +2496,7 @@ window.guardarVenta = async () => {
   const saldo = Math.max(0, total - pagado);
   // 286. estadoPago correcto: si saldo es 0 siempre es 'pagado', sin importar abonos previos
   const estadoPago = saldo === 0 ? 'pagado' : pagado > 0 ? 'parcial' : 'pendiente';
-  const metodoPago = document.getElementById('mp-efectivo')?.dataset.selected || 'efectivo';
+  const metodoPago = metodoPagoVenta;
 
   const esManual = document.getElementById('seccion-manual').style.display !== 'none';
 
@@ -2700,7 +2701,7 @@ window.guardarAbono = async () => {
     valor,
     nota: document.getElementById('ab-nota').value || '',
     // 227. Guardamos el método de pago del abono
-    metodoPago: document.getElementById('ab-mp-efectivo')?.dataset.selected || 'efectivo'
+    metodoPago: metodoPagoAbono
   }];
 
   // 125. Actualizamos la venta en Firebase con el nuevo saldo y lista de abonos
@@ -2854,7 +2855,7 @@ window.guardarEditarVenta = async () => {
     canal:      document.getElementById('ev-canal').value,
     cliente:    document.getElementById('ev-cliente').value,
     nota:       document.getElementById('ev-nota').value,
-    metodoPago: document.getElementById('ev-mp-efectivo')?.dataset.selected || 'efectivo',
+    metodoPago: metodoPagoEdit,
     pagado:     Number(document.getElementById('ev-pagado').value)||0,
     saldo:      Number(document.getElementById('ev-saldo').value)||0,
   };
