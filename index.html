@@ -783,15 +783,16 @@ body{
         </select>
       </div>
     </div>
-    <!-- 166. Selector de tipo de producto: del inventario, manual o combo -->
+
+    <!-- 271. Toggle: inventario / manual / combo -->
     <div style="display:flex;gap:8px;margin-bottom:12px">
       <button type="button" id="btn-tipo-inv" onclick="setTipoProducto('inventario')"
         style="flex:1;padding:8px;border-radius:var(--radius);border:2px solid var(--ink);background:var(--ink);color:#fff;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">
-        📦 Del inventario
+        📦 Inventario
       </button>
       <button type="button" id="btn-tipo-manual" onclick="setTipoProducto('manual')"
         style="flex:1;padding:8px;border-radius:var(--radius);border:2px solid var(--border);background:var(--surface-2);color:var(--ink-2);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">
-        ✏️ Producto manual
+        ✏️ Manual
       </button>
       <button type="button" onclick="closeModal('modal-venta');abrirVenderCombo()"
         style="flex:1;padding:8px;border-radius:var(--radius);border:2px solid var(--border);background:var(--surface-2);color:var(--ink-2);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">
@@ -799,67 +800,44 @@ body{
       </button>
     </div>
 
-    <!-- 167. Sección del inventario (visible por defecto) -->
+    <!-- 272. MODO INVENTARIO — múltiples productos con buscador -->
     <div id="seccion-inventario">
-      <div class="f-group"><label class="f-label">Producto *</label>
-        <select id="v-prod" class="f-input" onchange="fillVentaPrecio()">
-          <option value="">— Selecciona un producto —</option>
-        </select>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <label class="f-label" style="margin:0">Productos *</label>
+        <button type="button" class="btn btn-sm" onclick="agregarLineaVenta()">+ Producto</button>
       </div>
+      <!-- 273. Buscador de producto — filtra en tiempo real mientras escribes -->
+      <div id="v-lineas-container"></div>
     </div>
 
-    <!-- 168. Sección manual (oculta por defecto) — para productos fuera del catálogo
-               No descuenta stock ni requiere que el producto esté en el inventario -->
+    <!-- 274. MODO MANUAL — producto fuera del catálogo -->
     <div id="seccion-manual" style="display:none">
       <div class="f-group">
         <label class="f-label">Nombre del producto *</label>
         <input type="text" id="v-prod-manual" class="f-input" placeholder="Ej: Servicio de asesoría, Kit promocional...">
       </div>
-    </div>
-    <!-- 65. Selector de tipo de precio — aparece al seleccionar un producto
-              Muestra los 3 precios disponibles para que el vendedor elija cuál aplica
-              El precio se llena automáticamente pero puede editarse manualmente -->
-    <div id="v-precio-selector" style="display:none;margin-bottom:14px">
-      <label class="f-label">Tipo de precio</label>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
-        <button type="button" class="precio-btn active" id="btn-publico" onclick="seleccionarPrecio('publico')"
-          style="padding:10px 8px;border-radius:var(--radius);border:2px solid #2563EB;background:#EFF6FF;cursor:pointer;text-align:center;transition:all .15s">
-          <!-- 97. Cada botón muestra el tipo de precio arriba y el valor formateado en COP abajo -->
-          <div style="font-size:10px;font-weight:600;color:#1D4ED8;text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px">Público</div>
-          <div id="lbl-publico" style="font-size:13px;font-weight:700;color:#1D4ED8">$0</div>
-        </button>
-        <button type="button" class="precio-btn" id="btn-distribuidor" onclick="seleccionarPrecio('distribuidor')"
-          style="padding:10px 8px;border-radius:var(--radius);border:2px solid var(--border);background:var(--surface-2);cursor:pointer;text-align:center;transition:all .15s">
-          <div style="font-size:10px;font-weight:600;color:var(--ink-3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px">Distribuidor</div>
-          <div id="lbl-distribuidor" style="font-size:13px;font-weight:700;color:var(--ink-2)">$0</div>
-        </button>
-        <button type="button" class="precio-btn" id="btn-especial" onclick="seleccionarPrecio('especial')"
-          style="padding:10px 8px;border-radius:var(--radius);border:2px solid var(--border);background:var(--surface-2);cursor:pointer;text-align:center;transition:all .15s">
-          <div style="font-size:10px;font-weight:600;color:var(--ink-3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px">Especial</div>
-          <div id="lbl-especial" style="font-size:13px;font-weight:700;color:var(--ink-2)">$0</div>
-        </button>
+      <div class="f-row">
+        <div class="f-group"><label class="f-label">Cantidad</label><input type="number" id="v-cant" class="f-input" value="1" min="1" oninput="calcVentaTotal()"></div>
+        <div class="f-group">
+          <label class="f-label">Precio unitario ($)</label>
+          <input type="number" id="v-precio" class="f-input" oninput="calcVentaTotal();previoCOP('v-precio','prev-vprecio')">
+          <div id="prev-vprecio" style="font-size:11px;margin-top:4px;font-weight:600"></div>
+        </div>
       </div>
     </div>
-    <div class="f-row">
-      <div class="f-group"><label class="f-label">Cantidad</label><input type="number" id="v-cant" class="f-input" value="1" min="1" oninput="calcVentaTotal()"></div>
-      <div class="f-group">
-        <label class="f-label">Precio unitario ($)</label>
-        <input type="number" id="v-precio" class="f-input" oninput="calcVentaTotal();previoCOP('v-precio','prev-vprecio')">
-        <div id="prev-vprecio" style="font-size:11px;margin-top:4px;font-weight:600"></div>
-      </div>
-    </div>
+
+    <!-- 275. Total calculado -->
     <div class="f-group">
       <label class="f-label">Total ($)</label>
       <input type="number" id="v-total" class="f-input" readonly style="opacity:.6;cursor:not-allowed">
-      <!-- 130. Preview del total también formateado para confirmación visual -->
       <div id="prev-vtotal" style="font-size:12px;margin-top:4px;font-weight:700;color:var(--lime)"></div>
     </div>
+
     <div class="f-group"><label class="f-label">Cliente</label><input type="text" id="v-cliente" class="f-input" placeholder="Nombre del cliente"></div>
-    <!-- 101. Sección de pago — permite registrar cuánto pagó el cliente al momento
-               Si pagó menos que el total, la diferencia queda como saldo pendiente -->
+
+    <!-- Pago -->
     <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:14px">
       <div style="font-size:11px;font-weight:600;color:var(--ink-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px">Pago</div>
-      <!-- 218. Método de pago — efectivo, transferencia o mixto -->
       <div class="f-group">
         <label class="f-label">Método de pago</label>
         <div style="display:flex;gap:8px">
@@ -2161,7 +2139,11 @@ function renderVentas() {
     //      Verde = pagado, Amarillo = abono parcial, Rojo = pendiente total
     const epLabel = { pagado:'✅ Pagado', parcial:'⚡ Parcial', pendiente:'⚠️ Pendiente' };
     const epClass = { pagado:'b-success', parcial:'b-warning', pendiente:'b-danger' };
-    const ep = v.estadoPago || (v.saldo > 0 ? (v.pagado > 0 ? 'parcial' : 'pendiente') : 'pagado');
+    // 285. Estado de pago — usamos el valor guardado en Firebase como fuente de verdad
+    //      Si no existe (ventas viejas), lo calculamos del saldo
+    const ep = v.estadoPago
+      ? v.estadoPago
+      : (Number(v.saldo||0) === 0 ? 'pagado' : Number(v.pagado||0) > 0 ? 'parcial' : 'pendiente');
 
     // 116. Botón de abono solo visible en ventas con saldo pendiente
     const btnAbono = (v.saldo > 0)
@@ -2231,84 +2213,32 @@ function renderVentas() {
     </div>`;
 }
 
+// 276. Estado de las líneas de productos en la venta actual
+let ventaLineas = [];
+
 window.abrirModalVenta = () => {
   document.getElementById('v-fecha').value = today();
   document.getElementById('v-pagado').value = '';
   document.getElementById('v-saldo').value = '';
   document.getElementById('v-estado-pago').textContent = 'Completa el total para ver el estado de pago';
-  document.getElementById('v-precio-selector').style.display = 'none';
-  document.getElementById('v-prod-manual').value = '';
-  // 224. Reseteamos al modo inventario y método de pago por defecto al abrir
+  const mp = document.getElementById('v-prod-manual');
+  if(mp) mp.value = '';
+  const vc = document.getElementById('v-cant');
+  if(vc) vc.value = '1';
+  const vp = document.getElementById('v-precio');
+  if(vp) vp.value = '';
+  document.getElementById('v-total').value = '';
+  document.getElementById('prev-vtotal').textContent = '';
+  ventaLineas = [{ prodId:'', nombre:'', cant:1, precio:0, tipoPrecio:'publico', busqueda:'' }];
   setTipoProducto('inventario');
   setMetodoPago('efectivo');
-  const sel = document.getElementById('v-prod');
-  sel.innerHTML = '<option value="">— Selecciona un producto —</option>' +
-    DATA.inventario.map(p =>
-      `<option value="${p.id}" data-pventa="${p.pventa}" data-stock="${p.stock}">
-        ${p.nombre} (stock: ${p.stock})
-      </option>`).join('');
   openModal('modal-venta');
 };
 
-// 220. setMetodoPago — actualiza el estilo visual de los botones de método de pago
-//      tipo: 'efectivo' | 'transferencia' | 'mixto'
-// 239. setMetodoPagoEdit — toggle de método de pago en modal de edición
-window.setMetodoPagoEdit = (tipo) => {
-  ['efectivo','transferencia','mixto'].forEach(k => {
-    const btn = document.getElementById(`ev-mp-${k}`);
-    if(!btn) return;
-    const activo = k === tipo;
-    btn.style.background = activo ? 'var(--ink)' : 'var(--surface-2)';
-    btn.style.color = activo ? '#fff' : 'var(--ink-2)';
-    btn.style.borderColor = activo ? 'var(--ink)' : 'var(--border)';
-  });
-  const btn = document.getElementById('ev-mp-efectivo');
-  if(btn) btn.dataset.selected = tipo;
-};
-
-window.setMetodoPago = (tipo) => {
-  const btns = {
-    efectivo:      document.getElementById('mp-efectivo'),
-    transferencia: document.getElementById('mp-transferencia'),
-    mixto:         document.getElementById('mp-mixto')
-  };
-  Object.entries(btns).forEach(([k,btn]) => {
-    if(!btn) return;
-    const activo = k === tipo;
-    btn.style.background = activo ? 'var(--ink)' : 'var(--surface-2)';
-    btn.style.color = activo ? '#fff' : 'var(--ink-2)';
-    btn.style.borderColor = activo ? 'var(--ink)' : 'var(--border)';
-  });
-  // 221. Guardamos el método en un dataset del primer botón para leerlo al guardar
-  if(btns.efectivo) btns.efectivo.dataset.selected = tipo;
-};
-
-// 222. setMetodoPagoAbono — igual pero para el modal de abono (solo efectivo/transferencia)
-window.setMetodoPagoAbono = (tipo) => {
-  const btns = {
-    efectivo:      document.getElementById('ab-mp-efectivo'),
-    transferencia: document.getElementById('ab-mp-transferencia')
-  };
-  Object.entries(btns).forEach(([k,btn]) => {
-    if(!btn) return;
-    const activo = k === tipo;
-    btn.style.background = activo ? 'var(--ink)' : 'var(--surface-2)';
-    btn.style.color = activo ? '#fff' : 'var(--ink-2)';
-    btn.style.borderColor = activo ? 'var(--ink)' : 'var(--border)';
-  });
-  if(btns.efectivo) btns.efectivo.dataset.selected = tipo;
-};
-
 window.setTipoProducto = (tipo) => {
-  // 170. Alternamos entre modo inventario y modo manual
-  //      En modo inventario: usamos el select del catálogo, descuenta stock
-  //      En modo manual: campo de texto libre, NO descuenta stock
   const esInv = tipo === 'inventario';
   document.getElementById('seccion-inventario').style.display = esInv ? 'block' : 'none';
   document.getElementById('seccion-manual').style.display = esInv ? 'none' : 'block';
-  document.getElementById('v-precio-selector').style.display = 'none';
-
-  // 171. Estilo activo/inactivo de los botones del toggle
   const btnInv = document.getElementById('btn-tipo-inv');
   const btnMan = document.getElementById('btn-tipo-manual');
   btnInv.style.background = esInv ? 'var(--ink)' : 'var(--surface-2)';
@@ -2317,14 +2247,128 @@ window.setTipoProducto = (tipo) => {
   btnMan.style.background = esInv ? 'var(--surface-2)' : 'var(--ink)';
   btnMan.style.color = esInv ? 'var(--ink-2)' : '#fff';
   btnMan.style.borderColor = esInv ? 'var(--border)' : 'var(--ink)';
-
-  // 172. Limpiamos precio y total al cambiar de modo
-  document.getElementById('v-precio').value = '';
-  document.getElementById('v-total').value = '';
-  document.getElementById('v-cant').value = '1';
-  const prevTotal = document.getElementById('prev-vtotal');
-  if(prevTotal) prevTotal.textContent = '';
+  if(esInv) renderLineasVenta();
+  calcVentaTotal();
 };
+
+// 278. Renderiza líneas de productos con buscador
+function renderLineasVenta() {
+  const html = ventaLineas.map((l, i) => {
+    const busq = (l.busqueda||'').toLowerCase();
+    const prods = busq
+      ? DATA.inventario.filter(p => p.nombre.toLowerCase().includes(busq) || (p.marca||'').toLowerCase().includes(busq))
+      : DATA.inventario;
+    const prod = DATA.inventario.find(p => p.id === l.prodId);
+    const subtotal = fmt((l.cant||1)*(l.precio||0));
+
+    const tiposBtns = [
+      ['publico','Público','#2563EB','#EFF6FF'],
+      ['distribuidor','Dist.','#D97706','#FFFBEB'],
+      ['especial','Especial','#16A34A','#F0FDF4']
+    ].map(([tipo,label,color,bg]) => {
+      const activo = l.tipoPrecio === tipo;
+      const precio = tipo==='publico'?prod?.pventa:tipo==='distribuidor'?prod?.pdist:prod?.pesp;
+      return '<button type="button" onclick="seleccionarTipoPrecioLinea(' + i + ','' + tipo + '')"'
+        + ' style="padding:6px 4px;border-radius:6px;border:2px solid ' + (activo?color:'var(--border)') + ';'
+        + 'background:' + (activo?bg:'var(--surface)') + ';cursor:pointer;text-align:center;transition:all .12s">'
+        + '<div style="font-size:9px;font-weight:600;color:' + (activo?color:'var(--ink-3)') + ';text-transform:uppercase">' + label + '</div>'
+        + '<div style="font-size:11px;font-weight:700;color:' + (activo?color:'var(--ink-2)') + '">' + fmtCOP(precio||0) + '</div>'
+        + '</button>';
+    }).join('');
+
+    return '<div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:10px;margin-bottom:8px">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+        + '<span style="font-size:11px;font-weight:600;color:var(--ink-3);text-transform:uppercase">Producto ' + (i+1) + '</span>'
+        + (ventaLineas.length > 1 ? '<button type="button" onclick="quitarLineaVenta(' + i + ')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px">✕</button>' : '')
+      + '</div>'
+      + '<input type="text" class="f-input" placeholder="🔍 Buscar producto..." value="' + (l.busqueda||'').replace(/"/g,'&quot;') + '" data-idx="' + i + '" oninput="actualizarBusquedaLinea(this)" style="font-size:13px;margin-bottom:8px">'
+      + (!l.prodId
+        ? '<div style="max-height:130px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--surface);margin-bottom:8px">'
+            + prods.slice(0,8).map(p =>
+              '<div onclick="seleccionarProductoLinea(' + i + ','' + p.id + '')" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px" onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background='var(--surface)'">'
+                + '<div style="font-weight:500">' + p.nombre + '</div>'
+                + '<div style="color:var(--ink-3);font-size:11px">' + (p.marca||'') + ' · Stock: ' + p.stock + ' · ' + fmt(p.pventa) + '</div>'
+              + '</div>'
+            ).join('')
+            + (prods.length===0 ? '<div style="padding:10px;color:var(--ink-3);font-size:12px;text-align:center">Sin resultados</div>' : '')
+          + '</div>'
+        : '<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--lime-bg);border-radius:8px;margin-bottom:8px">'
+            + '<span style="font-size:12px;font-weight:600;color:var(--lime);flex:1">' + (prod?.nombre||'') + '</span>'
+            + '<button type="button" onclick="cambiarProductoLinea(' + i + ')" style="background:none;border:none;color:var(--ink-3);cursor:pointer;font-size:11px;text-decoration:underline">Cambiar</button>'
+          + '</div>'
+          + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px">' + tiposBtns + '</div>'
+          + '<div style="display:grid;grid-template-columns:80px 1fr 1fr;gap:8px;align-items:end">'
+            + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Cant.</label>'
+              + '<input type="number" class="f-input" value="' + (l.cant||1) + '" min="1" data-idx="' + i + '" data-tipo="cant" oninput="actualizarDatosLinea(this)" style="font-size:13px;text-align:center;padding:7px 6px"></div>'
+            + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Precio ($)</label>'
+              + '<input type="number" class="f-input" value="' + (l.precio||0) + '" data-idx="' + i + '" data-tipo="precio" oninput="actualizarDatosLinea(this)" style="font-size:13px;padding:7px 8px"></div>'
+            + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Subtotal</label>'
+              + '<div style="font-size:13px;font-weight:700;color:var(--lime);padding:7px 0">' + subtotal + '</div></div>'
+          + '</div>'
+      )
+      + '</div>';
+  }).join('');
+  document.getElementById('v-lineas-container').innerHTML = html;
+}
+
+window.agregarLineaVenta = () => {
+  ventaLineas.push({ prodId:'', nombre:'', cant:1, precio:0, tipoPrecio:'publico', busqueda:'' });
+  renderLineasVenta();
+};
+
+window.quitarLineaVenta = (i) => {
+  ventaLineas.splice(i, 1);
+  renderLineasVenta();
+  calcVentaTotal();
+};
+
+window.actualizarBusquedaLinea = (el) => {
+  const i = Number(el.dataset.idx);
+  ventaLineas[i].busqueda = el.value;
+  ventaLineas[i].prodId = '';
+  renderLineasVenta();
+  // Mantenemos el foco en el input de búsqueda
+  setTimeout(() => {
+    const inputs = document.getElementById('v-lineas-container').querySelectorAll('input[type="text"]');
+    if(inputs[i]) { inputs[i].focus(); inputs[i].setSelectionRange(inputs[i].value.length, inputs[i].value.length); }
+  }, 10);
+};
+
+window.seleccionarProductoLinea = (i, prodId) => {
+  const prod = DATA.inventario.find(p => p.id === prodId);
+  if(!prod) return;
+  ventaLineas[i].prodId = prodId;
+  ventaLineas[i].nombre = prod.nombre;
+  ventaLineas[i].precio = prod.pventa || 0;
+  ventaLineas[i].tipoPrecio = 'publico';
+  ventaLineas[i].busqueda = prod.nombre;
+  renderLineasVenta();
+  calcVentaTotal();
+};
+
+window.cambiarProductoLinea = (i) => {
+  ventaLineas[i].prodId = '';
+  ventaLineas[i].busqueda = '';
+  renderLineasVenta();
+};
+
+window.seleccionarTipoPrecioLinea = (i, tipo) => {
+  const prod = DATA.inventario.find(p => p.id === ventaLineas[i].prodId);
+  if(!prod) return;
+  ventaLineas[i].tipoPrecio = tipo;
+  const precios = { publico:prod.pventa||0, distribuidor:prod.pdist||0, especial:prod.pesp||0 };
+  ventaLineas[i].precio = precios[tipo];
+  renderLineasVenta();
+  calcVentaTotal();
+};
+
+window.actualizarDatosLinea = (el) => {
+  const i = Number(el.dataset.idx);
+  if(el.dataset.tipo === 'cant') ventaLineas[i].cant = Number(el.value)||1;
+  if(el.dataset.tipo === 'precio') ventaLineas[i].precio = Number(el.value)||0;
+  calcVentaTotal();
+};
+
 
 window.fillVentaPrecio = () => {
   // 69. Cuando el vendedor selecciona un producto, buscamos sus 3 precios en DATA
@@ -2390,37 +2434,40 @@ window.seleccionarPrecio = (tipo) => {
 };
 
 window.calcVentaTotal = () => {
-  const c = Number(document.getElementById('v-cant').value)||0;
-  const p = Number(document.getElementById('v-precio').value)||0;
-  const total = c * p;
+  // 284. Si estamos en modo inventario, sumamos todas las líneas
+  const esInv = document.getElementById('seccion-inventario')?.style.display !== 'none';
+  let total = 0;
+  if(esInv) {
+    total = ventaLineas.reduce((s,l) => s + ((l.cant||1)*(l.precio||0)), 0);
+  } else {
+    const c = Number(document.getElementById('v-cant')?.value)||0;
+    const p = Number(document.getElementById('v-precio')?.value)||0;
+    total = c * p;
+  }
   document.getElementById('v-total').value = total;
-  // 131. Mostramos el total formateado en COP debajo del campo para confirmación
   const prevTotal = document.getElementById('prev-vtotal');
   if(prevTotal) prevTotal.textContent = total > 0 ? '→ ' + fmt(total) + ' COP' : '';
   calcSaldo();
 };
 
 window.calcSaldo = () => {
-  // 110. Saldo = Total - Pagado
-  //      Si pagado > total, el saldo es 0 (no puede quedar en negativo)
   const total = Number(document.getElementById('v-total').value)||0;
   const pagado = Number(document.getElementById('v-pagado').value)||0;
   const saldo = Math.max(0, total - pagado);
   document.getElementById('v-saldo').value = saldo > 0 ? saldo : '';
-
-  // 111. Actualizamos el indicador visual del estado de pago
   const estadoEl = document.getElementById('v-estado-pago');
+  if(!estadoEl) return;
   if(total === 0) {
     estadoEl.textContent = 'Completa el total para ver el estado de pago';
     estadoEl.style.color = 'var(--ink-3)';
-  } else if(saldo === 0 && pagado >= total) {
+  } else if(saldo === 0) {
     estadoEl.innerHTML = '✅ <strong>Pagado completo</strong> — no queda saldo pendiente';
     estadoEl.style.color = 'var(--green)';
-  } else if(pagado > 0 && saldo > 0) {
-    estadoEl.innerHTML = `⚡ <strong>Abono parcial</strong> — queda pendiente ${fmt(saldo)}`;
+  } else if(pagado > 0) {
+    estadoEl.innerHTML = '⚡ <strong>Abono parcial</strong> — queda pendiente ' + fmt(saldo);
     estadoEl.style.color = 'var(--amber)';
   } else {
-    estadoEl.innerHTML = `⚠️ <strong>Pendiente total</strong> — ${fmt(total)} por cobrar`;
+    estadoEl.innerHTML = '⚠️ <strong>Pendiente total</strong> — ' + fmt(total) + ' por cobrar';
     estadoEl.style.color = 'var(--red)';
   }
 };
@@ -2428,72 +2475,87 @@ window.calcSaldo = () => {
 window.guardarVenta = async () => {
   const fecha = document.getElementById('v-fecha').value;
   const canal = document.getElementById('v-canal').value;
-  const precio = Number(document.getElementById('v-precio').value);
-  const cant = Number(document.getElementById('v-cant').value);
   const total = Number(document.getElementById('v-total').value);
   const cliente = document.getElementById('v-cliente').value;
   const nota = document.getElementById('v-nota').value;
   const pagado = Number(document.getElementById('v-pagado').value)||0;
   const saldo = Math.max(0, total - pagado);
+  // 286. estadoPago correcto: si saldo es 0 siempre es 'pagado', sin importar abonos previos
   const estadoPago = saldo === 0 ? 'pagado' : pagado > 0 ? 'parcial' : 'pendiente';
-  const tipoPrecio = document.getElementById('v-precio').dataset.tipoPrecio || 'publico';
-  // 225. Leemos el método de pago seleccionado (efectivo/transferencia/mixto)
   const metodoPago = document.getElementById('mp-efectivo')?.dataset.selected || 'efectivo';
 
-  // 173. Determinamos el modo: inventario o manual
   const esManual = document.getElementById('seccion-manual').style.display !== 'none';
 
   if(esManual) {
-    // 174. MODO MANUAL — producto fuera del catálogo
-    //      No descuenta stock, no requiere seleccionar del inventario
+    // Modo manual — un solo producto libre
     const nombreManual = document.getElementById('v-prod-manual').value.trim();
-    if(!fecha||!nombreManual||!cant||!precio) {
-      alert('Completa fecha, nombre del producto, cantidad y precio'); return;
-    }
+    const cant = Number(document.getElementById('v-cant')?.value)||1;
+    const precio = Number(document.getElementById('v-precio')?.value)||0;
+    if(!fecha||!nombreManual||!cant||!precio) { alert('Completa fecha, nombre del producto, cantidad y precio'); return; }
     await addDoc(collection(db,'ventas'), {
-      fecha, canal,
-      producto: nombreManual,
-      prodId: null,
-      esManual: true,
-      cant, precio, total,
-      cliente, nota, tipoPrecio,
-      metodoPago,   // 226. Guardamos el método de pago
-      pagado, saldo, estadoPago,
-      abonos: [],
-      createdAt: serverTimestamp()
+      fecha, canal, producto:nombreManual, prodId:null, esManual:true,
+      cant, precio, total, cliente, nota, tipoPrecio:'publico',
+      metodoPago, pagado, saldo, estadoPago, abonos:[], createdAt:serverTimestamp()
     });
-    await pushNotif('💰 Nueva venta', `${nombreManual}${cliente?' — '+cliente:''} · ${fmt(total)}`, 'venta');
+    await pushNotif('💰 Nueva venta', nombreManual + (cliente?' — '+cliente:'') + ' · ' + fmt(total), 'venta');
 
   } else {
-    // 175. MODO INVENTARIO — producto del catálogo, descuenta stock
-    const prodId = document.getElementById('v-prod').value;
-    if(!fecha||!prodId||!cant||!precio) {
-      alert('Completa todos los campos requeridos'); return;
-    }
-    const prod = DATA.inventario.find(p=>p.id===prodId);
-    if(!prod) { alert('Producto no encontrado'); return; }
-    if(prod.stock < cant) { alert(`Stock insuficiente. Disponible: ${prod.stock} uds.`); return; }
-    const nuevoStock = prod.stock - cant;
-    await updateDoc(doc(db,'inventario',prodId), { stock: nuevoStock });
-    await addDoc(collection(db,'ventas'), {
-      fecha, canal,
-      producto: prod.nombre, prodId,
-      esManual: false,
-      cant, precio, total,
-      cliente, nota, tipoPrecio,
-      metodoPago,   // Método de pago registrado
-      pagado, saldo, estadoPago,
-      abonos: [],
-      createdAt: serverTimestamp()
-    });
-    if(saldo > 0)
-      await pushNotif('💳 Venta a crédito', `${cliente||'Cliente'} debe ${fmt(saldo)} — ${prod.nombre}`, 'credito');
-    else
-      await pushNotif('💰 Nueva venta', `${prod.nombre}${cliente?' — '+cliente:''} · ${fmt(total)}`, 'venta');
-    if(nuevoStock <= (prod.stockMinimo||5))
-      await pushNotif('⚠️ Stock bajo', `${prod.nombre} quedó con ${nuevoStock} unidades`, 'stock');
-  }
+    // Modo inventario — una o varias líneas de productos
+    // 287. Validamos que todas las líneas tengan producto seleccionado
+    const lineasValidas = ventaLineas.filter(l => l.prodId);
+    if(!fecha || lineasValidas.length === 0) { alert('Selecciona al menos un producto'); return; }
+    if(!total) { alert('El total no puede ser cero'); return; }
 
+    // Verificamos stock de todos los productos
+    for(const l of lineasValidas) {
+      const prod = DATA.inventario.find(p => p.id === l.prodId);
+      if(!prod) { alert('Producto no encontrado: ' + l.nombre); return; }
+      if(prod.stock < l.cant) { alert('Stock insuficiente para ' + prod.nombre + '. Disponible: ' + prod.stock); return; }
+    }
+
+    // 288. Si es una sola línea, registramos como venta simple (compatible con historial)
+    //      Si son múltiples, registramos como venta múltiple con array de productos
+    if(lineasValidas.length === 1) {
+      const l = lineasValidas[0];
+      const prod = DATA.inventario.find(p => p.id === l.prodId);
+      await updateDoc(doc(db,'inventario',l.prodId), { stock: prod.stock - l.cant });
+      await addDoc(collection(db,'ventas'), {
+        fecha, canal, producto:prod.nombre, prodId:l.prodId, esManual:false,
+        cant:l.cant, precio:l.precio, total, cliente, nota, tipoPrecio:l.tipoPrecio,
+        metodoPago, pagado, saldo, estadoPago, abonos:[], createdAt:serverTimestamp()
+      });
+    } else {
+      // 289. Venta múltiple — descontamos stock de cada producto y registramos una entrada
+      const productosVenta = [];
+      for(const l of lineasValidas) {
+        const prod = DATA.inventario.find(p => p.id === l.prodId);
+        await updateDoc(doc(db,'inventario',l.prodId), { stock: prod.stock - l.cant });
+        productosVenta.push({ prodId:l.prodId, nombre:prod.nombre, cant:l.cant, precio:l.precio, tipoPrecio:l.tipoPrecio });
+        if(prod.stock - l.cant <= (prod.stockMinimo||5))
+          await pushNotif('⚠️ Stock bajo', prod.nombre + ' quedó con ' + (prod.stock-l.cant) + ' uds', 'stock');
+      }
+      const nombresProductos = productosVenta.map(p => p.nombre.split(' ').slice(0,2).join(' ')).join(' + ');
+      await addDoc(collection(db,'ventas'), {
+        fecha, canal, producto:nombresProductos, esMultiple:true, productosVenta,
+        cant:productosVenta.reduce((s,p)=>s+p.cant,0), precio:0, total, cliente, nota,
+        tipoPrecio:'varios', metodoPago, pagado, saldo, estadoPago, abonos:[], createdAt:serverTimestamp()
+      });
+    }
+
+    // Notificación
+    if(saldo > 0)
+      await pushNotif('💳 Venta a crédito', (cliente||'Cliente') + ' debe ' + fmt(saldo), 'credito');
+    else
+      await pushNotif('💰 Nueva venta', (cliente?cliente+' — ':'') + fmt(total), 'venta');
+
+    // Alertas de stock bajo para venta simple
+    if(lineasValidas.length === 1) {
+      const l = lineasValidas[0];
+      const prod = DATA.inventario.find(p => p.id === l.prodId);
+      if(prod && prod.stock - l.cant <= (prod.stockMinimo||5))
+        await pushNotif('⚠️ Stock bajo', prod.nombre + ' quedó con ' + (prod.stock-l.cant) + ' uds', 'stock');
+    }
+  }
   closeModal('modal-venta');
 };
 
