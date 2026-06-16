@@ -2141,9 +2141,13 @@ function renderVentas() {
     const epClass = { pagado:'b-success', parcial:'b-warning', pendiente:'b-danger' };
     // 285. Estado de pago — usamos el valor guardado en Firebase como fuente de verdad
     //      Si no existe (ventas viejas), lo calculamos del saldo
-    const ep = v.estadoPago
-      ? v.estadoPago
-      : (Number(v.saldo||0) === 0 ? 'pagado' : Number(v.pagado||0) > 0 ? 'parcial' : 'pendiente');
+    // 285. El saldo es la fuente de verdad — si saldo es 0 siempre es 'pagado'
+    //      independientemente de lo que diga estadoPago en Firebase
+    const saldoNum = Number(v.saldo||0);
+    const pagadoNum = Number(v.pagado||0);
+    const ep = saldoNum === 0 ? 'pagado'
+      : pagadoNum > 0 ? 'parcial'
+      : 'pendiente';
 
     // 116. Botón de abono solo visible en ventas con saldo pendiente
     const btnAbono = (v.saldo > 0)
@@ -3194,44 +3198,41 @@ window.guardarProducto = async () => {
 };
 
 window.editarProducto = (id) => {
-  // 88. Buscamos el producto en DATA.inventario por su ID
   const prod = DATA.inventario.find(p => p.id === id);
   if(!prod) { alert('Producto no encontrado'); return; }
 
-  // 89. Cargamos todos los datos del producto en el formulario
-  document.getElementById('p-id').value = id;
-  document.getElementById('p-nombre').value = prod.nombre || '';
-  document.getElementById('p-stock').value = prod.stock || 0;
-  document.getElementById('p-costo').value = prod.costo || 0;
-  document.getElementById('p-pventa').value = prod.pventa || 0;
-  document.getElementById('p-pdist').value = prod.pdist || 0;
-  document.getElementById('p-pesp').value = prod.pesp || 0;
-  document.getElementById('p-minimo').value = prod.stockMinimo || 5;
-
-  // 132. Disparamos las previews para que muestren el valor formateado
-  //      al abrir el modal con datos existentes
-  previoCOP('p-costo','prev-costo');
-  previoCOP('p-pventa','prev-pventa');
-  previoCOP('p-pdist','prev-pdist');
-  previoCOP('p-pesp','prev-pesp');
-
-  // 90. Seleccionamos la marca correcta en el select
-  //     Comparamos con el texto de la opción (no el value) porque así están definidas
-  const marcaSelect = document.getElementById('p-marca');
-  for(let i = 0; i < marcaSelect.options.length; i++) {
-    if(marcaSelect.options[i].text === prod.marca ||
-       marcaSelect.options[i].value === prod.marca) {
-      marcaSelect.selectedIndex = i;
-      break;
-    }
-  }
-
-  // 91. Cambiamos el título y el botón para indicar que estamos en modo edición
-  document.getElementById('modal-producto-title').textContent = `Editar — ${prod.nombre}`;
-  document.getElementById('btn-guardar-producto').textContent = 'Guardar cambios';
-
-  // 92. Abrimos el modal ya cargado con los datos
+  // 291. Abrimos primero el modal para que el DOM exista
   openModal('modal-producto');
+
+  // Pequeño delay para asegurar que el DOM está listo
+  setTimeout(() => {
+    document.getElementById('p-id').value = id;
+    document.getElementById('p-nombre').value = prod.nombre || '';
+    document.getElementById('p-stock').value = prod.stock || 0;
+    document.getElementById('p-costo').value = prod.costo || 0;
+    document.getElementById('p-pventa').value = prod.pventa || 0;
+    document.getElementById('p-pdist').value = prod.pdist || 0;
+    document.getElementById('p-pesp').value = prod.pesp || 0;
+    document.getElementById('p-minimo').value = prod.stockMinimo || 5;
+
+    // Previews
+    previoCOP('p-costo','prev-costo');
+    previoCOP('p-pventa','prev-pventa');
+    previoCOP('p-pdist','prev-pdist');
+    previoCOP('p-pesp','prev-pesp');
+
+    // Marca
+    const marcaSelect = document.getElementById('p-marca');
+    for(let i = 0; i < marcaSelect.options.length; i++) {
+      if(marcaSelect.options[i].text === prod.marca || marcaSelect.options[i].value === prod.marca) {
+        marcaSelect.selectedIndex = i;
+        break;
+      }
+    }
+
+    document.getElementById('modal-producto-title').textContent = 'Editar — ' + prod.nombre;
+    document.getElementById('btn-guardar-producto').textContent = 'Guardar cambios';
+  }, 50);
 };
 
 window.abrirAjuste = (id, nombre, stock) => {
