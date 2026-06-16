@@ -2268,7 +2268,7 @@ function renderLineasVenta() {
     ].map(([tipo,label,color,bg]) => {
       const activo = l.tipoPrecio === tipo;
       const precio = tipo==='publico'?prod?.pventa:tipo==='distribuidor'?prod?.pdist:prod?.pesp;
-      return '<button type="button" onclick="seleccionarTipoPrecioLinea(' + i + ','' + tipo + '')"'
+      return '<button type="button" onclick="seleccionarTipoPrecioLinea(' + i + ',\'' + tipo + '\')"'
         + ' style="padding:6px 4px;border-radius:6px;border:2px solid ' + (activo?color:'var(--border)') + ';'
         + 'background:' + (activo?bg:'var(--surface)') + ';cursor:pointer;text-align:center;transition:all .12s">'
         + '<div style="font-size:9px;font-weight:600;color:' + (activo?color:'var(--ink-3)') + ';text-transform:uppercase">' + label + '</div>'
