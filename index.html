@@ -758,6 +758,8 @@ body{
     <div class="page" id="page-metas"></div>
     <!-- 178. Página de combos -->
     <div class="page" id="page-combos"></div>
+    <!-- 306. Página de deudores -->
+    <div class="page" id="page-deudores"></div>
   </div>
 </div>
 
@@ -1425,7 +1427,8 @@ const auth = getAuth(app);
 let DATA = {
   ventas:[], inventario:[], gastos:[],
   proveedores:[], pedidos:[], metas:[],
-  notificaciones:[], combos:[]  // 179. combos: lista de combos fijos guardados
+  notificaciones:[], combos:[],
+  consumos:[]  // 305. consumos: retiros internos de Ángel y Jero
 };
 let currentPage = 'dashboard';  // Página activa
 let ajusteProductoId = null;    // ID del producto que se está ajustando
@@ -1474,8 +1477,10 @@ const MENU = [
   { id:'proveedores', label:'Proveedores', ico:'🚚', group:'Operaciones' },
   { id:'pedidos', label:'Pedidos', ico:'📋', group:'Operaciones' },
   { id:'metas', label:'Metas', ico:'🎯', group:'Operaciones' },
-  // 177. Combos — sección para crear y gestionar combos de productos
+  // 177. Combos
   { id:'combos', label:'Combos', ico:'🎁', group:'Operaciones' },
+  // 305. Deudores — clientes que deben + consumo interno Ángel/Jero
+  { id:'deudores', label:'Deudores', ico:'💳', group:'Negocio' },
 ];
 
 // ============================================================
@@ -1538,7 +1543,7 @@ document.getElementById('li-pass')?.addEventListener('keydown', e => {
 // Cada cambio en Firebase actualiza DATA y redibuja la página
 // ============================================================
 function startListeners() {
-  const cols = ['ventas','inventario','gastos','proveedores','pedidos','metas','combos'];
+  const cols = ['ventas','inventario','gastos','proveedores','pedidos','metas','combos','consumos'];
   cols.forEach(col => {
     const q = query(collection(db, col), orderBy('createdAt','desc'));
     onSnapshot(q, snap => {
@@ -1546,6 +1551,7 @@ function startListeners() {
       // Solo redibujamos si estamos en la página relevante o el dashboard
       if(currentPage === col || currentPage === 'dashboard') renderPage(currentPage);
       if(currentPage === 'clientes' && col === 'ventas') renderPage('clientes');
+      if(currentPage === 'deudores' && (col === 'ventas' || col === 'consumos')) renderPage('deudores');
       if(col === 'inventario') checkStockAlerts();
     });
   });
@@ -1606,7 +1612,8 @@ function renderPage(id) {
     dashboard:renderDashboard, ventas:renderVentas,
     inventario:renderInventario, clientes:renderClientes,
     gastos:renderGastos, proveedores:renderProveedores,
-    pedidos:renderPedidos, metas:renderMetas, combos:renderCombos
+    pedidos:renderPedidos, metas:renderMetas, combos:renderCombos,
+    deudores:renderDeudores
   };
   if(renders[id]) renders[id]();
 }
@@ -1646,10 +1653,13 @@ function showBrowserNotif(title, body) {
     new Notification(title, { body, tag:'duppla', icon:'/favicon.ico' });
   }
 }
-async function pushNotif(titulo, cuerpo, tipo) {
+async function pushNotif(titulo, cuerpo, tipo, destino) {
+  // 307. destino es opcional: { seccion, id } para notificaciones navegables
   try {
     await addDoc(collection(db,'notificaciones'), {
-      titulo, cuerpo, tipo, leida:false, createdAt:serverTimestamp()
+      titulo, cuerpo, tipo, leida:false,
+      destino: destino || null,
+      createdAt:serverTimestamp()
     });
   } catch(e) {}
 }
@@ -1668,7 +1678,7 @@ function renderNotifBell() {
     el.style.display = unread > 0 ? 'flex' : 'none';
   });
 
-  // 206. Cada notificación tiene botón ✕ para eliminarla individualmente
+  // 308. Cada notificación es clickeable si tiene destino, con botón ✕ independiente
   const listHtml = DATA.notificaciones.slice(0,30).map(n => {
     const t = n.createdAt?.seconds
       ? (() => {
@@ -1676,11 +1686,24 @@ function renderNotifBell() {
           return diff<1?'ahora':diff<60?`${diff}m`:diff<1440?`${Math.floor(diff/60)}h`:`${Math.floor(diff/1440)}d`;
         })()
       : '';
+    // 309. Si tiene destino, el área de contenido es clickeable y navega
+    const tieneDestino = n.destino?.seccion;
+    const estiloClickeable = tieneDestino ? 'cursor:pointer;' : '';
+    // 309. Construimos el onclick sin template literals anidados para evitar errores de sintaxis
+    const destinoId = (n.destino?.id || '').replace(/'/g, '');
+    const onclickNav = tieneDestino
+      ? 'onclick="navegarANotif(\'' + n.id + '\',\'' + n.destino.seccion + '\',\'' + destinoId + '\')"'
+      : '';
     return `<div class="notif-item${n.leida?'':' unread'}" style="position:relative;padding-right:32px">
-      <div class="notif-item-title">${n.titulo||''}</div>
-      <div class="notif-item-body">${n.cuerpo||''}</div>
-      <div class="notif-item-time">${t}</div>
-      <!-- 207. Botón eliminar individual — borra solo esa notificación -->
+      <div ${onclickNav} style="${estiloClickeable}padding:0">
+        <div class="notif-item-title" style="display:flex;align-items:center;gap:4px">
+          ${n.titulo||''}
+          ${tieneDestino ? '<span style="font-size:9px;color:var(--ink-3);margin-left:2px">→</span>' : ''}
+        </div>
+        <div class="notif-item-body">${n.cuerpo||''}</div>
+        <div class="notif-item-time">${t}</div>
+      </div>
+      <!-- 207. Botón ✕ independiente — borra sin navegar -->
       <button onclick="eliminarNotif('${n.id}')" style="position:absolute;top:50%;right:10px;transform:translateY(-50%);background:none;border:none;color:var(--ink-3);cursor:pointer;font-size:14px;padding:2px 4px;border-radius:4px;line-height:1" title="Eliminar">×</button>
     </div>`;
   }).join('');
@@ -1743,7 +1766,7 @@ function checkStockAlerts() {
     const key = 'duppla_stock_alert_' + today();
     if(!localStorage.getItem(key)) {
       const nombres = low.map(p=>`${p.nombre} (${p.stock})`).join(', ');
-      pushNotif('⚠️ Stock bajo', nombres, 'stock');
+      pushNotif('⚠️ Stock bajo', nombres, 'stock', {seccion:'inventario'});
       localStorage.setItem(key, '1');
     }
   }
@@ -2511,7 +2534,7 @@ window.guardarVenta = async () => {
       cant, precio, total, cliente, nota, tipoPrecio:'publico',
       metodoPago, pagado, saldo, estadoPago, abonos:[], createdAt:serverTimestamp()
     });
-    await pushNotif('💰 Nueva venta', nombreManual + (cliente?' — '+cliente:'') + ' · ' + fmt(total), 'venta');
+    await pushNotif('💰 Nueva venta', nombreManual + (cliente?' — '+cliente:'') + ' · ' + fmt(total), 'venta', {seccion:'ventas'});
 
   } else {
     // Modo inventario — una o varias líneas de productos
@@ -2546,7 +2569,7 @@ window.guardarVenta = async () => {
         await updateDoc(doc(db,'inventario',l.prodId), { stock: prod.stock - l.cant });
         productosVenta.push({ prodId:l.prodId, nombre:prod.nombre, cant:l.cant, precio:l.precio, tipoPrecio:l.tipoPrecio });
         if(prod.stock - l.cant <= (prod.stockMinimo||5))
-          await pushNotif('⚠️ Stock bajo', prod.nombre + ' quedó con ' + (prod.stock-l.cant) + ' uds', 'stock');
+          await pushNotif('⚠️ Stock bajo', prod.nombre + ' quedó con ' + (prod.stock-l.cant) + ' uds', 'stock', {seccion:'inventario', id:l.prodId});
       }
       const nombresProductos = productosVenta.map(p => p.nombre.split(' ').slice(0,2).join(' ')).join(' + ');
       await addDoc(collection(db,'ventas'), {
@@ -2558,16 +2581,16 @@ window.guardarVenta = async () => {
 
     // Notificación
     if(saldo > 0)
-      await pushNotif('💳 Venta a crédito', (cliente||'Cliente') + ' debe ' + fmt(saldo), 'credito');
+      await pushNotif('💳 Venta a crédito', (cliente||'Cliente') + ' debe ' + fmt(saldo), 'credito', {seccion:'deudores'});
     else
-      await pushNotif('💰 Nueva venta', (cliente?cliente+' — ':'') + fmt(total), 'venta');
+      await pushNotif('💰 Nueva venta', (cliente?cliente+' — ':'') + fmt(total), 'venta', {seccion:'ventas'});
 
     // Alertas de stock bajo para venta simple
     if(lineasValidas.length === 1) {
       const l = lineasValidas[0];
       const prod = DATA.inventario.find(p => p.id === l.prodId);
       if(prod && prod.stock - l.cant <= (prod.stockMinimo||5))
-        await pushNotif('⚠️ Stock bajo', prod.nombre + ' quedó con ' + (prod.stock-l.cant) + ' uds', 'stock');
+        await pushNotif('⚠️ Stock bajo', prod.nombre + ' quedó con ' + (prod.stock-l.cant) + ' uds', 'stock', {seccion:'inventario', id:l.prodId});
     }
   }
   closeModal('modal-venta');
@@ -2715,7 +2738,7 @@ window.guardarAbono = async () => {
   // 126. Notificamos al otro socio del abono recibido
   await pushNotif('💳 Abono recibido',
     `${venta.cliente||'Cliente'} abonó ${fmt(valor)} — saldo: ${fmt(nuevoSaldo)}`,
-    'abono');
+    'abono', {seccion:'ventas', id:abonoVentaId});
 
   closeModal('modal-abono');
   abonoVentaId = null;
@@ -2808,14 +2831,6 @@ window.abrirEditarComboVenta = (id) => {
     if(prevTotal && venta.total > 0) prevTotal.textContent = '→ ' + fmt(venta.total) + ' COP';
   }, 50);
 };
-
-  document.getElementById('ev-fecha').value = venta.fecha || '';
-  document.getElementById('ev-canal').value = venta.canal || 'directo';
-  document.getElementById('ev-cant').value = 1;
-  document.getElementById('ev-precio').value = venta.precio || 0;
-  document.getElementById('ev-total').value = venta.total || 0;
-  document.getElementById('ev-cliente').value = venta.cliente || '';
-  document.getElementById('ev-tipo-precio').value = venta.tipoPrecio || 'especial';
 
 window.fillEditVentaPrecio = () => {
   // 147. Al cambiar el producto en edición, sugerimos el precio público como base
@@ -3607,14 +3622,14 @@ window.guardarPedido = async () => {
     notas: document.getElementById('pe-notas').value,
     estado: 'pendiente', createdAt: serverTimestamp()
   });
-  await pushNotif('📋 Nuevo pedido', `${proveedorNombre} · ${fmt(total)}`, 'pedido');
+  await pushNotif('📋 Nuevo pedido', `${proveedorNombre} · ${fmt(total)}`, 'pedido', {seccion:'pedidos'});
   closeModal('modal-pedido');
 };
 
 window.cambiarEstadoPedido = async (id, estado) => {
   await updateDoc(doc(db,'pedidos',id), { estado });
   const p = DATA.pedidos.find(x=>x.id===id);
-  if(p) await pushNotif('📋 Pedido actualizado', `${p.proveedorNombre} → ${EST[estado]?.l||estado}`, 'pedido');
+  if(p) await pushNotif('📋 Pedido actualizado', `${p.proveedorNombre} → ${EST[estado]?.l||estado}`, 'pedido', {seccion:'pedidos', id});
 };
 
 // ============================================================
@@ -4043,7 +4058,7 @@ window.guardarVentaCombo = async () => {
     if(!prod) continue;
     await updateDoc(doc(db,'inventario',item.prodId), { stock: prod.stock - item.cant });
     if(prod.stock - item.cant <= (prod.stockMinimo||5))
-      await pushNotif('⚠️ Stock bajo', `${prod.nombre} quedó con ${prod.stock-item.cant} uds`, 'stock');
+      await pushNotif('⚠️ Stock bajo', `${prod.nombre} quedó con ${prod.stock-item.cant} uds`, 'stock', {seccion:'inventario', id:item.prodId});
   }
 
   // 195. Registramos la venta del combo como una sola entrada
@@ -4060,7 +4075,7 @@ window.guardarVentaCombo = async () => {
     createdAt: serverTimestamp()
   });
 
-  await pushNotif('🎁 Combo vendido', `${nombreCombo}${cliente?' — '+cliente:''} · ${fmt(precio)}`, 'venta');
+  await pushNotif('🎁 Combo vendido', `${nombreCombo}${cliente?' — '+cliente:''} · ${fmt(precio)}`, 'venta', {seccion:'ventas'});
   closeModal('modal-vender-combo');
   toast('✅ Combo registrado correctamente');
 };
@@ -4085,6 +4100,342 @@ window.eliminarDoc = async (col, id) => {
 
   await deleteDoc(doc(db, col, id));
   toast('Registro eliminado');
+};
+
+
+// ============================================================
+// 310. NAVEGACIÓN DESDE NOTIFICACIONES
+// navegarANotif lleva al usuario a la sección exacta de la notificación
+// ============================================================
+window.navegarANotif = (notifId, seccion, itemId) => {
+  // Cerramos los paneles de notificaciones
+  document.getElementById('notif-panel-s')?.classList.remove('open');
+  document.getElementById('notif-panel-m')?.classList.remove('open');
+
+  // Marcamos como leída
+  if(notifId) updateDoc(doc(db,'notificaciones',notifId),{leida:true}).catch(()=>{});
+
+  // 311. Navegamos a la sección correspondiente
+  showPage(seccion);
+
+  // 312. Si hay itemId, resaltamos el elemento después de que la página cargue
+  if(itemId) {
+    setTimeout(() => {
+      // Buscamos una fila o tarjeta con el ID del item y la resaltamos
+      const el = document.querySelector(`[data-id="${itemId}"]`);
+      if(el) {
+        el.scrollIntoView({ behavior:'smooth', block:'center' });
+        el.style.transition = 'background .3s';
+        el.style.background = 'rgba(200,224,90,.15)';
+        setTimeout(() => { el.style.background = ''; }, 2000);
+      }
+    }, 300);
+  }
+};
+
+// ============================================================
+// 313. MODAL: CONSUMO INTERNO (Ángel / Jero)
+// Registra productos que sacamos para uso personal
+// Descuenta stock pero NO cuenta como ingreso
+// ============================================================
+
+// Agregamos modal al body — lo insertamos via JS para mantener el HTML limpio
+(function() {
+  const modal = document.createElement('div');
+  modal.className = 'modal-bg';
+  modal.id = 'modal-consumo';
+  modal.innerHTML = `
+    <div class="modal" style="max-width:420px">
+      <div class="modal-header">
+        <span class="modal-title">Registrar consumo interno</span>
+        <button class="modal-close" onclick="closeModal('modal-consumo')">✕</button>
+      </div>
+      <div class="f-row">
+        <div class="f-group">
+          <label class="f-label">¿Quién?</label>
+          <div style="display:flex;gap:8px">
+            <button type="button" id="cons-jero" onclick="setConsumidor('jero')"
+              style="flex:1;padding:9px;border-radius:var(--radius);border:2px solid var(--ink);background:var(--ink);color:#fff;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s">
+              👤 Jero
+            </button>
+            <button type="button" id="cons-angel" onclick="setConsumidor('angel')"
+              style="flex:1;padding:9px;border-radius:var(--radius);border:2px solid var(--border);background:var(--surface-2);color:var(--ink-2);font-size:13px;font-weight:600;cursor:pointer;transition:all .15s">
+              👤 Ángel
+            </button>
+          </div>
+        </div>
+        <div class="f-group">
+          <label class="f-label">Fecha</label>
+          <input type="date" id="cons-fecha" class="f-input">
+        </div>
+      </div>
+      <!-- 314. Buscador de producto igual que en ventas -->
+      <div class="f-group">
+        <label class="f-label">Producto *</label>
+        <input type="text" id="cons-busqueda" class="f-input" placeholder="🔍 Buscar producto..."
+          oninput="filtrarProductosConsumo(this.value)">
+        <div id="cons-resultados" style="max-height:130px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--surface);margin-top:4px;display:none"></div>
+        <div id="cons-seleccionado" style="display:none;margin-top:6px;padding:8px 10px;background:var(--lime-bg);border-radius:8px;font-size:12px;font-weight:600;color:var(--lime)"></div>
+        <input type="hidden" id="cons-prod-id" value="">
+        <input type="hidden" id="cons-prod-costo" value="">
+      </div>
+      <div class="f-row">
+        <div class="f-group">
+          <label class="f-label">Cantidad</label>
+          <input type="number" id="cons-cant" class="f-input" value="1" min="1" oninput="calcTotalConsumo()">
+        </div>
+        <div class="f-group">
+          <label class="f-label">Costo unitario ($)</label>
+          <input type="number" id="cons-costo" class="f-input" readonly style="opacity:.6">
+        </div>
+      </div>
+      <div class="f-group">
+        <label class="f-label">Total a precio de costo ($)</label>
+        <input type="number" id="cons-total" class="f-input" readonly style="opacity:.6">
+        <div id="prev-cons-total" style="font-size:12px;margin-top:4px;font-weight:700;color:var(--blue)"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" onclick="closeModal('modal-consumo')">Cancelar</button>
+        <button class="btn btn-lime" onclick="guardarConsumo()">Registrar consumo</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+})();
+
+// 315. Estado del consumo
+let consumidorActual = 'jero';
+
+window.setConsumidor = (quien) => {
+  consumidorActual = quien;
+  ['jero','angel'].forEach(k => {
+    const btn = document.getElementById('cons-' + k);
+    if(!btn) return;
+    const activo = k === quien;
+    btn.style.background = activo ? 'var(--ink)' : 'var(--surface-2)';
+    btn.style.color = activo ? '#fff' : 'var(--ink-2)';
+    btn.style.borderColor = activo ? 'var(--ink)' : 'var(--border)';
+  });
+};
+
+window.filtrarProductosConsumo = (busq) => {
+  // 315b. Buscador de producto para consumo interno
+  const res = document.getElementById('cons-resultados');
+  if(!busq.trim()) { res.style.display = 'none'; return; }
+  const prods = DATA.inventario.filter(function(p) {
+    return p.nombre.toLowerCase().includes(busq.toLowerCase()) ||
+      (p.marca||'').toLowerCase().includes(busq.toLowerCase());
+  }).slice(0,8);
+  res.style.display = 'block';
+  if(!prods.length) {
+    res.innerHTML = '<div style="padding:10px;color:var(--ink-3);font-size:12px;text-align:center">Sin resultados</div>';
+    return;
+  }
+  let html = '';
+  prods.forEach(function(p) {
+    const div = document.createElement('div');
+    div.style.cssText = 'padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px';
+    div.innerHTML = '<div style="font-weight:500;color:var(--ink)">' + p.nombre + '</div>'
+      + '<div style="color:var(--ink-3);font-size:11px">' + (p.marca||'') + ' · Stock: ' + p.stock + ' · Costo: ' + fmt(p.costo||0) + '</div>';
+    div.addEventListener('mouseover', function(){ this.style.background='var(--surface-2)'; });
+    div.addEventListener('mouseout', function(){ this.style.background=''; });
+    div.addEventListener('click', function(){ seleccionarProductoConsumo(p.id); });
+    res.appendChild(div);
+    html = 'dom'; // flag
+  });
+  if(html !== 'dom') res.innerHTML = html; // fallback
+};
+
+
+window.seleccionarProductoConsumo = (prodId) => {
+  const prod = DATA.inventario.find(p => p.id === prodId);
+  if(!prod) return;
+  document.getElementById('cons-prod-id').value = prodId;
+  document.getElementById('cons-prod-costo').value = prod.costo || 0;
+  document.getElementById('cons-busqueda').value = prod.nombre;
+  document.getElementById('cons-resultados').style.display = 'none';
+  document.getElementById('cons-seleccionado').style.display = 'block';
+  document.getElementById('cons-seleccionado').textContent = '✅ ' + prod.nombre + ' (costo: ' + fmt(prod.costo||0) + ')';
+  document.getElementById('cons-costo').value = prod.costo || 0;
+  calcTotalConsumo();
+};
+
+window.calcTotalConsumo = () => {
+  const cant = Number(document.getElementById('cons-cant').value)||0;
+  const costo = Number(document.getElementById('cons-costo').value)||0;
+  const total = cant * costo;
+  document.getElementById('cons-total').value = total;
+  const prev = document.getElementById('prev-cons-total');
+  if(prev) prev.textContent = total > 0 ? '→ ' + fmt(total) + ' COP' : '';
+};
+
+window.abrirModalConsumo = () => {
+  consumidorActual = 'jero';
+  setConsumidor('jero');
+  document.getElementById('cons-fecha').value = today();
+  document.getElementById('cons-busqueda').value = '';
+  document.getElementById('cons-resultados').style.display = 'none';
+  document.getElementById('cons-seleccionado').style.display = 'none';
+  document.getElementById('cons-prod-id').value = '';
+  document.getElementById('cons-prod-costo').value = '';
+  document.getElementById('cons-costo').value = '';
+  document.getElementById('cons-cant').value = '1';
+  document.getElementById('cons-total').value = '';
+  const prev = document.getElementById('prev-cons-total');
+  if(prev) prev.textContent = '';
+  openModal('modal-consumo');
+};
+
+window.guardarConsumo = async () => {
+  const prodId = document.getElementById('cons-prod-id').value;
+  const cant = Number(document.getElementById('cons-cant').value)||0;
+  const costo = Number(document.getElementById('cons-costo').value)||0;
+  const fecha = document.getElementById('cons-fecha').value;
+  if(!prodId||!cant||!fecha) { alert('Selecciona un producto y completa los campos'); return; }
+
+  const prod = DATA.inventario.find(p => p.id === prodId);
+  if(!prod) { alert('Producto no encontrado'); return; }
+  if(prod.stock < cant) { alert('Stock insuficiente. Disponible: ' + prod.stock + ' uds.'); return; }
+
+  const total = cant * costo;
+
+  // 316. Descontamos stock — el producto SÍ sale del inventario
+  await updateDoc(doc(db,'inventario',prodId), { stock: prod.stock - cant });
+
+  // 317. Guardamos en colección 'consumos' — NO en ventas
+  //      Así el dashboard no lo cuenta como ingreso ni utilidad
+  await addDoc(collection(db,'consumos'), {
+    quien: consumidorActual,      // 'jero' o 'angel'
+    prodId, nombre: prod.nombre, marca: prod.marca||'',
+    cant, costoPorUnidad: costo,
+    total,                        // total al precio de costo
+    fecha, createdAt: serverTimestamp()
+  });
+
+  // 318. Notificación interna del consumo
+  const nombreQuien = consumidorActual === 'jero' ? 'Jero' : 'Ángel';
+  await pushNotif(
+    '📦 Consumo interno',
+    nombreQuien + ' retiró ' + cant + 'x ' + prod.nombre + ' (' + fmt(total) + ' costo)',
+    'consumo',
+    { seccion:'deudores' }
+  );
+
+  closeModal('modal-consumo');
+  toast('✅ Consumo registrado — stock descontado');
+  renderPage('deudores');
+};
+
+// ============================================================
+// 319. PÁGINA: DEUDORES
+// Dos secciones: clientes con saldo pendiente + consumo interno
+// ============================================================
+function renderDeudores() {
+  // --- SECCIÓN A: Deudores externos ---
+  // 320. Agrupamos ventas con saldo > 0 por cliente
+  const deudaMap = {};
+  DATA.ventas.filter(function(v){ return Number(v.saldo||0) > 0; }).forEach(function(v) {
+    const key = v.cliente || 'Sin nombre';
+    if(!deudaMap[key]) deudaMap[key] = { cliente:key, ventas:[], total:0 };
+    deudaMap[key].ventas.push(v);
+    deudaMap[key].total += Number(v.saldo||0);
+  });
+  const deudores = Object.values(deudaMap).sort(function(a,b){ return b.total-a.total; });
+
+  let htmlDeudores = '';
+  if(deudores.length === 0) {
+    htmlDeudores = '<div class="card"><div class="empty-state"><div class="empty-state-icon">✅</div><div class="empty-state-text">Sin deudores</div><div class="empty-state-sub">Todos los clientes están al día</div></div></div>';
+  } else {
+    deudores.forEach(function(d) {
+      const initials = d.cliente.split(' ').map(function(w){return w[0]||'';}).slice(0,2).join('').toUpperCase();
+      let detalles = '';
+      d.ventas.forEach(function(v) {
+        detalles += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">'
+          + '<div><div style="font-weight:500;color:var(--ink)">' + (v.producto||'') + '</div>'
+          + '<div style="color:var(--ink-3)">' + (v.fecha||'') + ' · Total: ' + fmt(v.total) + '</div></div>'
+          + '<div style="display:flex;align-items:center;gap:8px">'
+            + '<span style="font-weight:700;color:var(--red)">' + fmt(v.saldo) + '</span>'
+            + '<button class="btn btn-xs" style="color:var(--amber);border-color:#FDE68A" onclick="abrirAbono(\'' + v.id + '\')">+ Abono</button>'
+          + '</div></div>';
+      });
+      htmlDeudores += '<div class="list-card">'
+        + '<div class="list-card-header">'
+          + '<div style="display:flex;align-items:center;gap:10px">'
+            + '<div class="avatar">' + initials + '</div>'
+            + '<div><div class="list-card-title">' + d.cliente + '</div>'
+              + '<div class="list-card-sub">' + d.ventas.length + ' venta(s) pendiente(s)</div></div>'
+          + '</div>'
+          + '<div style="text-align:right">'
+            + '<div style="font-size:20px;font-weight:800;color:var(--red)">' + fmt(d.total) + '</div>'
+            + '<div style="font-size:11px;color:var(--ink-3)">total pendiente</div>'
+          + '</div>'
+        + '</div>'
+        + '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">' + detalles + '</div>'
+      + '</div>';
+    });
+  }
+
+  const totalCartera = deudores.reduce(function(s,d){ return s+d.total; }, 0);
+
+  // --- SECCIÓN B: Consumo interno ---
+  // 321. Totales por persona
+  const totalJero  = DATA.consumos.filter(function(c){return c.quien==='jero';}).reduce(function(s,c){return s+Number(c.total||0);},0);
+  const totalAngel = DATA.consumos.filter(function(c){return c.quien==='angel';}).reduce(function(s,c){return s+Number(c.total||0);},0);
+  const totalConsumos = totalJero + totalAngel;
+
+  // 322. Tabla de registros ordenada por fecha
+  const consumosOrd = [...DATA.consumos].sort(function(a,b){
+    if(b.fecha!==a.fecha) return b.fecha>a.fecha?1:-1;
+    return (b.createdAt?.seconds||0)-(a.createdAt?.seconds||0);
+  });
+
+  let filasConsumo = '';
+  consumosOrd.forEach(function(c) {
+    const esJero = c.quien === 'jero';
+    filasConsumo += '<tr>'
+      + '<td style="color:var(--ink-3)">' + (c.fecha||'') + '</td>'
+      + '<td><span style="display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;background:' + (esJero?'#EFF6FF':'#F0FDF4') + ';color:' + (esJero?'#1D4ED8':'#16A34A') + '">'
+        + (esJero?'👤 Jero':'👤 Ángel') + '</span></td>'
+      + '<td style="font-weight:500">' + (c.nombre||'') + '</td>'
+      + '<td style="text-align:center">' + (c.cant||0) + '</td>'
+      + '<td style="color:var(--ink-3)">' + fmt(c.costoPorUnidad||0) + '</td>'
+      + '<td style="font-weight:600;color:var(--blue)">' + fmt(c.total||0) + '</td>'
+      + '<td><button class="btn btn-xs btn-danger" onclick="eliminarConsumo(\'' + c.id + '\',\'' + c.prodId + '\',' + (c.cant||0) + ')">✕</button></td>'
+    + '</tr>';
+  });
+
+  const tablaConsumo = DATA.consumos.length
+    ? '<div class="table-wrap"><table class="tbl"><thead><tr><th>Fecha</th><th>Quién</th><th>Producto</th><th>Cant.</th><th>Costo unit.</th><th>Total costo</th><th></th></tr></thead><tbody>' + filasConsumo + '</tbody></table></div>'
+    : '<div class="empty-state"><div class="empty-state-icon">📦</div><div class="empty-state-text">Sin consumos registrados</div><div class="empty-state-sub">Registra lo que Ángel o Jero retiran del inventario</div></div>';
+
+  document.getElementById('page-deudores').innerHTML =
+    '<div class="page-header"><div><div class="page-title">Deudores</div></div></div>'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'
+      + '<div style="font-size:13px;font-weight:700;color:var(--ink);text-transform:uppercase;letter-spacing:.04em">Clientes — Cartera pendiente</div>'
+      + (totalCartera > 0 ? '<span style="font-size:16px;font-weight:800;color:var(--red)">' + fmt(totalCartera) + '</span>' : '')
+    + '</div>'
+    + '<div class="list-cards" style="margin-bottom:28px">' + htmlDeudores + '</div>'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'
+      + '<div style="font-size:13px;font-weight:700;color:var(--ink);text-transform:uppercase;letter-spacing:.04em">Consumo interno — Ángel & Jero</div>'
+      + '<button class="btn btn-sm btn-lime" onclick="abrirModalConsumo()">+ Registrar consumo</button>'
+    + '</div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">'
+      + '<div class="metric-card"><div class="metric-label">Jero debe</div><div class="metric-value" style="font-size:18px;color:#1D4ED8">' + fmt(totalJero) + '</div><div class="metric-sub">a precio de costo</div></div>'
+      + '<div class="metric-card"><div class="metric-label">Ángel debe</div><div class="metric-value" style="font-size:18px;color:#16A34A">' + fmt(totalAngel) + '</div><div class="metric-sub">a precio de costo</div></div>'
+      + '<div class="metric-card"><div class="metric-label">Total consumo</div><div class="metric-value" style="font-size:18px;color:var(--blue)">' + fmt(totalConsumos) + '</div><div class="metric-sub">' + DATA.consumos.length + ' registros</div></div>'
+    + '</div>'
+    + '<div class="card">' + tablaConsumo + '</div>';
+}
+
+
+// 323. Eliminar consumo — devuelve el stock al inventario
+window.eliminarConsumo = async (id, prodId, cant) => {
+  if(!confirm('¿Eliminar este consumo? El stock se devolverá al inventario.')) return;
+  const prod = DATA.inventario.find(p => p.id === prodId);
+  if(prod) {
+    await updateDoc(doc(db,'inventario',prodId), { stock: prod.stock + Number(cant) });
+  }
+  await deleteDoc(doc(db,'consumos',id));
+  toast('✅ Consumo eliminado — stock restaurado');
 };
 
 </script>
