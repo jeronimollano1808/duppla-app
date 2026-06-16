@@ -1678,9 +1678,9 @@ function renderNotifBell() {
     el.style.display = unread > 0 ? 'flex' : 'none';
   });
 
-  // 308. Construimos notificaciones con DOM para clicks confiables
-  const listContainer = document.createElement('div');
-  DATA.notificaciones.slice(0,30).forEach(n => {
+  // 308. Construimos HTML de notificaciones
+  //      Guardamos el destino en data-seccion y data-id para delegación de eventos
+  const items = DATA.notificaciones.slice(0,30).map(n => {
     const t = n.createdAt?.seconds
       ? (() => {
           const diff = Math.floor((Date.now()-n.createdAt.seconds*1000)/60000);
@@ -1688,51 +1688,53 @@ function renderNotifBell() {
         })()
       : '';
     const tieneDestino = n.destino?.seccion;
-    const item = document.createElement('div');
-    item.className = 'notif-item' + (n.leida ? '' : ' unread');
-    item.style.cssText = 'position:relative;padding-right:32px';
-    const contentDiv = document.createElement('div');
-    contentDiv.style.cssText = (tieneDestino ? 'cursor:pointer;' : '') + 'padding:0';
-    contentDiv.innerHTML =
-      '<div class="notif-item-title" style="display:flex;align-items:center;gap:4px">'
-        + (n.titulo||'')
-        + (tieneDestino ? ' <span style="font-size:9px;color:var(--ink-3)">→</span>' : '')
+    const seccion = n.destino?.seccion || '';
+    const itemId  = n.destino?.id || '';
+    return '<div class="notif-item' + (n.leida?'':' unread') + '" style="position:relative;padding-right:32px">'
+      + '<div class="notif-clickable" '
+        + 'data-notif-id="' + n.id + '" '
+        + 'data-seccion="' + seccion + '" '
+        + 'data-item-id="' + itemId + '" '
+        + (tieneDestino ? 'style="cursor:pointer"' : '')
+      + '>'
+        + '<div class="notif-item-title">' + (n.titulo||'') + (tieneDestino?' <span style="font-size:9px;color:var(--ink-3)">→</span>':'') + '</div>'
+        + '<div class="notif-item-body">' + (n.cuerpo||'') + '</div>'
+        + '<div class="notif-item-time">' + t + '</div>'
       + '</div>'
-      + '<div class="notif-item-body">' + (n.cuerpo||'') + '</div>'
-      + '<div class="notif-item-time">' + t + '</div>';
-    // 309. Click en contenido navega a destino
-    if(tieneDestino) {
-      contentDiv.addEventListener('click', (e) => {
+      + '<button class="notif-del-btn" data-del-id="' + n.id + '" '
+        + 'style="position:absolute;top:50%;right:10px;transform:translateY(-50%);background:none;border:none;color:var(--ink-3);cursor:pointer;font-size:14px;padding:2px 4px;border-radius:4px;line-height:1" '
+        + 'title="Eliminar">×</button>'
+    + '</div>';
+  }).join('');
+
+  // 311. Footer
+  const footer = DATA.notificaciones.length > 0 ? '<div style="padding:8px 16px;border-top:1px solid var(--border);display:flex;justify-content:center"><button onclick="eliminarTodasNotifs()" style="font-size:11px;background:none;border:none;color:var(--red);cursor:pointer;font-weight:500">🗑 Limpiar todas</button></div>' : '';
+
+  const content = (items || '<div class="notif-empty">Sin notificaciones aún</div>') + footer;
+
+  // 312. Inyectamos HTML y adjuntamos delegación de eventos
+  ['notif-list-s','notif-list-m'].forEach(listId => {
+    const listEl = document.getElementById(listId);
+    if(!listEl) return;
+    listEl.innerHTML = content;
+
+    // 313. Delegación: un solo listener en el contenedor detecta todos los clics
+    listEl.addEventListener('click', function handler(e) {
+      // Clic en botón eliminar
+      const delBtn = e.target.closest('.notif-del-btn');
+      if(delBtn) {
         e.stopPropagation();
-        navegarANotif(n.id, n.destino.seccion, n.destino.id||'');
-      });
-    }
-    // 310. Botón ✕ solo borra, no navega
-    const btnX = document.createElement('button');
-    btnX.innerHTML = '×';
-    btnX.title = 'Eliminar';
-    btnX.style.cssText = 'position:absolute;top:50%;right:10px;transform:translateY(-50%);background:none;border:none;color:var(--ink-3);cursor:pointer;font-size:14px;padding:2px 4px;border-radius:4px;line-height:1';
-    btnX.addEventListener('click', (e) => { e.stopPropagation(); eliminarNotif(n.id); });
-    item.appendChild(contentDiv);
-    item.appendChild(btnX);
-    listContainer.appendChild(item);
+        eliminarNotif(delBtn.dataset.delId);
+        return;
+      }
+      // Clic en área de contenido navegable
+      const clickable = e.target.closest('.notif-clickable');
+      if(clickable && clickable.dataset.seccion) {
+        e.stopPropagation();
+        navegarANotif(clickable.dataset.notifId, clickable.dataset.seccion, clickable.dataset.itemId);
+      }
+    }, { once: false });
   });
-  const listHtml = listContainer.innerHTML;
-
-  // 311. Footer con botón para limpiar todas
-  const footer = DATA.notificaciones.length > 0 ? `
-    <div style="padding:8px 16px;border-top:1px solid var(--border);display:flex;justify-content:center">
-      <button onclick="eliminarTodasNotifs()" style="font-size:11px;background:none;border:none;color:var(--red);cursor:pointer;font-weight:500">
-        🗑 Limpiar todas
-      </button>
-    </div>` : '';
-
-  const content = (listHtml || '<div class="notif-empty">Sin notificaciones aún</div>') + footer;
-
-  const listS = document.getElementById('notif-list-s');
-  const listM = document.getElementById('notif-list-m');
-  if(listS) listS.innerHTML = content;
-  if(listM) listM.innerHTML = content;
 }
 
 window.toggleNotif = (ctx) => {
