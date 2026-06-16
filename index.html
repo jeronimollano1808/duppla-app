@@ -2243,6 +2243,49 @@ window.abrirModalVenta = () => {
   }, 30);
 };
 
+// 294. setMetodoPago — toggle método de pago en modal de nueva venta
+window.setMetodoPago = (tipo) => {
+  ['efectivo','transferencia','mixto'].forEach(k => {
+    const btn = document.getElementById('mp-' + k);
+    if(!btn) return;
+    const activo = k === tipo;
+    btn.style.background = activo ? 'var(--ink)' : 'var(--surface-2)';
+    btn.style.color = activo ? '#fff' : 'var(--ink-2)';
+    btn.style.borderColor = activo ? 'var(--ink)' : 'var(--border)';
+  });
+  // Guardamos el método seleccionado en dataset para leerlo al guardar
+  const ref = document.getElementById('mp-efectivo');
+  if(ref) ref.dataset.selected = tipo;
+};
+
+// 295. setMetodoPagoAbono — toggle en modal de abono
+window.setMetodoPagoAbono = (tipo) => {
+  ['efectivo','transferencia'].forEach(k => {
+    const btn = document.getElementById('ab-mp-' + k);
+    if(!btn) return;
+    const activo = k === tipo;
+    btn.style.background = activo ? 'var(--ink)' : 'var(--surface-2)';
+    btn.style.color = activo ? '#fff' : 'var(--ink-2)';
+    btn.style.borderColor = activo ? 'var(--ink)' : 'var(--border)';
+  });
+  const ref = document.getElementById('ab-mp-efectivo');
+  if(ref) ref.dataset.selected = tipo;
+};
+
+// 296. setMetodoPagoEdit — toggle en modal de editar venta
+window.setMetodoPagoEdit = (tipo) => {
+  ['efectivo','transferencia','mixto'].forEach(k => {
+    const btn = document.getElementById('ev-mp-' + k);
+    if(!btn) return;
+    const activo = k === tipo;
+    btn.style.background = activo ? 'var(--ink)' : 'var(--surface-2)';
+    btn.style.color = activo ? '#fff' : 'var(--ink-2)';
+    btn.style.borderColor = activo ? 'var(--ink)' : 'var(--border)';
+  });
+  const ref = document.getElementById('ev-mp-efectivo');
+  if(ref) ref.dataset.selected = tipo;
+};
+
 window.setTipoProducto = (tipo) => {
   const esInv = tipo === 'inventario';
   document.getElementById('seccion-inventario').style.display = esInv ? 'block' : 'none';
