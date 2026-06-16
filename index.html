@@ -2370,68 +2370,11 @@ window.actualizarDatosLinea = (el) => {
 };
 
 
-window.fillVentaPrecio = () => {
-  // 69. Cuando el vendedor selecciona un producto, buscamos sus 3 precios en DATA
-  const sel = document.getElementById('v-prod');
-  const prodId = sel.value;
-  const selector = document.getElementById('v-precio-selector');
-
-  if(!prodId) {
-    // 70. Si no hay producto seleccionado, ocultamos el selector de precios
-    selector.style.display = 'none';
-    return;
-  }
-
-  // 71. Encontramos el producto en el estado global DATA.inventario
-  const prod = DATA.inventario.find(p => p.id === prodId);
-  if(!prod) return;
-
-  // 72. Mostramos los precios disponibles en los 3 botones
-  //     Si un precio es 0 o no existe, mostramos "N/D" (no disponible)
-  document.getElementById('lbl-publico').textContent = fmtCOP(prod.pventa);
-  document.getElementById('lbl-distribuidor').textContent = fmtCOP(prod.pdist);
-  document.getElementById('lbl-especial').textContent = fmtCOP(prod.pesp);
-
-  // 73. Mostramos el selector y seleccionamos precio público por defecto
-  selector.style.display = 'block';
-  seleccionarPrecio('publico');
-};
-
-window.seleccionarPrecio = (tipo) => {
-  // 74. Reseteamos los estilos de los 3 botones al estado inactivo
-  const btns = { publico:'btn-publico', distribuidor:'btn-distribuidor', especial:'btn-especial' };
-  Object.values(btns).forEach(id => {
-    const btn = document.getElementById(id);
-    btn.style.border = '2px solid var(--border)';
-    btn.style.background = 'var(--surface-2)';
-    btn.querySelector('div:first-child').style.color = 'var(--ink-3)';
-    btn.querySelector('div:last-child').style.color = 'var(--ink-2)';
-  });
-
-  // 75. Aplicamos el estilo activo al botón seleccionado según el tipo
-  const colores = {
-    publico: { border:'#2563EB', bg:'#EFF6FF', color:'#1D4ED8' },
-    distribuidor: { border:'#D97706', bg:'#FFFBEB', color:'#92400E' },
-    especial: { border:'#16A34A', bg:'#F0FDF4', color:'#166534' }
-  };
-  const c = colores[tipo];
-  const btnActivo = document.getElementById(btns[tipo]);
-  btnActivo.style.border = `2px solid ${c.border}`;
-  btnActivo.style.background = c.bg;
-  btnActivo.querySelector('div:first-child').style.color = c.color;
-  btnActivo.querySelector('div:last-child').style.color = c.color;
-
-  // 76. Llenamos el campo de precio con el valor correspondiente al tipo seleccionado
-  const prod = DATA.inventario.find(p => p.id === document.getElementById('v-prod').value);
-  if(!prod) return;
-  const precios = { publico: prod.pventa, distribuidor: prod.pdist||0, especial: prod.pesp||0 };
-  const precio = precios[tipo];
-
-  // 77. Guardamos el tipo de precio seleccionado en el input oculto para registrarlo en la venta
-  document.getElementById('v-precio').value = precio > 0 ? precio : '';
-  document.getElementById('v-precio').dataset.tipoPrecio = tipo;
-  calcVentaTotal();
-};
+// 290. fillVentaPrecio y seleccionarPrecio — mantenidas por compatibilidad
+//      Ya no se usan en el nuevo modal multi-producto pero pueden ser llamadas
+//      desde código antiguo. Las dejamos como no-ops seguras.
+window.fillVentaPrecio = () => {};
+window.seleccionarPrecio = (tipo) => {};
 
 window.calcVentaTotal = () => {
   // 284. Si estamos en modo inventario, sumamos todas las líneas
