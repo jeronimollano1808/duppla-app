@@ -2842,92 +2842,96 @@ window.guardarEditarVenta = async () => {
   if(!id) return;
 
   const venta = DATA.ventas.find(v => v.id === id);
-  const precio = Number(document.getElementById('ev-precio').value)||0;
-  const total = Number(document.getElementById('ev-total').value)||0;
+  if(!venta) { toast('Venta no encontrada', 'error'); return; }
 
-  // 203. Si es combo solo actualizamos campos básicos sin tocar stock
-  if(venta?.esCombo) {
-    await updateDoc(doc(db,'ventas',id), {
-      fecha:       document.getElementById('ev-fecha').value,
-      canal:       document.getElementById('ev-canal').value,
-      cliente:     document.getElementById('ev-cliente').value,
-      precio, total: precio,
-      nota:        document.getElementById('ev-nota').value,
-      metodoPago:  document.getElementById('ev-mp-efectivo')?.dataset.selected || 'efectivo',
-      pagado:      Number(document.getElementById('ev-pagado').value)||0,
-      saldo:       Number(document.getElementById('ev-saldo').value)||0,
-    });
+  const precio  = Number(document.getElementById('ev-precio').value)||0;
+  const total   = Number(document.getElementById('ev-total').value)||0;
+  const prodVal = document.getElementById('ev-prod').value;
+
+  // 297. Campos comunes a todos los tipos de venta
+  const camposBase = {
+    fecha:      document.getElementById('ev-fecha').value,
+    canal:      document.getElementById('ev-canal').value,
+    cliente:    document.getElementById('ev-cliente').value,
+    nota:       document.getElementById('ev-nota').value,
+    metodoPago: document.getElementById('ev-mp-efectivo')?.dataset.selected || 'efectivo',
+    pagado:     Number(document.getElementById('ev-pagado').value)||0,
+    saldo:      Number(document.getElementById('ev-saldo').value)||0,
+  };
+
+  // Rehabilitamos campos al cerrar
+  const rehabilitar = () => {
     document.getElementById('ev-cant').disabled = false;
     document.getElementById('ev-prod').disabled = false;
+  };
+
+  // 298. Combo — solo campos básicos
+  if(venta.esCombo) {
+    await updateDoc(doc(db,'ventas',id), { ...camposBase, precio, total: precio });
+    rehabilitar();
     closeModal('modal-editar-venta');
     toast('✅ Combo actualizado');
     return;
   }
 
-  // 212. Si es venta manual, solo actualizamos campos editables sin tocar stock
-  if(venta?.esManual || !venta?.prodId) {
-    document.getElementById('ev-prod').disabled = false;
-    await updateDoc(doc(db,'ventas',id), {
-      fecha:      document.getElementById('ev-fecha').value,
-      canal:      document.getElementById('ev-canal').value,
-      cliente:    document.getElementById('ev-cliente').value,
-      precio, total: precio,
-      cant:       Number(document.getElementById('ev-cant').value)||1,
-      tipoPrecio: document.getElementById('ev-tipo-precio').value,
-      nota:       document.getElementById('ev-nota').value,
-      metodoPago: document.getElementById('ev-mp-efectivo')?.dataset.selected || 'efectivo',
-      pagado:     Number(document.getElementById('ev-pagado').value)||0,
-      saldo:      Number(document.getElementById('ev-saldo').value)||0,
-    });
-    document.getElementById('ev-cant').disabled = false;
+  // 299. Venta múltiple — solo campos básicos, no tocamos stock ni productos
+  if(venta.esMultiple || prodVal === '__multiple__') {
+    await updateDoc(doc(db,'ventas',id), { ...camposBase, precio, total });
+    rehabilitar();
     closeModal('modal-editar-venta');
     toast('✅ Venta actualizada');
     return;
   }
 
-  // 204. Venta normal — ajuste de stock si cambió cantidad o producto
+  // 300. Venta manual — solo campos básicos + precio y cantidad
+  if(venta.esManual || !venta.prodId || prodVal === '__manual__') {
+    await updateDoc(doc(db,'ventas',id), {
+      ...camposBase, precio, total: precio,
+      cant:       Number(document.getElementById('ev-cant').value)||1,
+      tipoPrecio: document.getElementById('ev-tipo-precio').value,
+    });
+    rehabilitar();
+    closeModal('modal-editar-venta');
+    toast('✅ Venta actualizada');
+    return;
+  }
+
+  // 301. Venta normal del inventario — ajustamos stock si cambió cantidad o producto
   const cantOriginal = Number(document.getElementById('ev-cant-original').value)||0;
   const prodOriginal = document.getElementById('ev-prod-original').value;
-  const cantNueva = Number(document.getElementById('ev-cant').value)||0;
-  const prodNuevo = document.getElementById('ev-prod').value;
+  const cantNueva    = Number(document.getElementById('ev-cant').value)||0;
+  const prodNuevo    = prodVal;
 
-  if(!prodNuevo||!cantNueva||!precio) { alert('Producto, cantidad y precio son requeridos'); return; }
+  if(!prodNuevo || !cantNueva || !precio) { alert('Producto, cantidad y precio son requeridos'); return; }
 
   const prodNuevoData = DATA.inventario.find(p => p.id === prodNuevo);
-  if(!prodNuevoData) { alert('Producto no encontrado'); return; }
+  if(!prodNuevoData) { alert('Producto no encontrado en inventario'); return; }
 
   if(prodOriginal && prodOriginal !== prodNuevo) {
     const prodOriginalData = DATA.inventario.find(p => p.id === prodOriginal);
     if(prodOriginalData)
       await updateDoc(doc(db,'inventario',prodOriginal), { stock: prodOriginalData.stock + cantOriginal });
-    if(prodNuevoData.stock < cantNueva) { alert(`Stock insuficiente. Disponible: ${prodNuevoData.stock}`); return; }
+    if(prodNuevoData.stock < cantNueva) { alert('Stock insuficiente. Disponible: ' + prodNuevoData.stock); return; }
     await updateDoc(doc(db,'inventario',prodNuevo), { stock: prodNuevoData.stock - cantNueva });
   } else if(cantNueva !== cantOriginal) {
     const diff = cantOriginal - cantNueva;
     const nuevoStock = prodNuevoData.stock + diff;
-    if(nuevoStock < 0) { alert(`Stock insuficiente. Solo hay ${prodNuevoData.stock} unidades`); return; }
+    if(nuevoStock < 0) { alert('Stock insuficiente. Solo hay ' + prodNuevoData.stock + ' unidades'); return; }
     await updateDoc(doc(db,'inventario',prodNuevo), { stock: nuevoStock });
   }
 
   await updateDoc(doc(db,'ventas',id), {
-    fecha:      document.getElementById('ev-fecha').value,
-    canal:      document.getElementById('ev-canal').value,
+    ...camposBase, precio, total,
     producto:   prodNuevoData.nombre,
     prodId:     prodNuevo,
     cant:       cantNueva,
-    precio, total,
-    cliente:    document.getElementById('ev-cliente').value,
     tipoPrecio: document.getElementById('ev-tipo-precio').value,
-    nota:       document.getElementById('ev-nota').value,
-    metodoPago: document.getElementById('ev-mp-efectivo')?.dataset.selected || 'efectivo',
-    pagado:     Number(document.getElementById('ev-pagado').value)||0,
-    saldo:      Number(document.getElementById('ev-saldo').value)||0,
   });
 
-  document.getElementById('ev-cant').disabled = false;
-  document.getElementById('ev-prod').disabled = false;
+  rehabilitar();
   closeModal('modal-editar-venta');
   toast('✅ Venta actualizada correctamente');
+
 };
 
 // ============================================================
