@@ -2221,22 +2221,26 @@ function renderVentas() {
 let ventaLineas = [];
 
 window.abrirModalVenta = () => {
-  document.getElementById('v-fecha').value = today();
-  document.getElementById('v-pagado').value = '';
-  document.getElementById('v-saldo').value = '';
-  document.getElementById('v-estado-pago').textContent = 'Completa el total para ver el estado de pago';
-  const mp = document.getElementById('v-prod-manual');
-  if(mp) mp.value = '';
-  const vc = document.getElementById('v-cant');
-  if(vc) vc.value = '1';
-  const vp = document.getElementById('v-precio');
-  if(vp) vp.value = '';
-  document.getElementById('v-total').value = '';
-  document.getElementById('prev-vtotal').textContent = '';
+  // 293. Abrimos el modal primero para que el DOM exista antes de renderizar
   ventaLineas = [{ prodId:'', nombre:'', cant:1, precio:0, tipoPrecio:'publico', busqueda:'' }];
-  setTipoProducto('inventario');
-  setMetodoPago('efectivo');
   openModal('modal-venta');
+
+  setTimeout(() => {
+    document.getElementById('v-fecha').value = today();
+    document.getElementById('v-pagado').value = '';
+    document.getElementById('v-saldo').value = '';
+    document.getElementById('v-estado-pago').textContent = 'Completa el total para ver el estado de pago';
+    const mp = document.getElementById('v-prod-manual');
+    if(mp) mp.value = '';
+    const vc = document.getElementById('v-cant');
+    if(vc) vc.value = '1';
+    const vp = document.getElementById('v-precio');
+    if(vp) vp.value = '';
+    document.getElementById('v-total').value = '';
+    document.getElementById('prev-vtotal').textContent = '';
+    setTipoProducto('inventario');
+    setMetodoPago('efectivo');
+  }, 30);
 };
 
 window.setTipoProducto = (tipo) => {
@@ -2330,7 +2334,8 @@ function renderLineasVenta() {
       + contenido
       + '</div>';
   });
-  document.getElementById('v-lineas-container').innerHTML = html;
+  const container = document.getElementById('v-lineas-container');
+  if(container) container.innerHTML = html;
 }
 
 window.agregarLineaVenta = () => {
