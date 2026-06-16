@@ -2253,61 +2253,79 @@ window.setTipoProducto = (tipo) => {
 
 // 278. Renderiza líneas de productos con buscador
 function renderLineasVenta() {
-  const html = ventaLineas.map((l, i) => {
+  // 278. Renderiza líneas de productos con buscador — usando template literals seguros
+  let html = '';
+  ventaLineas.forEach(function(l, i) {
     const busq = (l.busqueda||'').toLowerCase();
     const prods = busq
-      ? DATA.inventario.filter(p => p.nombre.toLowerCase().includes(busq) || (p.marca||'').toLowerCase().includes(busq))
+      ? DATA.inventario.filter(function(p){ return p.nombre.toLowerCase().includes(busq) || (p.marca||'').toLowerCase().includes(busq); })
       : DATA.inventario;
-    const prod = DATA.inventario.find(p => p.id === l.prodId);
-    const subtotal = fmt((l.cant||1)*(l.precio||0));
+    const prod = DATA.inventario.find(function(p){ return p.id === l.prodId; });
 
-    const tiposBtns = [
-      ['publico','Público','#2563EB','#EFF6FF'],
-      ['distribuidor','Dist.','#D97706','#FFFBEB'],
-      ['especial','Especial','#16A34A','#F0FDF4']
-    ].map(([tipo,label,color,bg]) => {
-      const activo = l.tipoPrecio === tipo;
-      const precio = tipo==='publico'?prod?.pventa:tipo==='distribuidor'?prod?.pdist:prod?.pesp;
-      return '<button type="button" onclick="seleccionarTipoPrecioLinea(' + i + ',\'' + tipo + '\')"'
-        + ' style="padding:6px 4px;border-radius:6px;border:2px solid ' + (activo?color:'var(--border)') + ';'
-        + 'background:' + (activo?bg:'var(--surface)') + ';cursor:pointer;text-align:center;transition:all .12s">'
-        + '<div style="font-size:9px;font-weight:600;color:' + (activo?color:'var(--ink-3)') + ';text-transform:uppercase">' + label + '</div>'
-        + '<div style="font-size:11px;font-weight:700;color:' + (activo?color:'var(--ink-2)') + '">' + fmtCOP(precio||0) + '</div>'
-        + '</button>';
-    }).join('');
+    let contenido = '';
 
-    return '<div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:10px;margin-bottom:8px">'
+    if(!l.prodId) {
+      // Lista de resultados de búsqueda
+      let resultados = '';
+      prods.slice(0,8).forEach(function(p) {
+        resultados += '<div onclick="seleccionarProductoLinea(' + i + ',\'' + p.id + '\')" '
+          + 'style="padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px" '
+          + 'onmouseover="this.style.background=\'var(--surface-2)\'" onmouseout="this.style.background=\'var(--surface)\'">'
+          + '<div style="font-weight:500;color:var(--ink)">' + p.nombre + '</div>'
+          + '<div style="color:var(--ink-3);font-size:11px">' + (p.marca||'') + ' · Stock: ' + p.stock + ' · ' + fmt(p.pventa) + '</div>'
+          + '</div>';
+      });
+      if(prods.length === 0) resultados = '<div style="padding:10px;color:var(--ink-3);font-size:12px;text-align:center">Sin resultados</div>';
+      contenido = '<div style="max-height:130px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--surface);margin-bottom:8px">' + resultados + '</div>';
+    } else {
+      // Producto seleccionado — botones de tipo de precio
+      let tiposBtns = '';
+      [['publico','Público','#2563EB','#EFF6FF'],
+       ['distribuidor','Dist.','#D97706','#FFFBEB'],
+       ['especial','Especial','#16A34A','#F0FDF4']
+      ].forEach(function(arr) {
+        const tipo = arr[0], label = arr[1], color = arr[2], bg = arr[3];
+        const activo = l.tipoPrecio === tipo;
+        const precio = tipo==='publico'?prod.pventa:tipo==='distribuidor'?(prod.pdist||0):(prod.pesp||0);
+        tiposBtns += '<button type="button" onclick="seleccionarTipoPrecioLinea(' + i + ',\'' + tipo + '\')" '
+          + 'style="padding:6px 4px;border-radius:6px;border:2px solid ' + (activo?color:'var(--border)') + ';'
+          + 'background:' + (activo?bg:'var(--surface)') + ';cursor:pointer;text-align:center;transition:all .12s">'
+          + '<div style="font-size:9px;font-weight:600;color:' + (activo?color:'var(--ink-3)') + ';text-transform:uppercase">' + label + '</div>'
+          + '<div style="font-size:11px;font-weight:700;color:' + (activo?color:'var(--ink-2)') + '">' + fmtCOP(precio) + '</div>'
+          + '</button>';
+      });
+
+      const subtotal = fmt((l.cant||1)*(l.precio||0));
+      contenido = '<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--lime-bg);border-radius:8px;margin-bottom:8px">'
+        + '<span style="font-size:12px;font-weight:600;color:var(--lime);flex:1">' + prod.nombre + '</span>'
+        + '<button type="button" onclick="cambiarProductoLinea(' + i + ')" style="background:none;border:none;color:var(--ink-3);cursor:pointer;font-size:11px;text-decoration:underline">Cambiar</button>'
+        + '</div>'
+        + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px">' + tiposBtns + '</div>'
+        + '<div style="display:grid;grid-template-columns:80px 1fr 1fr;gap:8px;align-items:end">'
+          + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Cant.</label>'
+            + '<input type="number" class="f-input" value="' + (l.cant||1) + '" min="1" data-idx="' + i + '" data-tipo="cant" oninput="actualizarDatosLinea(this)" style="font-size:13px;text-align:center;padding:7px 6px"></div>'
+          + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Precio ($)</label>'
+            + '<input type="number" class="f-input" value="' + (l.precio||0) + '" data-idx="' + i + '" data-tipo="precio" oninput="actualizarDatosLinea(this)" style="font-size:13px;padding:7px 8px"></div>'
+          + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Subtotal</label>'
+            + '<div style="font-size:13px;font-weight:700;color:var(--lime);padding:7px 0">' + subtotal + '</div></div>'
+        + '</div>';
+    }
+
+    const quitarBtn = ventaLineas.length > 1
+      ? '<button type="button" onclick="quitarLineaVenta(' + i + ')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px">✕</button>'
+      : '';
+
+    const busqVal = (l.busqueda||'').replace(/"/g, '&quot;');
+    html += '<div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:10px;margin-bottom:8px">'
       + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
         + '<span style="font-size:11px;font-weight:600;color:var(--ink-3);text-transform:uppercase">Producto ' + (i+1) + '</span>'
-        + (ventaLineas.length > 1 ? '<button type="button" onclick="quitarLineaVenta(' + i + ')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px">✕</button>' : '')
+        + quitarBtn
       + '</div>'
-      + '<input type="text" class="f-input" placeholder="🔍 Buscar producto..." value="' + (l.busqueda||'').replace(/"/g,'&quot;') + '" data-idx="' + i + '" oninput="actualizarBusquedaLinea(this)" style="font-size:13px;margin-bottom:8px">'
-      + (!l.prodId
-        ? '<div style="max-height:130px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--surface);margin-bottom:8px">'
-            + prods.slice(0,8).map(p =>
-              '<div onclick="seleccionarProductoLinea(' + i + ','' + p.id + '')" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px" onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background='var(--surface)'">'
-                + '<div style="font-weight:500">' + p.nombre + '</div>'
-                + '<div style="color:var(--ink-3);font-size:11px">' + (p.marca||'') + ' · Stock: ' + p.stock + ' · ' + fmt(p.pventa) + '</div>'
-              + '</div>'
-            ).join('')
-            + (prods.length===0 ? '<div style="padding:10px;color:var(--ink-3);font-size:12px;text-align:center">Sin resultados</div>' : '')
-          + '</div>'
-        : '<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--lime-bg);border-radius:8px;margin-bottom:8px">'
-            + '<span style="font-size:12px;font-weight:600;color:var(--lime);flex:1">' + (prod?.nombre||'') + '</span>'
-            + '<button type="button" onclick="cambiarProductoLinea(' + i + ')" style="background:none;border:none;color:var(--ink-3);cursor:pointer;font-size:11px;text-decoration:underline">Cambiar</button>'
-          + '</div>'
-          + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px">' + tiposBtns + '</div>'
-          + '<div style="display:grid;grid-template-columns:80px 1fr 1fr;gap:8px;align-items:end">'
-            + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Cant.</label>'
-              + '<input type="number" class="f-input" value="' + (l.cant||1) + '" min="1" data-idx="' + i + '" data-tipo="cant" oninput="actualizarDatosLinea(this)" style="font-size:13px;text-align:center;padding:7px 6px"></div>'
-            + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Precio ($)</label>'
-              + '<input type="number" class="f-input" value="' + (l.precio||0) + '" data-idx="' + i + '" data-tipo="precio" oninput="actualizarDatosLinea(this)" style="font-size:13px;padding:7px 8px"></div>'
-            + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Subtotal</label>'
-              + '<div style="font-size:13px;font-weight:700;color:var(--lime);padding:7px 0">' + subtotal + '</div></div>'
-          + '</div>'
-      )
+      + '<input type="text" class="f-input" placeholder="🔍 Buscar producto..." value="' + busqVal + '" '
+        + 'data-idx="' + i + '" oninput="actualizarBusquedaLinea(this)" style="font-size:13px;margin-bottom:8px">'
+      + contenido
       + '</div>';
-  }).join('');
+  });
   document.getElementById('v-lineas-container').innerHTML = html;
 }
 
