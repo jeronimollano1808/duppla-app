@@ -1110,11 +1110,15 @@ body{
     <input type="hidden" id="p-id" value="">
     <div class="f-group"><label class="f-label">Nombre del producto *</label><input type="text" id="p-nombre" class="f-input" placeholder="Ej: Omega 3 Integral Médica"></div>
     <div class="f-row">
-      <!-- 346. Marca: campo de texto libre con sugerencias de marcas existentes -->
+      <!-- 346. Marca: select con marcas comunes + opción para escribir una personalizada -->
       <div class="f-group"><label class="f-label">Marca</label>
-        <input type="text" id="p-marca" class="f-input" placeholder="Ej: BSN, MuscleTech..." list="marcas-list" autocomplete="off">
-        <datalist id="marcas-list" id="marcas-datalist"></datalist>
-        <div style="font-size:11px;color:var(--ink-3);margin-top:3px">Escribe la marca o elige una existente</div>
+        <input type="text" id="p-marca" class="f-input" placeholder="Ej: BSN, MuscleTech, Iron Nutrition..." list="marcas-datalist" autocomplete="off">
+        <datalist id="marcas-datalist">
+          <option value="BSN"><option value="Integral Médica"><option value="Insane Labz">
+          <option value="Iron Nutrition"><option value="MuscleTech"><option value="Nutrex">
+          <option value="Nutricost"><option value="Optimum Nutrition"><option value="Smart Nutrition">
+          <option value="Vitanas"><option value="Youtheory">
+        </datalist>
       </div>
       <div class="f-group"><label class="f-label">Stock</label><input type="number" id="p-stock" class="f-input" value="0" min="0"></div>
     </div>
@@ -3181,7 +3185,8 @@ function renderInventario() {
     const sl = p.stock===0 ? 'Agotado' : p.stock<=(p.stockMinimo||5) ? `Bajo (${p.stock})` : `OK (${p.stock})`;
     // 80. Mostramos los 3 precios en columnas separadas con punto de color identificador
     //     Si un precio no está configurado mostramos "—"
-    return `<tr>
+    // 351. data-nombre y data-marca permiten filtrar sin re-renderizar
+    return `<tr data-nombre="${(p.nombre||'').toLowerCase()}" data-marca="${(p.marca||'').toLowerCase()}">
       <td style="font-weight:500">${p.nombre}</td>
       <td style="color:var(--ink-3)">${p.marca||''}</td>
       <td><span class="${sc}">${sl}</span></td>
@@ -3224,11 +3229,11 @@ function renderInventario() {
     <div style="position:relative;margin-bottom:14px">
       <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--ink-3);font-size:14px">🔍</span>
       <input type="text" id="search-inventario" class="f-input"
-        style="padding-left:36px;background:var(--surface)"
+        style="padding-left:36px;padding-right:36px;background:var(--surface)"
         placeholder="Buscar por nombre o marca..."
-        value="${busquedaInventario}"
-        oninput="busquedaInventario=this.value.toLowerCase();renderInventario();setTimeout(()=>{const s=document.getElementById('search-inventario');if(s){s.value=busquedaInventario;s.focus();s.setSelectionRange(s.value.length,s.value.length);}},0)">
-      ${busquedaInventario ? `<button onclick="busquedaInventario='';renderInventario()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--ink-3);font-size:16px">✕</button>` : ''}
+        oninput="filtrarFilasInventario(this.value)">
+      <button id="inv-search-clear" onclick="document.getElementById('search-inventario').value='';filtrarFilasInventario('')"
+        style="display:none;position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--ink-3);font-size:16px">✕</button>
     </div>
     <div id="inv-search-info" style="font-size:12px;color:var(--ink-3);margin-bottom:10px"></div>
     <div class="card">
@@ -3292,6 +3297,26 @@ window.actualizarTablaInventario = () => {
   }).join('');
 };
 
+
+// 352. Filtra filas del inventario en el DOM sin re-renderizar
+//      Mucho más rápido y no pierde el foco del input
+window.filtrarFilasInventario = (busq) => {
+  busquedaInventario = busq.toLowerCase();
+  const tbody = document.getElementById('inv-tabla-body');
+  if(!tbody) return;
+  let visibles = 0;
+  tbody.querySelectorAll('tr').forEach(tr => {
+    const nombre = tr.dataset.nombre || '';
+    const marca  = tr.dataset.marca  || '';
+    const match  = !busquedaInventario || nombre.includes(busquedaInventario) || marca.includes(busquedaInventario);
+    tr.style.display = match ? '' : 'none';
+    if(match) visibles++;
+  });
+  const info = document.getElementById('inv-search-info');
+  if(info) info.textContent = busquedaInventario ? visibles + ' resultado(s) para "' + busq + '"' : '';
+  const btnX = document.getElementById('inv-search-clear');
+  if(btnX) btnX.style.display = busquedaInventario ? 'block' : 'none';
+};
 
 window.corregirPrecios = async () => {
   //      Criterio: precio público mayor a 0 pero menor a 1000
