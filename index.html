@@ -2315,7 +2315,7 @@ function renderVentas() {
       ${DATA.ventas.length ?
         `<div class="table-wrap"><table class="tbl">
           <thead><tr><th>Fecha</th><th>Cliente</th><th>Producto</th><th>Canal</th><th>Precio</th><th>Total</th><th>Método</th><th>Saldo</th><th>Estado</th><th></th></tr></thead>
-          <tbody>${rows}</tbody>
+          <tbody id="inv-tabla-body">${rows}</tbody>
         </table></div>`
         : `<div class="empty-state"><div class="empty-state-icon">🛒</div><div class="empty-state-text">Sin ventas registradas</div></div>`}
     </div>`;
@@ -3220,10 +3220,10 @@ function renderInventario() {
         style="padding-left:36px;background:var(--surface)"
         placeholder="Buscar por nombre o marca..."
         value="${busquedaInventario}"
-        oninput="busquedaInventario=this.value.toLowerCase();renderInventario()">
-      ${busquedaInventario ? `<button onclick="busquedaInventario='';renderInventario()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--ink-3);font-size:16px">✕</button>` : ''}
+        oninput="busquedaInventario=this.value.toLowerCase();actualizarTablaInventario()">
+      ${busquedaInventario ? `<button onclick="busquedaInventario='';actualizarTablaInventario()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--ink-3);font-size:16px">✕</button>` : ''}
     </div>
-    ${busquedaInventario ? `<div style="font-size:12px;color:var(--ink-3);margin-bottom:10px">${inventarioFiltrado.length} resultado(s) para "<strong>${busquedaInventario}</strong>"</div>` : ''}
+    <div id="inv-search-info" style="font-size:12px;color:var(--ink-3);margin-bottom:10px"></div>
     <div class="card">
       ${inventarioFiltrado.length ?
         `<div class="table-wrap"><table class="tbl">
@@ -3234,8 +3234,59 @@ function renderInventario() {
     </div>`;
 }
 
+// 345. Actualiza solo la tabla de inventario sin reconstruir toda la página
+//      Esto preserva el foco del buscador mientras el usuario escribe
+window.actualizarTablaInventario = () => {
+  const filtrado = busquedaInventario
+    ? DATA.inventario.filter(p =>
+        (p.nombre||'').toLowerCase().includes(busquedaInventario) ||
+        (p.marca||'').toLowerCase().includes(busquedaInventario)
+      )
+    : DATA.inventario;
+
+  // Actualizamos el contador de resultados
+  const infoEl = document.getElementById('inv-search-info');
+  if(infoEl) {
+    infoEl.textContent = busquedaInventario
+      ? filtrado.length + ' resultado(s) para "' + busquedaInventario + '"'
+      : '';
+  }
+
+  // Actualizamos solo el cuerpo de la tabla
+  const tbody = document.getElementById('inv-tabla-body');
+  if(!tbody) { renderInventario(); return; }
+
+  if(filtrado.length === 0) {
+    tbody.closest('.card').innerHTML = '<div class="empty-state"><div class="empty-state-icon">📦</div>'
+      + '<div class="empty-state-text">' + (busquedaInventario ? 'Sin resultados para "' + busquedaInventario + '"' : 'Sin productos') + '</div></div>';
+    return;
+  }
+
+  tbody.innerHTML = filtrado.map(p => {
+    const margen = p.costo > 0 ? Math.round(((p.pventa-p.costo)/p.costo)*100) : null;
+    const stockColor = p.stock <= 0 ? 'var(--red)' : p.stock <= (p.stockMinimo||5) ? 'var(--amber)' : 'var(--green)';
+    const stockLabel = p.stock <= 0 ? 'Agotado (0)' : p.stock <= (p.stockMinimo||5) ? 'Bajo (' + p.stock + ')' : 'OK (' + p.stock + ')';
+    return '<tr data-id="' + p.id + '">'
+      + '<td style="font-weight:500">' + p.nombre + '</td>'
+      + '<td style="color:var(--ink-3)">' + (p.marca||'') + '</td>'
+      + '<td style="font-weight:600;color:' + stockColor + '">' + stockLabel + '</td>'
+      + '<td><div style="display:flex;flex-direction:column;gap:2px">'
+        + '<span style="font-size:12px"><span style="color:#2563EB">●</span> ' + fmt(p.pventa||0) + '</span>'
+        + '<span style="font-size:12px"><span style="color:#D97706">●</span> ' + fmt(p.pdist||0) + '</span>'
+        + '<span style="font-size:12px"><span style="color:#16A34A">●</span> ' + (p.pesp ? fmt(p.pesp) : '—') + '</span>'
+      + '</div></td>'
+      + '<td style="color:' + (margen!==null?margen>=30?'var(--green)':margen>=15?'var(--amber)':'var(--red)':'var(--ink-3)') + '">' + (margen!==null?margen+'%':'—') + '</td>'
+      + '<td><div style="display:flex;gap:5px">'
+        + '<button class="btn btn-xs" onclick="editarProducto(\'' + p.id + '\')">✏️ Editar</button>'
+        + '<button class="btn btn-xs" onclick="abrirAjuste(\'' + p.id + '\',\'' + p.nombre.replace(/'/g,"\\'") + '\',' + p.stock + ')">± Stock</button>'
+        + '<button class="btn btn-xs btn-danger" onclick="eliminarDoc(\'inventario\',\'' + p.id + '\')">✕</button>'
+      + '</div></td>'
+    + '</tr>';
+  }).join('');
+};
+
+
 window.corregirPrecios = async () => {
-  // 163. Identificamos productos con precios que parecen estar sin los ceros
   //      Criterio: precio público mayor a 0 pero menor a 1000
   //      (ningún suplemento debería costar menos de $1.000 COP)
   const aCorregir = DATA.inventario.filter(p => p.pventa > 0 && p.pventa < 1000);
