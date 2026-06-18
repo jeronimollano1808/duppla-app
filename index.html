@@ -760,6 +760,52 @@ body{
     <div class="page" id="page-combos"></div>
     <!-- 306. Página de deudores -->
     <div class="page" id="page-deudores"></div>
+    <!-- 328. Página de distribuidores -->
+    <div class="page" id="page-distribuidores"></div>
+
+<!-- 329. MODAL: NUEVO / EDITAR DISTRIBUIDOR -->
+<div class="modal-bg" id="modal-distribuidor">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-header">
+      <span class="modal-title" id="modal-dist-titulo">Nuevo distribuidor</span>
+      <button class="modal-close" onclick="closeModal('modal-distribuidor')">✕</button>
+    </div>
+    <input type="hidden" id="dist-id" value="">
+    <div class="f-row">
+      <div class="f-group">
+        <label class="f-label">Nombre *</label>
+        <input type="text" id="dist-nombre" class="f-input" placeholder="Nombre del gimnasio o persona">
+      </div>
+      <div class="f-group">
+        <label class="f-label">Tipo</label>
+        <select id="dist-tipo" class="f-input">
+          <option value="gimnasio">🏋️ Gimnasio</option>
+          <option value="persona">👤 Persona distribuidora</option>
+          <option value="tienda">🏪 Tienda / Local</option>
+        </select>
+      </div>
+    </div>
+    <div class="f-row">
+      <div class="f-group">
+        <label class="f-label">Teléfono</label>
+        <input type="text" id="dist-telefono" class="f-input" placeholder="Ej: 3001234567">
+      </div>
+      <div class="f-group">
+        <label class="f-label">Ciudad</label>
+        <input type="text" id="dist-ciudad" class="f-input" placeholder="Ej: Medellín">
+      </div>
+    </div>
+    <div class="f-group">
+      <label class="f-label">Notas</label>
+      <input type="text" id="dist-notas" class="f-input" placeholder="Contacto, dirección, observaciones...">
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-distribuidor')">Cancelar</button>
+      <button class="btn btn-lime" onclick="guardarDistribuidor()">Guardar</button>
+    </div>
+  </div>
+</div>
+
   </div>
 </div>
 
@@ -778,7 +824,7 @@ body{
     <div class="f-row">
       <div class="f-group"><label class="f-label">Fecha *</label><input type="date" id="v-fecha" class="f-input"></div>
       <div class="f-group"><label class="f-label">Canal</label>
-        <select id="v-canal" class="f-input">
+        <select id="v-canal" class="f-input" onchange="toggleDistribuidorField(this.value)">
           <option value="web">Página web</option>
           <option value="directo">Venta directa</option>
           <option value="distribuidor">Distribuidor</option>
@@ -870,6 +916,14 @@ body{
       <div id="v-estado-pago" style="margin-top:10px;font-size:12px;color:var(--ink-3)">
         Completa el total para ver el estado de pago
       </div>
+    </div>
+    <!-- 330. Distribuidor vinculado — aparece si el canal es distribuidor -->
+    <div class="f-group" id="v-dist-grupo" style="display:none">
+      <label class="f-label">Distribuidor / Gimnasio</label>
+      <select id="v-dist-id" class="f-input">
+        <option value="">— Sin vincular —</option>
+      </select>
+      <div style="font-size:11px;color:var(--ink-3);margin-top:3px">Opcional — para llevar historial por distribuidor</div>
     </div>
     <div class="f-group"><label class="f-label">Nota (opcional)</label><input type="text" id="v-nota" class="f-input" placeholder="Referencia adicional"></div>
     <div class="modal-footer">
@@ -1428,7 +1482,8 @@ let DATA = {
   ventas:[], inventario:[], gastos:[],
   proveedores:[], pedidos:[], metas:[],
   notificaciones:[], combos:[],
-  consumos:[]  // 305. consumos: retiros internos de Ángel y Jero
+  consumos:[],
+  distribuidores:[]  // 326. distribuidores: gimnasios y distribuidores vinculados
 };
 let currentPage = 'dashboard';  // Página activa
 let ajusteProductoId = null;    // ID del producto que se está ajustando
@@ -1473,6 +1528,8 @@ const MENU = [
   { id:'ventas', label:'Ventas', ico:'🛒', group:'Negocio' },
   { id:'inventario', label:'Inventario', ico:'📦', group:'Negocio' },
   { id:'clientes', label:'Clientes', ico:'👥', group:'Negocio' },
+  // 327. Distribuidores — gimnasios y distribuidores con historial de compras
+  { id:'distribuidores', label:'Distribuidores', ico:'🏋️', group:'Negocio' },
   { id:'gastos', label:'Gastos', ico:'💸', group:'Negocio' },
   { id:'proveedores', label:'Proveedores', ico:'🚚', group:'Operaciones' },
   { id:'pedidos', label:'Pedidos', ico:'📋', group:'Operaciones' },
@@ -1543,7 +1600,7 @@ document.getElementById('li-pass')?.addEventListener('keydown', e => {
 // Cada cambio en Firebase actualiza DATA y redibuja la página
 // ============================================================
 function startListeners() {
-  const cols = ['ventas','inventario','gastos','proveedores','pedidos','metas','combos','consumos'];
+  const cols = ['ventas','inventario','gastos','proveedores','pedidos','metas','combos','consumos','distribuidores'];
   cols.forEach(col => {
     const q = query(collection(db, col), orderBy('createdAt','desc'));
     onSnapshot(q, snap => {
@@ -1552,6 +1609,7 @@ function startListeners() {
       if(currentPage === col || currentPage === 'dashboard') renderPage(currentPage);
       if(currentPage === 'clientes' && col === 'ventas') renderPage('clientes');
       if(currentPage === 'deudores' && (col === 'ventas' || col === 'consumos')) renderPage('deudores');
+      if(currentPage === 'distribuidores' && (col === 'ventas' || col === 'distribuidores')) renderPage('distribuidores');
       if(col === 'inventario') checkStockAlerts();
     });
   });
@@ -1613,7 +1671,8 @@ function renderPage(id) {
     inventario:renderInventario, clientes:renderClientes,
     gastos:renderGastos, proveedores:renderProveedores,
     pedidos:renderPedidos, metas:renderMetas, combos:renderCombos,
-    deudores:renderDeudores
+    deudores:renderDeudores,
+    distribuidores:renderDistribuidores
   };
   if(renders[id]) renders[id]();
 }
@@ -2284,6 +2343,9 @@ window.abrirModalVenta = () => {
     if(vp) vp.value = '';
     document.getElementById('v-total').value = '';
     document.getElementById('prev-vtotal').textContent = '';
+    // 344. Ocultamos campo distribuidor al abrir el modal
+    const distGrupo = document.getElementById('v-dist-grupo');
+    if(distGrupo) distGrupo.style.display = 'none';
     setTipoProducto('inventario');
     setMetodoPago('efectivo');
   }, 30);
@@ -2538,6 +2600,8 @@ window.guardarVenta = async () => {
   // 286. estadoPago correcto: si saldo es 0 siempre es 'pagado', sin importar abonos previos
   const estadoPago = saldo === 0 ? 'pagado' : pagado > 0 ? 'parcial' : 'pendiente';
   const metodoPago = metodoPagoVenta;
+  // 343. Distribuidor vinculado — solo si el canal es distribuidor
+  const distribuidorId = document.getElementById('v-dist-id')?.value || null;
 
   const esManual = document.getElementById('seccion-manual').style.display !== 'none';
 
@@ -2550,7 +2614,8 @@ window.guardarVenta = async () => {
     await addDoc(collection(db,'ventas'), {
       fecha, canal, producto:nombreManual, prodId:null, esManual:true,
       cant, precio, total, cliente, nota, tipoPrecio:'publico',
-      metodoPago, pagado, saldo, estadoPago, abonos:[], createdAt:serverTimestamp()
+      metodoPago, pagado, saldo, estadoPago, abonos:[],
+      distribuidorId: distribuidorId || null, createdAt:serverTimestamp()
     });
     await pushNotif('💰 Nueva venta', nombreManual + (cliente?' — '+cliente:'') + ' · ' + fmt(total), 'venta', {seccion:'ventas'});
 
@@ -2577,7 +2642,8 @@ window.guardarVenta = async () => {
       await addDoc(collection(db,'ventas'), {
         fecha, canal, producto:prod.nombre, prodId:l.prodId, esManual:false,
         cant:l.cant, precio:l.precio, total, cliente, nota, tipoPrecio:l.tipoPrecio,
-        metodoPago, pagado, saldo, estadoPago, abonos:[], createdAt:serverTimestamp()
+        metodoPago, pagado, saldo, estadoPago, abonos:[],
+        distribuidorId: distribuidorId || null, createdAt:serverTimestamp()
       });
     } else {
       // 289. Venta múltiple — descontamos stock de cada producto y registramos una entrada
@@ -2593,7 +2659,8 @@ window.guardarVenta = async () => {
       await addDoc(collection(db,'ventas'), {
         fecha, canal, producto:nombresProductos, esMultiple:true, productosVenta,
         cant:productosVenta.reduce((s,p)=>s+p.cant,0), precio:0, total, cliente, nota,
-        tipoPrecio:'varios', metodoPago, pagado, saldo, estadoPago, abonos:[], createdAt:serverTimestamp()
+        tipoPrecio:'varios', metodoPago, pagado, saldo, estadoPago, abonos:[],
+        distribuidorId: distribuidorId || null, createdAt:serverTimestamp()
       });
     }
 
@@ -4455,6 +4522,188 @@ window.eliminarConsumo = async (id, prodId, cant) => {
   await deleteDoc(doc(db,'consumos',id));
   toast('✅ Consumo eliminado — stock restaurado');
 };
+
+// ============================================================
+// 331. DISTRIBUIDORES
+// ============================================================
+
+window.toggleDistribuidorField = (canal) => {
+  const grupo = document.getElementById('v-dist-grupo');
+  if(!grupo) return;
+  if(canal === 'distribuidor') {
+    grupo.style.display = 'block';
+    const sel = document.getElementById('v-dist-id');
+    if(sel) {
+      sel.innerHTML = '<option value="">— Sin vincular —</option>'
+        + DATA.distribuidores.map(d =>
+            '<option value="' + d.id + '">'
+            + (d.tipo==='gimnasio'?'🏋️':d.tipo==='tienda'?'🏪':'👤')
+            + ' ' + d.nombre + (d.ciudad?' — '+d.ciudad:'') + '</option>'
+          ).join('');
+    }
+  } else {
+    grupo.style.display = 'none';
+  }
+};
+
+window.abrirNuevoDistribuidor = () => {
+  document.getElementById('dist-id').value = '';
+  document.getElementById('dist-nombre').value = '';
+  document.getElementById('dist-tipo').value = 'gimnasio';
+  document.getElementById('dist-telefono').value = '';
+  document.getElementById('dist-ciudad').value = '';
+  document.getElementById('dist-notas').value = '';
+  document.getElementById('modal-dist-titulo').textContent = 'Nuevo distribuidor';
+  openModal('modal-distribuidor');
+};
+
+window.editarDistribuidor = (id) => {
+  const d = DATA.distribuidores.find(x => x.id === id);
+  if(!d) return;
+  openModal('modal-distribuidor');
+  setTimeout(() => {
+    document.getElementById('dist-id').value = id;
+    document.getElementById('dist-nombre').value = d.nombre || '';
+    document.getElementById('dist-tipo').value = d.tipo || 'gimnasio';
+    document.getElementById('dist-telefono').value = d.telefono || '';
+    document.getElementById('dist-ciudad').value = d.ciudad || '';
+    document.getElementById('dist-notas').value = d.notas || '';
+    document.getElementById('modal-dist-titulo').textContent = 'Editar — ' + d.nombre;
+  }, 30);
+};
+
+window.guardarDistribuidor = async () => {
+  const nombre = document.getElementById('dist-nombre').value.trim();
+  if(!nombre) { alert('El nombre es obligatorio'); return; }
+  const id = document.getElementById('dist-id').value;
+  const data = {
+    nombre,
+    tipo:     document.getElementById('dist-tipo').value,
+    telefono: document.getElementById('dist-telefono').value.trim(),
+    ciudad:   document.getElementById('dist-ciudad').value.trim(),
+    notas:    document.getElementById('dist-notas').value.trim(),
+  };
+  if(id) {
+    await updateDoc(doc(db,'distribuidores',id), data);
+    toast('✅ Distribuidor actualizado');
+  } else {
+    await addDoc(collection(db,'distribuidores'), { ...data, createdAt: serverTimestamp() });
+    toast('✅ Distribuidor agregado');
+  }
+  closeModal('modal-distribuidor');
+};
+
+window.eliminarDistribuidor = async (id) => {
+  const d = DATA.distribuidores.find(x => x.id === id);
+  if(!confirm('¿Eliminar ' + (d?.nombre||'este distribuidor') + '? Las ventas vinculadas no se borran.')) return;
+  await deleteDoc(doc(db,'distribuidores',id));
+  toast('✅ Distribuidor eliminado');
+};
+
+let distDetalleId = null;
+window.verDetalleDistribuidor = (id) => {
+  distDetalleId = distDetalleId === id ? null : id;
+  renderDistribuidores();
+};
+
+// ============================================================
+// 338. PÁGINA: DISTRIBUIDORES
+// ============================================================
+function renderDistribuidores() {
+  const tipoIco   = { gimnasio:'🏋️', persona:'👤', tienda:'🏪' };
+  const tipoLabel = { gimnasio:'Gimnasio', persona:'Persona distribuidora', tienda:'Tienda / Local' };
+
+  const distData = DATA.distribuidores.map(d => {
+    const ventas = DATA.ventas.filter(v => v.distribuidorId === d.id);
+    const total  = ventas.reduce((s,v) => s + Number(v.total||0), 0);
+    const sorted = [...ventas].sort((a,b) => b.fecha > a.fecha ? 1 : -1);
+    const ultima = sorted.length ? sorted[0] : null;
+    return { ...d, ventas, total, ultima };
+  }).sort((a,b) => b.total - a.total);
+
+  const totalGeneral  = DATA.ventas.filter(v => v.canal === 'distribuidor').reduce((s,v) => s+Number(v.total||0), 0);
+  const totalVinculado = distData.reduce((s,d) => s + d.total, 0);
+
+  const resumenHtml =
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">'
+    + '<div class="metric-card"><div class="metric-label">Total canal dist.</div><div class="metric-value" style="font-size:18px;color:var(--lime)">' + fmt(totalGeneral) + '</div><div class="metric-sub">todas las ventas dist.</div></div>'
+    + '<div class="metric-card"><div class="metric-label">Vinculado</div><div class="metric-value" style="font-size:18px;color:var(--blue)">' + fmt(totalVinculado) + '</div><div class="metric-sub">con distribuidor asignado</div></div>'
+    + '<div class="metric-card"><div class="metric-label">Distribuidores</div><div class="metric-value" style="font-size:18px">' + DATA.distribuidores.length + '</div><div class="metric-sub">registrados</div></div>'
+    + '</div>';
+
+  let cardsHtml = '';
+  if(distData.length === 0) {
+    cardsHtml = '<div class="card"><div class="empty-state"><div class="empty-state-icon">🏋️</div>'
+      + '<div class="empty-state-text">Sin distribuidores registrados</div>'
+      + '<div class="empty-state-sub">Agrega tu primer gimnasio o distribuidor con el botón de arriba</div></div></div>';
+  } else {
+    distData.forEach(d => {
+      const ico   = tipoIco[d.tipo]   || '👤';
+      const label = tipoLabel[d.tipo] || '';
+      const isOpen = distDetalleId === d.id;
+
+      let historialHtml = '';
+      if(isOpen) {
+        const ventasOrd = [...d.ventas].sort((a,b) => b.fecha > a.fecha ? 1 : -1);
+        if(!ventasOrd.length) {
+          historialHtml = '<div style="padding:12px;color:var(--ink-3);font-size:12px;text-align:center">Sin ventas vinculadas aún</div>';
+        } else {
+          let filas = '';
+          ventasOrd.forEach(v => {
+            const pagado = Number(v.saldo||0) > 0;
+            filas += '<tr>'
+              + '<td style="color:var(--ink-3)">' + (v.fecha||'') + '</td>'
+              + '<td style="font-weight:500">' + (v.producto||'') + '</td>'
+              + '<td style="text-align:center">' + (v.cant||1) + '</td>'
+              + '<td style="font-weight:600;color:var(--lime)">' + fmt(v.total) + '</td>'
+              + '<td><span style="padding:2px 8px;border-radius:12px;font-size:10px;font-weight:600;background:'
+                + (pagado?'var(--amber-bg)':'#F0FDF4') + ';color:' + (pagado?'var(--amber)':'var(--green)') + '">'
+                + (pagado?'Pendiente':'Pagado') + '</span></td>'
+            + '</tr>';
+          });
+          historialHtml = '<div class="table-wrap" style="margin-top:12px"><table class="tbl">'
+            + '<thead><tr><th>Fecha</th><th>Producto</th><th>Cant.</th><th>Total</th><th>Estado</th></tr></thead>'
+            + '<tbody>' + filas + '</tbody></table></div>';
+        }
+      }
+
+      cardsHtml += '<div class="card" style="margin-bottom:12px">'
+        + '<div style="display:flex;justify-content:space-between;align-items:flex-start">'
+          + '<div style="display:flex;align-items:center;gap:12px;flex:1">'
+            + '<div style="width:40px;height:40px;border-radius:10px;background:var(--lime-bg);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">' + ico + '</div>'
+            + '<div style="flex:1;min-width:0">'
+              + '<div style="font-size:14px;font-weight:700;color:var(--ink)">' + d.nombre + '</div>'
+              + '<div style="font-size:11px;color:var(--ink-3);margin-top:2px">' + label
+                + (d.ciudad?' · '+d.ciudad:'') + (d.telefono?' · '+d.telefono:'') + '</div>'
+              + (d.notas?'<div style="font-size:11px;color:var(--ink-3);margin-top:2px">'+d.notas+'</div>':'')
+            + '</div>'
+          + '</div>'
+          + '<div style="text-align:right;flex-shrink:0;margin-left:12px">'
+            + '<div style="font-size:18px;font-weight:800;color:var(--lime)">' + fmt(d.total) + '</div>'
+            + '<div style="font-size:11px;color:var(--ink-3)">' + d.ventas.length + ' venta(s)</div>'
+            + (d.ultima?'<div style="font-size:10px;color:var(--ink-3)">Última: '+d.ultima.fecha+'</div>':'')
+          + '</div>'
+        + '</div>'
+        + '<div style="display:flex;gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">'
+          + '<button class="btn btn-sm" onclick="verDetalleDistribuidor(\'' + d.id + '\')" style="flex:1">'
+            + (isOpen?'▲ Ocultar':'▼ Ver historial ('+d.ventas.length+')') + '</button>'
+          + '<button class="btn btn-sm" onclick="editarDistribuidor(\'' + d.id + '\')">✏️ Editar</button>'
+          + '<button class="btn btn-sm btn-danger" onclick="eliminarDistribuidor(\'' + d.id + '\')">✕</button>'
+        + '</div>'
+        + (isOpen ? historialHtml : '')
+      + '</div>';
+    });
+  }
+
+  document.getElementById('page-distribuidores').innerHTML =
+    '<div class="page-header">'
+      + '<div><div class="page-title">Distribuidores</div><div class="page-sub">Gimnasios y distribuidores vinculados</div></div>'
+      + '<button class="btn btn-lime btn-sm" onclick="abrirNuevoDistribuidor()">+ Agregar</button>'
+    + '</div>'
+    + resumenHtml
+    + cardsHtml;
+}
+
 
 </script>
 </body>
