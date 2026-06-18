@@ -2318,7 +2318,7 @@ function renderVentas() {
       ${DATA.ventas.length ?
         `<div class="table-wrap"><table class="tbl">
           <thead><tr><th>Fecha</th><th>Cliente</th><th>Producto</th><th>Canal</th><th>Precio</th><th>Total</th><th>Método</th><th>Saldo</th><th>Estado</th><th></th></tr></thead>
-          <tbody id="inv-tabla-body">${rows}</tbody>
+          <tbody>${rows}</tbody>
         </table></div>`
         : `<div class="empty-state"><div class="empty-state-icon">🛒</div><div class="empty-state-text">Sin ventas registradas</div></div>`}
     </div>`;
@@ -3240,7 +3240,7 @@ function renderInventario() {
       ${inventarioFiltrado.length ?
         `<div class="table-wrap"><table class="tbl">
           <thead><tr><th>Producto</th><th>Marca</th><th>Stock</th><th>Precios 🔵Púb 🟠Dist 🟢Esp</th><th>Margen</th><th></th></tr></thead>
-          <tbody>${rows}</tbody>
+          <tbody id="inv-tabla-body">${rows}</tbody>
         </table></div>`
         : `<div class="empty-state"><div class="empty-state-icon">📦</div><div class="empty-state-text">${busquedaInventario ? 'Sin resultados para "'+busquedaInventario+'"' : 'Sin productos en inventario'}</div></div>`}
     </div>`;
