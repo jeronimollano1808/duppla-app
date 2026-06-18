@@ -1622,6 +1622,9 @@ function renderPage(id) {
 // 49. CONTROLES DEL SIDEBAR MÓVIL
 // ============================================================
 window.toggleSidebar = () => {
+  // 324. Cerramos notificaciones antes de abrir el sidebar
+  document.getElementById('notif-panel-s')?.classList.remove('open');
+  document.getElementById('notif-panel-m')?.classList.remove('open');
   document.getElementById('sidebar').classList.toggle('open');
   document.getElementById('overlay').style.display = 'block';
 };
@@ -1738,8 +1741,10 @@ function renderNotifBell() {
 }
 
 window.toggleNotif = (ctx) => {
-  // 137. Cerramos el otro panel si está abierto, y alternamos el que se pidió
-  //      Esto evita que ambos paneles queden abiertos al mismo tiempo
+  // 325. Cerramos el sidebar si está abierto antes de abrir notificaciones
+  document.getElementById('sidebar')?.classList.remove('open');
+  document.getElementById('overlay').style.display = 'none';
+  // 137. Cerramos el otro panel y alternamos el que se pidió
   if(ctx === 'mobile') {
     document.getElementById('notif-panel-s')?.classList.remove('open');
     document.getElementById('notif-panel-m')?.classList.toggle('open');
