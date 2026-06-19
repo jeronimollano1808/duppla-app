@@ -3197,6 +3197,13 @@ function renderInventario() {
           <span><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#16A34A;margin-right:4px"></span>${p.pesp>0?fmt(p.pesp):'—'}</span>
         </div>
       </td>
+      <!-- 355. Valor total en stock — a costo y a precio público -->
+      <td>
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <span style="font-size:12px;font-weight:600;color:var(--ink)">${fmt((p.stock||0)*(p.pventa||0))}</span>
+          <span style="font-size:10px;color:var(--ink-3)">costo: ${fmt((p.stock||0)*(p.costo||0))}</span>
+        </div>
+      </td>
       <td style="color:${margen>=30?'var(--green)':margen>=15?'var(--amber)':'var(--red)'}">${margen!==null?margen+'%':'—'}</td>
       <td>
         <div style="display:flex;gap:5px">
@@ -3239,7 +3246,7 @@ function renderInventario() {
     <div class="card">
       ${inventarioFiltrado.length ?
         `<div class="table-wrap"><table class="tbl">
-          <thead><tr><th>Producto</th><th>Marca</th><th>Stock</th><th>Precios 🔵Púb 🟠Dist 🟢Esp</th><th>Margen</th><th></th></tr></thead>
+          <thead><tr><th>Producto</th><th>Marca</th><th>Stock</th><th>Precios 🔵Púb 🟠Dist 🟢Esp</th><th>Valor total</th><th>Margen</th><th></th></tr></thead>
           <tbody id="inv-tabla-body">${rows}</tbody>
         </table></div>`
         : `<div class="empty-state"><div class="empty-state-icon">📦</div><div class="empty-state-text">${busquedaInventario ? 'Sin resultados para "'+busquedaInventario+'"' : 'Sin productos en inventario'}</div></div>`}
