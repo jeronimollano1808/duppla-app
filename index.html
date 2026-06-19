@@ -903,6 +903,17 @@ body{
           </button>
         </div>
       </div>
+      <!-- 358. Desglose mixto — aparece solo si el método es 'mixto' -->
+      <div class="f-row" id="v-mixto-grupo" style="display:none">
+        <div class="f-group" style="margin-bottom:0">
+          <label class="f-label">💵 Efectivo ($)</label>
+          <input type="number" id="v-mixto-efectivo" class="f-input" placeholder="0" oninput="calcMixtoVenta()">
+        </div>
+        <div class="f-group" style="margin-bottom:0">
+          <label class="f-label">📲 Transferencia ($)</label>
+          <input type="number" id="v-mixto-transferencia" class="f-input" placeholder="0" oninput="calcMixtoVenta()">
+        </div>
+      </div>
       <div class="f-row">
         <div class="f-group" style="margin-bottom:0">
           <label class="f-label">Pagó en este momento ($)</label>
@@ -1011,6 +1022,17 @@ body{
           style="flex:1;padding:7px;border-radius:var(--radius);border:2px solid var(--border);background:var(--surface-2);color:var(--ink-2);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">
           🔀 Mixto
         </button>
+      </div>
+    </div>
+    <!-- 363. Desglose mixto editable -->
+    <div class="f-row" id="ev-mixto-grupo" style="display:none">
+      <div class="f-group">
+        <label class="f-label">💵 Efectivo ($)</label>
+        <input type="number" id="ev-mixto-efectivo" class="f-input" placeholder="0" oninput="calcMixtoEdit()">
+      </div>
+      <div class="f-group">
+        <label class="f-label">📲 Transferencia ($)</label>
+        <input type="number" id="ev-mixto-transferencia" class="f-input" placeholder="0" oninput="calcMixtoEdit()">
       </div>
     </div>
     <!-- 238. Saldo editable para corregir errores o ajustes manuales -->
@@ -1867,6 +1889,13 @@ function checkStockAlerts() {
 // 241. Estado de búsqueda para ventas e inventario
 let busquedaVentas = '';
 let busquedaInventario = '';
+// 357. ID de la venta múltiple cuyo desglose está expandido en la tabla
+let ventaDetalleId = null;
+window.toggleDetalleVenta = (id) => {
+  ventaDetalleId = ventaDetalleId === id ? null : id;
+  renderVentas();
+};
+
 // 302. Variables globales para métodos de pago — más confiables que dataset
 let metodoPagoVenta = 'efectivo';
 let metodoPagoAbono = 'efectivo';
@@ -2240,7 +2269,9 @@ function renderVentas() {
     const mpIco = { efectivo:'💵', transferencia:'📲', mixto:'🔀' };
     const mpLabel = { efectivo:'Efectivo', transferencia:'Transfer.', mixto:'Mixto' };
     const mp = v.metodoPago || 'efectivo';
-    const mpBadge = `<span style="font-size:11px;color:var(--ink-3)">${mpIco[mp]||'💵'} ${mpLabel[mp]||mp}</span>`;
+    const mpBadge = mp === 'mixto' && (v.mixtoEfectivo || v.mixtoTransferencia)
+      ? `<span style="font-size:11px;color:var(--ink-3)">🔀 💵${fmt(v.mixtoEfectivo||0)} + 📲${fmt(v.mixtoTransferencia||0)}</span>`
+      : `<span style="font-size:11px;color:var(--ink-3)">${mpIco[mp]||'💵'} ${mpLabel[mp]||mp}</span>`;
 
     // 115. Badge de estado de pago con color semántico
     //      Verde = pagado, Amarillo = abono parcial, Rojo = pendiente total
@@ -2270,10 +2301,31 @@ function renderVentas() {
       ? `<td style="color:var(--red);font-size:12px">${fmt(v.saldo)}</td>`
       : `<td style="color:var(--ink-3);font-size:12px">—</td>`;
 
+    // 356. Para ventas múltiples, mostramos botón expandible con desglose por producto
+    let productoCell;
+    if(v.esMultiple && v.productosVenta?.length) {
+      const isOpen = ventaDetalleId === v.id;
+      const desglose = v.productosVenta.map(p =>
+        '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:11px;border-bottom:1px solid var(--border)">'
+          + '<span style="color:var(--ink-2)">' + p.nombre + ' ×' + p.cant + '</span>'
+          + '<span style="font-weight:600;color:var(--ink)">' + fmt(p.precio*p.cant) + '</span>'
+        + '</div>'
+      ).join('');
+      productoCell = '<td>'
+        + '<button onclick="toggleDetalleVenta(\'' + v.id + '\')" style="background:none;border:none;cursor:pointer;text-align:left;padding:0;display:flex;align-items:center;gap:5px">'
+          + '<span style="font-size:10px;color:var(--ink-3)">' + (isOpen?'▼':'▶') + '</span>'
+          + '<span style="font-weight:500;color:var(--ink)">📦 ' + v.productosVenta.length + ' productos</span>'
+        + '</button>'
+        + (isOpen ? '<div style="margin-top:6px;padding:8px;background:var(--surface-2);border-radius:8px;min-width:200px">' + desglose + '</div>' : '')
+      + '</td>';
+    } else {
+      productoCell = '<td>' + (v.producto||'') + manualBadge + '</td>';
+    }
+
     return `<tr>
       <td style="color:var(--ink-3)">${v.fecha||''}</td>
       <td style="font-weight:500">${v.cliente||'—'}</td>
-      <td>${v.producto||''}${manualBadge}</td>
+      ${productoCell}
       <td><span class="badge b-${v.canal||'web'}">${v.canal||''}</span></td>
       <td><span class="badge ${tpClass[tp]}">${tpLabel[tp]||tp}</span></td>
       <td style="font-weight:600;color:var(--lime)">${fmt(v.total)}</td>
@@ -2349,6 +2401,11 @@ window.abrirModalVenta = () => {
     // 344. Ocultamos campo distribuidor al abrir el modal
     const distGrupo = document.getElementById('v-dist-grupo');
     if(distGrupo) distGrupo.style.display = 'none';
+    // 362. Reset campos mixto
+    const mixtoGrupo = document.getElementById('v-mixto-grupo');
+    if(mixtoGrupo) mixtoGrupo.style.display = 'none';
+    document.getElementById('v-mixto-efectivo').value = '';
+    document.getElementById('v-mixto-transferencia').value = '';
     setTipoProducto('inventario');
     setMetodoPago('efectivo');
   }, 30);
@@ -2365,6 +2422,23 @@ window.setMetodoPago = (tipo) => {
     btn.style.color = activo ? '#fff' : 'var(--ink-2)';
     btn.style.borderColor = activo ? 'var(--ink)' : 'var(--border)';
   });
+  // 359. Mostramos el desglose efectivo/transferencia solo si es mixto
+  const grupo = document.getElementById('v-mixto-grupo');
+  if(grupo) {
+    grupo.style.display = tipo === 'mixto' ? 'flex' : 'none';
+    if(tipo !== 'mixto') {
+      document.getElementById('v-mixto-efectivo').value = '';
+      document.getElementById('v-mixto-transferencia').value = '';
+    }
+  }
+};
+
+// 360. calcMixtoVenta — suma efectivo + transferencia y actualiza "Pagó en este momento"
+window.calcMixtoVenta = () => {
+  const ef = Number(document.getElementById('v-mixto-efectivo').value)||0;
+  const tr = Number(document.getElementById('v-mixto-transferencia').value)||0;
+  document.getElementById('v-pagado').value = ef + tr;
+  calcSaldo();
 };
 
 // 295. setMetodoPagoAbono — toggle en modal de abono
@@ -2391,6 +2465,16 @@ window.setMetodoPagoEdit = (tipo) => {
     btn.style.color = activo ? '#fff' : 'var(--ink-2)';
     btn.style.borderColor = activo ? 'var(--ink)' : 'var(--border)';
   });
+  // 364. Mostramos desglose mixto en edición
+  const grupo = document.getElementById('ev-mixto-grupo');
+  if(grupo) grupo.style.display = tipo === 'mixto' ? 'flex' : 'none';
+};
+
+// 365. calcMixtoEdit — suma efectivo + transferencia y actualiza pagado en edición
+window.calcMixtoEdit = () => {
+  const ef = Number(document.getElementById('ev-mixto-efectivo').value)||0;
+  const tr = Number(document.getElementById('ev-mixto-transferencia').value)||0;
+  document.getElementById('ev-pagado').value = ef + tr;
 };
 
 window.setTipoProducto = (tipo) => {
@@ -2605,6 +2689,9 @@ window.guardarVenta = async () => {
   const metodoPago = metodoPagoVenta;
   // 343. Distribuidor vinculado — solo si el canal es distribuidor
   const distribuidorId = document.getElementById('v-dist-id')?.value || null;
+  // 361. Desglose mixto — solo se guarda si el método es mixto
+  const mixtoEfectivo = metodoPago === 'mixto' ? Number(document.getElementById('v-mixto-efectivo').value)||0 : null;
+  const mixtoTransferencia = metodoPago === 'mixto' ? Number(document.getElementById('v-mixto-transferencia').value)||0 : null;
 
   const esManual = document.getElementById('seccion-manual').style.display !== 'none';
 
@@ -2618,6 +2705,7 @@ window.guardarVenta = async () => {
       fecha, canal, producto:nombreManual, prodId:null, esManual:true,
       cant, precio, total, cliente, nota, tipoPrecio:'publico',
       metodoPago, pagado, saldo, estadoPago, abonos:[],
+      mixtoEfectivo, mixtoTransferencia,
       distribuidorId: distribuidorId || null, createdAt:serverTimestamp()
     });
     await pushNotif('💰 Nueva venta', nombreManual + (cliente?' — '+cliente:'') + ' · ' + fmt(total), 'venta', {seccion:'ventas'});
@@ -2646,6 +2734,7 @@ window.guardarVenta = async () => {
         fecha, canal, producto:prod.nombre, prodId:l.prodId, esManual:false,
         cant:l.cant, precio:l.precio, total, cliente, nota, tipoPrecio:l.tipoPrecio,
         metodoPago, pagado, saldo, estadoPago, abonos:[],
+        mixtoEfectivo, mixtoTransferencia,
         distribuidorId: distribuidorId || null, createdAt:serverTimestamp()
       });
     } else {
@@ -2663,6 +2752,7 @@ window.guardarVenta = async () => {
         fecha, canal, producto:nombresProductos, esMultiple:true, productosVenta,
         cant:productosVenta.reduce((s,p)=>s+p.cant,0), precio:0, total, cliente, nota,
         tipoPrecio:'varios', metodoPago, pagado, saldo, estadoPago, abonos:[],
+        mixtoEfectivo, mixtoTransferencia,
         distribuidorId: distribuidorId || null, createdAt:serverTimestamp()
       });
     }
@@ -2884,6 +2974,9 @@ window.editarVenta = (id) => {
     setMetodoPagoEdit(venta.metodoPago || 'efectivo');
     document.getElementById('ev-pagado').value = venta.pagado || 0;
     document.getElementById('ev-saldo').value = venta.saldo || 0;
+    // 366. Cargamos el desglose mixto si existe
+    document.getElementById('ev-mixto-efectivo').value = venta.mixtoEfectivo || '';
+    document.getElementById('ev-mixto-transferencia').value = venta.mixtoTransferencia || '';
 
     previoCOP('ev-precio', 'prev-ev-precio');
     const prevTotal = document.getElementById('prev-ev-total');
@@ -2914,6 +3007,8 @@ window.abrirEditarComboVenta = (id) => {
     setMetodoPagoEdit(venta.metodoPago || 'efectivo');
     document.getElementById('ev-pagado').value = venta.pagado || 0;
     document.getElementById('ev-saldo').value = venta.saldo || 0;
+    document.getElementById('ev-mixto-efectivo').value = venta.mixtoEfectivo || '';
+    document.getElementById('ev-mixto-transferencia').value = venta.mixtoTransferencia || '';
     previoCOP('ev-precio', 'prev-ev-precio');
     const prevTotal = document.getElementById('prev-ev-total');
     if(prevTotal && venta.total > 0) prevTotal.textContent = '→ ' + fmt(venta.total) + ' COP';
@@ -2961,6 +3056,9 @@ window.guardarEditarVenta = async () => {
     metodoPago: metodoPagoEdit,
     pagado:     Number(document.getElementById('ev-pagado').value)||0,
     saldo:      Number(document.getElementById('ev-saldo').value)||0,
+    // 367. Desglose mixto — null si el método no es mixto
+    mixtoEfectivo: metodoPagoEdit === 'mixto' ? (Number(document.getElementById('ev-mixto-efectivo').value)||0) : null,
+    mixtoTransferencia: metodoPagoEdit === 'mixto' ? (Number(document.getElementById('ev-mixto-transferencia').value)||0) : null,
   };
 
   // Rehabilitamos campos al cerrar
