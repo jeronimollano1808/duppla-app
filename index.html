@@ -845,6 +845,29 @@ body{
   </div>
 </div>
 
+<!-- 411. MODAL: RECORDATORIO DE COBRO POR WHATSAPP -->
+<div class="modal-bg" id="modal-recordatorio">
+  <div class="modal" style="max-width:460px">
+    <div class="modal-header">
+      <span class="modal-title">Recordatorio de cobro</span>
+      <button class="modal-close" onclick="closeModal('modal-recordatorio')">✕</button>
+    </div>
+    <input type="hidden" id="rec-cliente" value="">
+    <div class="f-group">
+      <label class="f-label">WhatsApp del cliente *</label>
+      <input type="text" id="rec-telefono" class="f-input" placeholder="Ej: 3001234567">
+    </div>
+    <div class="f-group">
+      <label class="f-label">Mensaje (puedes editarlo)</label>
+      <textarea id="rec-mensaje" class="f-input" rows="7" style="resize:vertical;font-family:inherit"></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-recordatorio')">Cancelar</button>
+      <button class="btn btn-lime" onclick="enviarRecordatorioWhatsApp()">💬 Abrir WhatsApp</button>
+    </div>
+  </div>
+</div>
+
   </div>
 </div>
 
@@ -5129,12 +5152,26 @@ window.guardarConsumo = async () => {
 function renderDeudores() {
   // --- SECCIÓN A: Deudores externos ---
   // 320. Agrupamos ventas con saldo > 0 por cliente
+  // 404. UMBRAL_MORA_DIAS define cuándo una deuda se considera "en mora" para el recordatorio
+  const HOY_MORA = new Date();
+  const UMBRAL_MORA_DIAS = 8;
   const deudaMap = {};
   DATA.ventas.filter(function(v){ return Number(v.saldo||0) > 0; }).forEach(function(v) {
     const key = v.cliente || 'Sin nombre';
     if(!deudaMap[key]) deudaMap[key] = { cliente:key, ventas:[], total:0 };
     deudaMap[key].ventas.push(v);
     deudaMap[key].total += Number(v.saldo||0);
+  });
+  // 405. Para cada deudor calculamos los días de mora de su venta más antigua pendiente
+  Object.values(deudaMap).forEach(function(d) {
+    let maxDias = 0;
+    d.ventas.forEach(function(v) {
+      if(!v.fecha) return;
+      const dias = Math.floor((HOY_MORA - new Date(v.fecha)) / 86400000);
+      if(dias > maxDias) maxDias = dias;
+    });
+    d.diasMora = maxDias;
+    d.enMora = maxDias >= UMBRAL_MORA_DIAS;
   });
   const deudores = Object.values(deudaMap).sort(function(a,b){ return b.total-a.total; });
 
@@ -5154,16 +5191,27 @@ function renderDeudores() {
             + '<button class="btn btn-xs" style="color:var(--amber);border-color:#FDE68A" onclick="abrirAbono(\'' + v.id + '\')">+ Abono</button>'
           + '</div></div>';
       });
+      // 406. Badge de mora + botón de recordatorio WhatsApp — solo si está en mora
+      const moraBadge = d.enMora
+        ? '<div style="font-size:10px;font-weight:700;color:var(--red);margin-top:3px">⏰ ' + d.diasMora + ' días en mora</div>'
+        : (d.diasMora > 0 ? '<div style="font-size:10px;color:var(--ink-3);margin-top:3px">' + d.diasMora + ' día' + (d.diasMora!==1?'s':'') + ' desde la venta más antigua</div>' : '');
+      const nombreSeg = d.cliente.replace(/'/g,"\\'");
+      const btnRecordatorio = d.enMora
+        ? '<button class="btn btn-sm" style="color:#16A34A;border-color:#BBF7D0;margin-top:8px" onclick="abrirRecordatorioCobro(\'' + nombreSeg + '\')">💬 Generar recordatorio</button>'
+        : '';
       htmlDeudores += '<div class="list-card">'
         + '<div class="list-card-header">'
           + '<div style="display:flex;align-items:center;gap:10px">'
             + '<div class="avatar">' + initials + '</div>'
             + '<div><div class="list-card-title">' + d.cliente + '</div>'
-              + '<div class="list-card-sub">' + d.ventas.length + ' venta(s) pendiente(s)</div></div>'
+              + '<div class="list-card-sub">' + d.ventas.length + ' venta(s) pendiente(s)</div>'
+              + moraBadge
+            + '</div>'
           + '</div>'
           + '<div style="text-align:right">'
             + '<div style="font-size:20px;font-weight:800;color:var(--red)">' + fmt(d.total) + '</div>'
             + '<div style="font-size:11px;color:var(--ink-3)">total pendiente</div>'
+            + btnRecordatorio
           + '</div>'
         + '</div>'
         + '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">' + detalles + '</div>'
@@ -5233,6 +5281,47 @@ window.eliminarConsumo = async (id, prodId, cant) => {
   }
   await deleteDoc(doc(db,'consumos',id));
   toast('✅ Consumo eliminado — stock restaurado');
+};
+
+// ============================================================
+// 407. RECORDATORIO DE COBRO — genera el mensaje de WhatsApp listo
+//      Como el teléfono del cliente no se guarda en la venta (es
+//      texto libre), pedimos el número solo al momento de enviar.
+// ============================================================
+window.abrirRecordatorioCobro = (nombreCliente) => {
+  const ventasCliente = DATA.ventas.filter(v => (v.cliente||'Sin nombre') === nombreCliente && Number(v.saldo||0) > 0);
+  const totalDeuda = ventasCliente.reduce((s,v) => s + Number(v.saldo||0), 0);
+  const HOY_M = new Date();
+  let diasMora = 0;
+  ventasCliente.forEach(v => {
+    if(!v.fecha) return;
+    const d = Math.floor((HOY_M - new Date(v.fecha)) / 86400000);
+    if(d > diasMora) diasMora = d;
+  });
+
+  // 408. Mensaje pre-armado, cordial pero claro — el usuario puede editarlo antes de enviar
+  const productos = ventasCliente.map(v => '- ' + (v.producto||'Producto') + ' (' + fmt(v.saldo) + ')').join('\n');
+  const mensaje = 'Hola ' + nombreCliente.split(' ')[0] + ', ¿cómo estás? Te escribo de DUPPLA para recordarte '
+    + 'amablemente el pago pendiente de ' + fmt(totalDeuda) + (diasMora>0?' (lleva ' + diasMora + ' días)':'') + ':\n\n'
+    + productos + '\n\n'
+    + 'Cualquier inconveniente me cuentas, ¡gracias!';
+
+  document.getElementById('rec-cliente').value = nombreCliente;
+  document.getElementById('rec-telefono').value = '';
+  document.getElementById('rec-mensaje').value = mensaje;
+  openModal('modal-recordatorio');
+};
+
+// 409. Abre WhatsApp Web/App con el mensaje editado y el número ingresado
+window.enviarRecordatorioWhatsApp = () => {
+  let telefono = document.getElementById('rec-telefono').value.trim().replace(/\D/g,'');
+  if(!telefono) { alert('Ingresa el número de WhatsApp del cliente'); return; }
+  // 410. Si el número no incluye código de país, asumimos Colombia (+57)
+  if(telefono.length === 10) telefono = '57' + telefono;
+  const mensaje = document.getElementById('rec-mensaje').value;
+  const url = 'https://wa.me/' + telefono + '?text=' + encodeURIComponent(mensaje);
+  window.open(url, '_blank');
+  closeModal('modal-recordatorio');
 };
 
 // ============================================================
