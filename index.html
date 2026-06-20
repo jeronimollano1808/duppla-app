@@ -1669,6 +1669,46 @@ function numeroALetras(n) {
 // entonces, pero es preferible a no mostrar nada. Solo devolvemos null cuando
 // es imposible saber el costo (venta manual, o producto ya no existe en inventario).
 // ============================================================
+// ============================================================
+// 428. generarTopProductosHtml — genera solo el HTML del ranking de productos
+// Separado de renderDashboard para que el toggle Ingresos/Margen pueda
+// repintar ÚNICAMENTE esta sección sin recalcular todo el dashboard.
+// ============================================================
+function generarTopProductosHtml(pm, ordenarPor) {
+  const top = Object.entries(pm).sort((a,b)=> ordenarPor==='margen' ? b[1].margen-a[1].margen : b[1].total-a[1].total).slice(0,5);
+  const maxT = top.length ? Math.max(...top.map(t=>ordenarPor==='margen'?t[1].margen:t[1].total), 1) : 1;
+  return top.length ? top.map(([n,d],i) => `
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+      <span style="width:20px;height:20px;border-radius:50%;background:var(--surface-3);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--ink-2);flex-shrink:0">${i+1}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12px;font-weight:500;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:4px">${n}</div>
+        <div class="prog"><div class="prog-fill prog-lime" style="width:${Math.max(2,Math.round(((ordenarPor==='margen'?d.margen:d.total)/maxT)*100))}%"></div></div>
+      </div>
+      <div style="text-align:right;white-space:nowrap">
+        <div style="font-size:11px;color:var(--ink-3)">${fmt(d.total)}</div>
+        <div style="font-size:10px;color:${d.sinCosto?'var(--ink-3)':(d.margen>=0?'var(--blue)':'var(--red)')}">${d.sinCosto?'margen N/D':'margen: '+fmt(d.margen)}</div>
+      </div>
+    </div>`).join('')
+    : '<div class="empty-state" style="padding:16px"><div class="empty-state-text">Sin ventas en este período</div></div>';
+}
+
+// 429. Toggle del ranking — usa el pm ya calculado (window._dashPM), NO llama
+//      renderDashboard(), así que es instantáneo sin importar cuántas ventas haya.
+window.setDashRankingPor = (tipo) => {
+  window.dashRankingPor = tipo;
+  const cont = document.getElementById('dash-top-productos');
+  if(cont && window._dashPM) cont.innerHTML = generarTopProductosHtml(window._dashPM, tipo);
+  // Actualizamos el estilo visual de los botones del toggle
+  ['ingresos','margen'].forEach(t => {
+    const btn = document.getElementById('dash-rank-btn-'+t);
+    if(!btn) return;
+    const activo = t === tipo;
+    btn.style.background = activo ? 'var(--ink)' : 'transparent';
+    btn.style.color = activo ? '#fff' : 'var(--ink-3)';
+    btn.style.borderColor = activo ? 'var(--ink)' : 'var(--border)';
+  });
+};
+
 function calcularMargenVenta(v) {
   // Venta múltiple: sumamos el margen de cada línea, con fallback por línea
   if(v.esMultiple && v.productosVenta?.length) {
@@ -2330,22 +2370,12 @@ function renderDashboard() {
     if(margenV !== null) pm[v.producto].margen += margenV;
     else pm[v.producto].sinCosto = true;
   });
+  // 427. FIX RENDIMIENTO: guardamos pm calculado en una variable global para
+  //      que el toggle Ingresos/Margen pueda reordenar y repintar SOLO el
+  //      ranking, sin recalcular ventas/canales/caja/rentabilidad del dashboard.
+  window._dashPM = pm;
   const ordenarPor = window.dashRankingPor || 'ingresos';
-  const top = Object.entries(pm).sort((a,b)=> ordenarPor==='margen' ? b[1].margen-a[1].margen : b[1].total-a[1].total).slice(0,5);
-  const maxT = top.length ? Math.max(...top.map(t=>ordenarPor==='margen'?t[1].margen:t[1].total), 1) : 1;
-  const topHtml = top.length ? top.map(([n,d],i) => `
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-      <span style="width:20px;height:20px;border-radius:50%;background:var(--surface-3);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--ink-2);flex-shrink:0">${i+1}</span>
-      <div style="flex:1;min-width:0">
-        <div style="font-size:12px;font-weight:500;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:4px">${n}</div>
-        <div class="prog"><div class="prog-fill prog-lime" style="width:${Math.max(2,Math.round(((ordenarPor==='margen'?d.margen:d.total)/maxT)*100))}%"></div></div>
-      </div>
-      <div style="text-align:right;white-space:nowrap">
-        <div style="font-size:11px;color:var(--ink-3)">${fmt(d.total)}</div>
-        <div style="font-size:10px;color:${d.sinCosto?'var(--ink-3)':(d.margen>=0?'var(--blue)':'var(--red)')}">${d.sinCosto?'margen N/D':'margen: '+fmt(d.margen)}</div>
-      </div>
-    </div>`).join('')
-    : '<div class="empty-state" style="padding:16px"><div class="empty-state-text">Sin ventas en este período</div></div>';
+  const topHtml = generarTopProductosHtml(pm, ordenarPor);
 
   // Meta del mes
   const mesActual = new Date().toISOString().slice(0,7);
@@ -2441,15 +2471,15 @@ function renderDashboard() {
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
           <div class="card-title" style="margin:0">Top productos — ${label}</div>
-          <!-- 374. Toggle para rankear por ingresos o por margen real -->
+          <!-- 374. Toggle para rankear por ingresos o por margen real — repinta solo el ranking -->
           <div style="display:flex;gap:4px">
-            <button onclick="window.dashRankingPor='ingresos';renderDashboard()"
+            <button id="dash-rank-btn-ingresos" onclick="setDashRankingPor('ingresos')"
               style="padding:3px 9px;border-radius:14px;border:1px solid ${ordenarPor==='ingresos'?'var(--ink)':'var(--border)'};background:${ordenarPor==='ingresos'?'var(--ink)':'transparent'};color:${ordenarPor==='ingresos'?'#fff':'var(--ink-3)'};font-size:10px;font-weight:600;cursor:pointer">Ingresos</button>
-            <button onclick="window.dashRankingPor='margen';renderDashboard()"
+            <button id="dash-rank-btn-margen" onclick="setDashRankingPor('margen')"
               style="padding:3px 9px;border-radius:14px;border:1px solid ${ordenarPor==='margen'?'var(--ink)':'var(--border)'};background:${ordenarPor==='margen'?'var(--ink)':'transparent'};color:${ordenarPor==='margen'?'#fff':'var(--ink-3)'};font-size:10px;font-weight:600;cursor:pointer">Margen</button>
           </div>
         </div>
-        ${topHtml}
+        <div id="dash-top-productos">${topHtml}</div>
       </div>
     </div>
     <div class="card">
