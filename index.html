@@ -868,6 +868,24 @@ body{
   </div>
 </div>
 
+<!-- 419. MODAL: CIERRE DE MES / CORTE CONTABLE -->
+<div class="modal-bg" id="modal-cierre-mes">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-header">
+      <span class="modal-title">Cerrar el mes actual</span>
+      <button class="modal-close" onclick="closeModal('modal-cierre-mes')">✕</button>
+    </div>
+    <div style="background:var(--amber-bg);border:1px solid #FDE68A;border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#92400E">
+      ⚠️ Esta acción guarda una foto fija de las cifras del mes. No se puede deshacer ni recalcular automáticamente después.
+    </div>
+    <div id="cierre-mes-preview" style="margin-bottom:14px"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-cierre-mes')">Cancelar</button>
+      <button class="btn btn-lime" onclick="confirmarCierreMes()">🔒 Confirmar cierre</button>
+    </div>
+  </div>
+</div>
+
   </div>
 </div>
 
@@ -1570,7 +1588,8 @@ let DATA = {
   proveedores:[], pedidos:[], metas:[],
   notificaciones:[], combos:[],
   consumos:[],
-  distribuidores:[]  // 326. distribuidores: gimnasios y distribuidores vinculados
+  distribuidores:[],  // 326. distribuidores: gimnasios y distribuidores vinculados
+  cierres:[]  // 415. cierres: snapshots mensuales inmutables (corte contable)
 };
 let currentPage = 'dashboard';  // Página activa
 let ajusteProductoId = null;    // ID del producto que se está ajustando
@@ -1777,7 +1796,7 @@ document.getElementById('li-pass')?.addEventListener('keydown', e => {
 // Cada cambio en Firebase actualiza DATA y redibuja la página
 // ============================================================
 function startListeners() {
-  const cols = ['ventas','inventario','gastos','proveedores','pedidos','metas','combos','consumos','distribuidores'];
+  const cols = ['ventas','inventario','gastos','proveedores','pedidos','metas','combos','consumos','distribuidores','cierres'];
   cols.forEach(col => {
     const q = query(collection(db, col), orderBy('createdAt','desc'));
     onSnapshot(q, snap => {
@@ -4560,14 +4579,47 @@ function renderMetas() {
     </div>`;
   }).join('');
 
+  // 416. CIERRE DE MES — historial de snapshots ya generados, más reciente primero
+  const mesActualStr = hoy.toISOString().slice(0,7);
+  const cierresOrd = [...DATA.cierres].sort((a,b) => b.mes > a.mes ? 1 : -1);
+  const yaExisteCierreMesActual = cierresOrd.some(c => c.mes === mesActualStr);
+
+  let cierresHtml = '';
+  if(cierresOrd.length === 0) {
+    cierresHtml = '<div class="empty-state" style="padding:20px"><div class="empty-state-text">Sin cierres generados aún</div></div>';
+  } else {
+    cierresOrd.forEach(c => {
+      const [ca,cm] = (c.mes||'').split('-');
+      const utilidadC = Number(c.ingresos||0) - Number(c.gastos||0);
+      cierresHtml += '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">'
+        + '<div>'
+          + '<div style="font-size:13px;font-weight:600;color:var(--ink)">' + (MESES[parseInt(cm)]||c.mes) + ' ' + ca + '</div>'
+          + '<div style="font-size:11px;color:var(--ink-3)">Cerrado el ' + (c.fechaCierre||'') + ' · ' + (c.numVentas||0) + ' ventas</div>'
+        + '</div>'
+        + '<div style="text-align:right">'
+          + '<div style="font-size:13px;font-weight:700;color:' + (utilidadC>=0?'var(--green)':'var(--red)') + '">' + fmt(utilidadC) + '</div>'
+          + '<div style="font-size:10px;color:var(--ink-3)">utilidad neta</div>'
+        + '</div>'
+      + '</div>';
+    });
+  }
+
   document.getElementById('page-metas').innerHTML = `
     <div class="page-header">
       <div><div class="page-title">Metas y presupuesto</div></div>
       <button class="btn btn-lime btn-sm" onclick="openModal('modal-meta')">+ Nueva meta</button>
     </div>
     ${DATA.metas.length ?
-      `<div class="list-cards">${cards}</div>`
-      : `<div class="card"><div class="empty-state"><div class="empty-state-icon">🎯</div><div class="empty-state-text">Sin metas configuradas</div><div class="empty-state-sub">Crea tu primera meta mensual</div></div></div>`}`;
+      `<div class="list-cards" style="margin-bottom:24px">${cards}</div>`
+      : `<div class="card" style="margin-bottom:24px"><div class="empty-state"><div class="empty-state-icon">🎯</div><div class="empty-state-text">Sin metas configuradas</div><div class="empty-state-sub">Crea tu primera meta mensual</div></div></div>`}
+    <!-- 417. Sección de cierre de mes / corte contable -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:700;color:var(--ink);text-transform:uppercase;letter-spacing:.04em">📁 Cierre de mes</div>
+      <button class="btn btn-sm ${yaExisteCierreMesActual?'':'btn-lime'}" onclick="abrirCierreMes()" ${yaExisteCierreMesActual?'disabled style="opacity:.5;cursor:not-allowed"':''}>
+        ${yaExisteCierreMesActual ? '✅ Mes actual ya cerrado' : '🔒 Cerrar mes actual'}
+      </button>
+    </div>
+    <div class="card">${cierresHtml}</div>`;
 }
 
 window.guardarMeta = async () => {
@@ -4581,6 +4633,54 @@ window.guardarMeta = async () => {
     createdAt:serverTimestamp()
   });
   closeModal('modal-meta');
+};
+
+// ============================================================
+// 418. CIERRE DE MES — snapshot inmutable para comparar mes contra mes
+// Una vez generado, el cierre NO se recalcula automáticamente aunque
+// se editen ventas viejas — es una "foto" congelada del momento del corte.
+// ============================================================
+window.abrirCierreMes = () => {
+  const hoy = new Date();
+  const mesActual = hoy.toISOString().slice(0,7);
+  const ventasMes = DATA.ventas.filter(v => v.fecha?.slice(0,7) === mesActual);
+  const gastosMes = DATA.gastos.filter(g => g.fecha?.slice(0,7) === mesActual);
+  const ingresos = ventasMes.reduce((s,v)=>s+Number(v.total||0),0);
+  const gastosTotal = gastosMes.reduce((s,g)=>s+Number(g.valor||0),0);
+  let margenTotal = 0;
+  ventasMes.forEach(v => { const m = calcularMargenVenta(v); if(m!==null) margenTotal += m; });
+  const inventarioValorizado = DATA.inventario.reduce((s,p)=>s+(Number(p.costo||0)*Number(p.stock||0)),0);
+
+  document.getElementById('cierre-mes-preview').innerHTML =
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:12px">'
+    + '<div>Ingresos: <strong>' + fmt(ingresos) + '</strong></div>'
+    + '<div>Gastos: <strong>' + fmt(gastosTotal) + '</strong></div>'
+    + '<div>Utilidad neta: <strong>' + fmt(ingresos-gastosTotal) + '</strong></div>'
+    + '<div>Margen real: <strong>' + fmt(margenTotal) + '</strong></div>'
+    + '<div>Ventas: <strong>' + ventasMes.length + '</strong></div>'
+    + '<div>Inventario valorizado: <strong>' + fmt(inventarioValorizado) + '</strong></div>'
+    + '</div>';
+
+  // Guardamos los valores calculados para usarlos al confirmar, sin recalcular dos veces
+  window._cierrePendiente = { mes: mesActual, ingresos, gastos: gastosTotal, margen: margenTotal, numVentas: ventasMes.length, inventarioValorizado };
+  openModal('modal-cierre-mes');
+};
+
+window.confirmarCierreMes = async () => {
+  const c = window._cierrePendiente;
+  if(!c) { alert('Error al preparar el cierre. Intenta de nuevo.'); return; }
+  await addDoc(collection(db,'cierres'), {
+    mes: c.mes,
+    ingresos: c.ingresos,
+    gastos: c.gastos,
+    margen: c.margen,
+    numVentas: c.numVentas,
+    inventarioValorizado: c.inventarioValorizado,
+    fechaCierre: today(),
+    createdAt: serverTimestamp()
+  });
+  closeModal('modal-cierre-mes');
+  toast('✅ Mes cerrado correctamente — snapshot guardado');
 };
 
 // ============================================================
