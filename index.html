@@ -2299,7 +2299,8 @@ function renderDashboard() {
         <div class="page-title">Dashboard</div>
         <div class="page-sub" style="font-weight:500;color:var(--ink-2)">${label}</div>
       </div>
-      <button class="btn btn-sm" onclick="exportarReporte()">↓ Exportar reporte</button>
+      <button class="btn btn-sm" onclick="exportarReporte()">↓ CSV</button>
+      <button class="btn btn-sm" onclick="exportarReportePDF()">↓ PDF</button>
     </div>
     ${alertHtml}
     ${filtroHtml}
@@ -3398,6 +3399,134 @@ window.exportarCSV = () => {
   a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));
   a.download = `DUPPLA_Ventas_${today()}.csv`;
   a.click();
+};
+
+// ============================================================
+// 400. REPORTE MENSUAL EN PDF — versión presentable del reporte
+// Usa la misma fuente de datos que exportarReporte (CSV) pero con
+// formato visual: resumen, top productos por margen, y cartera.
+// ============================================================
+window.exportarReportePDF = () => {
+  const { label, inicio, fin } = getPeriodoFechas();
+  const pv = DATA.ventas.filter(v => v.fecha >= inicio && v.fecha <= fin);
+  const pg = DATA.gastos.filter(g => g.fecha >= inicio && g.fecha <= fin);
+
+  const tv = pv.reduce((s,v)=>s+Number(v.total||0),0);
+  const tg = pg.reduce((s,g)=>s+Number(g.valor||0),0);
+  const cartera = pv.reduce((s,v)=>s+Number(v.saldo||0),0);
+
+  // 401. Margen real del período — reutilizamos calcularMargenVenta()
+  let margenTotal = 0;
+  pv.forEach(v => { const m = calcularMargenVenta(v); if(m !== null) margenTotal += m; });
+
+  // 402. Top 5 productos por ingresos (reutilizamos la misma lógica de agrupación que el dashboard)
+  const pm = {};
+  pv.forEach(v => {
+    if(v.esMultiple && v.productosVenta) {
+      v.productosVenta.forEach(p => {
+        if(!pm[p.nombre]) pm[p.nombre] = {cant:0,total:0};
+        pm[p.nombre].cant += Number(p.cant||0);
+        pm[p.nombre].total += Number(p.precio||0)*Number(p.cant||0);
+      });
+    } else {
+      if(!pm[v.producto]) pm[v.producto] = {cant:0,total:0};
+      pm[v.producto].cant += Number(v.cant||0);
+      pm[v.producto].total += Number(v.total||0);
+    }
+  });
+  const top5 = Object.entries(pm).sort((a,b)=>b[1].total-a[1].total).slice(0,5);
+
+  // 403. Construcción del PDF
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit:'mm', format:'letter' });
+  const pageW = doc.internal.pageSize.getWidth();
+  const margin = 18;
+  let y = 22;
+
+  // Encabezado de marca
+  doc.setFillColor(200,224,90); doc.rect(0,0,pageW,12,'F');
+  doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.setTextColor(15,17,23);
+  doc.text('DUPPLA', margin, 8.5);
+  doc.setTextColor(0,0,0);
+  y = 22;
+
+  doc.setFont('helvetica','bold'); doc.setFontSize(16);
+  doc.text('Reporte mensual', margin, y); y += 7;
+  doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.setTextColor(100);
+  doc.text(label, margin, y); doc.setTextColor(0); y += 12;
+
+  // Resumen financiero en tabla de 2 columnas
+  doc.setFont('helvetica','bold'); doc.setFontSize(11);
+  doc.text('Resumen financiero', margin, y); y += 7;
+  doc.setDrawColor(220); doc.setLineWidth(0.2);
+  doc.line(margin, y, pageW-margin, y); y += 7;
+
+  const resumenFilas = [
+    ['Ingresos totales', fmt(tv)],
+    ['Gastos totales', fmt(tg)],
+    ['Utilidad neta', fmt(tv-tg)],
+    ['Margen real (ventas con costo)', fmt(margenTotal)],
+    ['Ventas realizadas', String(pv.length)],
+    ['Cartera pendiente (por cobrar)', fmt(cartera)],
+  ];
+  doc.setFont('helvetica','normal'); doc.setFontSize(10);
+  resumenFilas.forEach(([label2,val]) => {
+    doc.text(label2, margin, y);
+    doc.setFont('helvetica','bold');
+    doc.text(val, pageW-margin, y, { align:'right' });
+    doc.setFont('helvetica','normal');
+    y += 7;
+  });
+  y += 6;
+
+  // Top productos
+  doc.setFont('helvetica','bold'); doc.setFontSize(11);
+  doc.text('Top 5 productos del período', margin, y); y += 7;
+  doc.line(margin, y, pageW-margin, y); y += 6;
+  doc.setFontSize(9);
+  doc.text('Producto', margin, y);
+  doc.text('Cant.', pageW-margin-40, y, { align:'right' });
+  doc.text('Total', pageW-margin, y, { align:'right' });
+  y += 5;
+  doc.setFont('helvetica','normal');
+  if(top5.length === 0) {
+    doc.text('Sin ventas en este período.', margin, y); y += 6;
+  } else {
+    top5.forEach(([nombre,d]) => {
+      const nombreCorto = nombre.length > 45 ? nombre.slice(0,45)+'…' : nombre;
+      doc.text(nombreCorto, margin, y);
+      doc.text(String(d.cant), pageW-margin-40, y, { align:'right' });
+      doc.text(fmt(d.total), pageW-margin, y, { align:'right' });
+      y += 6;
+    });
+  }
+  y += 6;
+
+  // Cartera pendiente — detalle por cliente
+  if(cartera > 0) {
+    doc.setFont('helvetica','bold'); doc.setFontSize(11);
+    doc.text('Cartera pendiente por cobrar', margin, y); y += 7;
+    doc.line(margin, y, pageW-margin, y); y += 6;
+    doc.setFont('helvetica','normal'); doc.setFontSize(9);
+    const deudaPorCliente = {};
+    pv.filter(v=>Number(v.saldo||0)>0).forEach(v => {
+      const key = v.cliente || 'Sin nombre';
+      deudaPorCliente[key] = (deudaPorCliente[key]||0) + Number(v.saldo||0);
+    });
+    Object.entries(deudaPorCliente).sort((a,b)=>b[1]-a[1]).forEach(([cliente,monto]) => {
+      doc.text(cliente, margin, y);
+      doc.text(fmt(monto), pageW-margin, y, { align:'right' });
+      y += 6;
+    });
+  }
+
+  // Pie de página
+  doc.setFontSize(8); doc.setTextColor(150);
+  doc.text('Generado automáticamente por DUPPLA · ' + new Date().toLocaleDateString('es-CO'), margin, 280);
+
+  const nombreArchivo = 'DUPPLA_Reporte_' + inicio + '_' + fin + '.pdf';
+  doc.save(nombreArchivo);
+  toast('✅ Reporte PDF generado');
 };
 
 // ============================================================
