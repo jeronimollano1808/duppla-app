@@ -2202,6 +2202,31 @@ function renderDashboard() {
       <div class="bar-lbl">${cNames[k]}</div>
     </div>`).join('');
 
+  // 414. RENTABILIDAD POR CANAL — margen real (no solo volumen) de Web/Directo/Distribuidor
+  //      Responde: ¿cuál canal deja más plata realmente, no solo cuál mueve más dinero?
+  const canalesMargen = { web:0, directo:0, distribuidor:0 };
+  const canalesConCosto = { web:false, directo:false, distribuidor:false };
+  pv.forEach(v => {
+    if(canalesMargen[v.canal]===undefined) return;
+    const m = calcularMargenVenta(v);
+    if(m !== null) { canalesMargen[v.canal] += m; canalesConCosto[v.canal] = true; }
+  });
+  const canalRentabilidadHtml = Object.entries(canales).map(([k,ingreso]) => {
+    if(ingreso === 0) return '';
+    const margenK = canalesMargen[k];
+    const pctMargenK = ingreso > 0 ? Math.round((margenK/ingreso)*100) : 0;
+    return `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)">
+      <span style="font-size:12px;font-weight:500;color:var(--ink)">${cNames[k]}</span>
+      <div style="text-align:right">
+        <span style="font-size:12px;color:var(--ink-3)">${fmt(ingreso)} ingreso</span>
+        <span style="font-size:12px;font-weight:700;color:${margenK>=0?'var(--green)':'var(--red)'};margin-left:8px">
+          ${canalesConCosto[k] ? fmt(margenK) + ' margen (' + pctMargenK + '%)' : 'margen N/D'}
+        </span>
+      </div>
+    </div>`;
+  }).join('') || '<div style="padding:10px;color:var(--ink-3);font-size:12px;text-align:center">Sin ventas en este período</div>';
+
   // 383. FLUJO DE CAJA — cuánto entró en efectivo vs. transferencia en el período
   //      Tomamos el pago inicial de cada venta del período (campo 'pagado'),
   //      más cualquier abono fechado dentro del período (puede ser de una venta
@@ -2368,6 +2393,10 @@ function renderDashboard() {
       <div class="card">
         <div class="card-title">Flujo de caja — ${label}</div>
         ${cajaHtml}
+      </div>
+      <div class="card">
+        <div class="card-title">Rentabilidad por canal — ${label}</div>
+        ${canalRentabilidadHtml}
       </div>
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
