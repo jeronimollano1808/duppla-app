@@ -6,6 +6,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>DUPPLA</title>
+<!-- 386. jsPDF para generar cuentas de cobro PDF directamente en el navegador -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
 /* ============================================================
    253. FUENTES — Inter desde Google Fonts
@@ -806,6 +808,43 @@ body{
   </div>
 </div>
 
+<!-- 394. MODAL: GENERAR CUENTA DE COBRO PDF -->
+<div class="modal-bg" id="modal-cuenta-cobro">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-header">
+      <span class="modal-title">Cuenta de cobro</span>
+      <button class="modal-close" onclick="closeModal('modal-cuenta-cobro')">✕</button>
+    </div>
+    <input type="hidden" id="cdc-dist-id" value="">
+    <div style="background:var(--amber-bg);border:1px solid #FDE68A;border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#92400E">
+      Total a cobrar: <strong id="cdc-total-preview"></strong>
+    </div>
+    <div class="f-group">
+      <label class="f-label">Nombre del negocio / gimnasio *</label>
+      <input type="text" id="cdc-nombre-negocio" class="f-input">
+    </div>
+    <div class="f-row">
+      <div class="f-group">
+        <label class="f-label">Persona responsable</label>
+        <input type="text" id="cdc-responsable" class="f-input" placeholder="Opcional">
+      </div>
+      <div class="f-group">
+        <label class="f-label">NIT / CC</label>
+        <input type="text" id="cdc-nit" class="f-input" placeholder="Opcional">
+      </div>
+    </div>
+    <div class="f-group">
+      <label class="f-label">Cuenta para consignar</label>
+      <input type="text" id="cdc-cuenta" class="f-input" placeholder="Ej: de Ahorros Bancolombia 16159529766">
+      <div style="font-size:11px;color:var(--ink-3);margin-top:3px">Se recuerda automáticamente la próxima vez</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-cuenta-cobro')">Cancelar</button>
+      <button class="btn btn-lime" onclick="confirmarGenerarCuentaCobro()">↓ Generar PDF</button>
+    </div>
+  </div>
+</div>
+
   </div>
 </div>
 
@@ -1521,10 +1560,63 @@ let ajusteProductoId = null;    // ID del producto que se está ajustando
 // 98. fmt formatea números como pesos colombianos con separador de miles
 //     Ejemplos: 110000 → $110.000 | 1500000 → $1.500.000
 //     toLocaleString('es-CO') usa el formato colombiano: punto para miles, coma para decimales
+// ============================================================
 const fmt = n => '$' + Number(n||0).toLocaleString('es-CO');
 
 // ============================================================
-// 365. MARGEN REAL POR VENTA — fuente única de verdad
+// 385. NÚMERO A LETRAS (pesos colombianos) — para cuentas de cobro
+// Convierte 503000 -> "QUINIENTOS TRES MIL PESOS"
+// Cubre el rango típico de ventas de Duppla (hasta cientos de millones)
+// ============================================================
+function numeroALetras(n) {
+  n = Math.round(Number(n)||0);
+  if(n === 0) return 'CERO PESOS';
+
+  const UNIDADES = ['','UNO','DOS','TRES','CUATRO','CINCO','SEIS','SIETE','OCHO','NUEVE'];
+  const DECENAS = ['','DIEZ','VEINTE','TREINTA','CUARENTA','CINCUENTA','SESENTA','SETENTA','OCHENTA','NOVENTA'];
+  const ESPECIALES = {11:'ONCE',12:'DOCE',13:'TRECE',14:'CATORCE',15:'QUINCE',16:'DIECISÉIS',17:'DIECISIETE',18:'DIECIOCHO',19:'DIECINUEVE',21:'VEINTIUNO'};
+  const CENTENAS = ['','CIENTO','DOSCIENTOS','TRESCIENTOS','CUATROCIENTOS','QUINIENTOS','SEISCIENTOS','SETECIENTOS','OCHOCIENTOS','NOVECIENTOS'];
+
+  function trescientos(num) {
+    if(num === 0) return '';
+    if(num === 100) return 'CIEN';
+    let c = Math.floor(num/100), r = num%100, out = '';
+    if(c>0) out += CENTENAS[c] + ' ';
+    if(r > 0) {
+      if(ESPECIALES[r]) { out += ESPECIALES[r]; }
+      else {
+        let d = Math.floor(r/10), u = r%10;
+        if(d===1 && u>0) out += ESPECIALES[10+u] || ('DIEZ Y ' + UNIDADES[u]);
+        else if(d===2 && u>0) out += 'VEINTI' + UNIDADES[u];
+        else { out += DECENAS[d]; if(u>0) out += (d>0?' Y ':'') + UNIDADES[u]; }
+      }
+    }
+    return out.trim();
+  }
+
+  function grupoDeTresLetras(num, singular, plural) {
+    if(num === 0) return '';
+    if(num === 1) return singular;
+    // 395. "VEINTIUNO" se acorta a "VEINTIUN" cuando antecede a MIL/MILLONES
+    let texto = trescientos(num);
+    if(texto === 'VEINTIUNO') texto = 'VEINTIUN';
+    if(texto.endsWith(' UNO')) texto = texto.slice(0,-1);
+    return texto + ' ' + plural;
+  }
+
+  const millones = Math.floor(n / 1000000);
+  const miles = Math.floor((n % 1000000) / 1000);
+  const resto = n % 1000;
+
+  let partes = [];
+  if(millones > 0) partes.push(grupoDeTresLetras(millones, 'UN MILLÓN', 'MILLONES'));
+  if(miles > 0) partes.push(grupoDeTresLetras(miles, 'MIL', 'MIL'));
+  if(resto > 0) partes.push(trescientos(resto));
+
+  return (partes.join(' ').trim() || 'CERO') + ' PESOS';
+}
+
+
 // Calcula la ganancia (precio - costo histórico) de cualquier venta
 // independientemente de si es normal, manual, múltiple o combo.
 // Devuelve null si no hay costo conocido (ventas manuales o
@@ -4960,6 +5052,147 @@ window.eliminarDistribuidor = async (id) => {
   toast('✅ Distribuidor eliminado');
 };
 
+// ============================================================
+// 387. CUENTA DE COBRO PDF — solo el saldo pendiente de un distribuidor
+// Replica el formato colombiano de referencia: encabezado, DEBE A,
+// suma en letras, tabla de productos pendientes, datos de consignación.
+// ============================================================
+window.generarCuentaDeCobro = (distribuidorId) => {
+  const d = DATA.distribuidores.find(x => x.id === distribuidorId);
+  if(!d) { alert('Distribuidor no encontrado'); return; }
+
+  // 388. Solo incluimos las VENTAS con saldo pendiente — esto es un cobro, no un historial completo
+  const pendientes = DATA.ventas.filter(v => v.distribuidorId === distribuidorId && Number(v.saldo||0) > 0);
+  if(pendientes.length === 0) { alert(d.nombre + ' no tiene saldo pendiente. No hay nada que cobrar.'); return; }
+
+  const totalCobro = pendientes.reduce((s,v) => s + Number(v.saldo||0), 0);
+
+  // 389. Abrimos modal para confirmar/completar datos fiscales antes de generar el PDF
+  //      (NIT/CC del distribuidor y cuenta bancaria pueden no estar siempre registrados)
+  document.getElementById('cdc-dist-id').value = distribuidorId;
+  document.getElementById('cdc-nombre-negocio').value = d.nombre || '';
+  document.getElementById('cdc-responsable').value = '';
+  document.getElementById('cdc-nit').value = '';
+  document.getElementById('cdc-cuenta').value = localStorage.getItem('duppla_cuenta_bancaria') || '';
+  document.getElementById('cdc-total-preview').textContent = fmt(totalCobro) + ' (' + pendientes.length + ' venta(s) pendiente(s))';
+  openModal('modal-cuenta-cobro');
+};
+
+// 390. Confirmar datos y disparar la generación real del PDF con jsPDF
+window.confirmarGenerarCuentaCobro = () => {
+  const distribuidorId = document.getElementById('cdc-dist-id').value;
+  const d = DATA.distribuidores.find(x => x.id === distribuidorId);
+  const nombreNegocio = document.getElementById('cdc-nombre-negocio').value.trim();
+  const responsable = document.getElementById('cdc-responsable').value.trim();
+  const nit = document.getElementById('cdc-nit').value.trim();
+  const cuenta = document.getElementById('cdc-cuenta').value.trim();
+
+  if(!nombreNegocio) { alert('El nombre del negocio es obligatorio'); return; }
+
+  // Guardamos la cuenta bancaria para no repetirla cada vez
+  if(cuenta) localStorage.setItem('duppla_cuenta_bancaria', cuenta);
+
+  const pendientes = DATA.ventas.filter(v => v.distribuidorId === distribuidorId && Number(v.saldo||0) > 0);
+  const totalCobro = pendientes.reduce((s,v) => s + Number(v.saldo||0), 0);
+
+  // 391. Construcción del PDF con jsPDF — tamaño carta, replicando el formato de referencia
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'mm', format: 'letter' });
+  const pageW = doc.internal.pageSize.getWidth();
+  const margin = 20;
+  let y = 25;
+
+  // Fecha en español
+  const fechaHoy = new Date();
+  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const fechaTexto = 'Guarne, ' + fechaHoy.getDate() + ' ' + meses[fechaHoy.getMonth()] + ' ' + fechaHoy.getFullYear() + '.';
+
+  doc.setFont('helvetica','normal'); doc.setFontSize(10);
+  doc.text(fechaTexto, pageW - margin, y, { align: 'right' });
+  y += 12;
+
+  doc.setFont('helvetica','bold'); doc.setFontSize(16);
+  doc.text('CUENTA DE COBRO', pageW/2, y, { align: 'center' });
+  y += 12;
+
+  doc.setFont('helvetica','normal'); doc.setFontSize(11);
+  doc.text(nombreNegocio.toUpperCase(), pageW/2, y, { align: 'center' }); y += 6;
+  if(responsable) { doc.text(responsable.toUpperCase(), pageW/2, y, { align: 'center' }); y += 6; }
+  if(nit) { doc.text('NIT: ' + nit, pageW/2, y, { align: 'center' }); y += 6; }
+  y += 8;
+
+  doc.setFont('helvetica','bold'); doc.setFontSize(11);
+  doc.text('DEBE A:', pageW/2, y, { align: 'center' }); y += 6;
+  doc.setFont('helvetica','normal');
+  doc.text('JERÓNIMO ARROYAVE LLANO', pageW/2, y, { align: 'center' }); y += 6;
+  doc.text('CC 1.193.237.401', pageW/2, y, { align: 'center' }); y += 12;
+
+  doc.setFont('helvetica','bold'); doc.setFontSize(10);
+  doc.text('La suma de:', margin, y);
+  doc.setFont('helvetica','normal');
+  const sumaTexto = numeroALetras(totalCobro) + ' (' + fmt(totalCobro) + ').';
+  doc.text(sumaTexto, margin + 25, y);
+  y += 10;
+
+  doc.setFont('helvetica','bold');
+  doc.text('Por concepto de:', margin, y);
+  doc.setFont('helvetica','normal');
+  doc.text('Venta de suplementos como se detalla a continuación:', margin + 38, y);
+  y += 10;
+
+  // 392. Tabla de productos pendientes — una fila por venta con saldo
+  const colX = [margin, margin+25, margin+95, margin+135, pageW-margin];
+  doc.setFont('helvetica','bold'); doc.setFontSize(9);
+  doc.setDrawColor(0); doc.setLineWidth(0.3);
+  doc.line(margin, y, pageW-margin, y); y += 5;
+  doc.text('Cantidad', colX[0], y);
+  doc.text('Producto', colX[1], y);
+  doc.text('Saldo pendiente', colX[3], y, { align: 'right' });
+  y += 2;
+  doc.line(margin, y, pageW-margin, y); y += 6;
+
+  doc.setFont('helvetica','normal');
+  pendientes.forEach(v => {
+    doc.text(String(v.cant||1), colX[0], y);
+    const nombreProd = (v.producto||'').length > 38 ? v.producto.slice(0,38)+'…' : (v.producto||'');
+    doc.text(nombreProd, colX[1], y);
+    doc.text(fmt(v.saldo), colX[3], y, { align: 'right' });
+    y += 6;
+  });
+  y += 2;
+  doc.line(margin, y, pageW-margin, y); y += 6;
+  doc.setFont('helvetica','bold');
+  doc.text('Total', colX[1], y);
+  doc.text(fmt(totalCobro), colX[3], y, { align: 'right' });
+  y += 14;
+
+  doc.setFont('helvetica','normal'); doc.setFontSize(10);
+  if(cuenta) {
+    doc.text('Favor consignar en la cuenta ' + cuenta, margin, y);
+    y += 14;
+  }
+
+  doc.text('Cordialmente,', margin, y); y += 22;
+  doc.setFont('helvetica','bold');
+  doc.text('JERÓNIMO ARROYAVE LLANO', margin, y); y += 5;
+  doc.setFont('helvetica','normal');
+  doc.text('CC 1.193.237.401', margin, y); y += 14;
+
+  // 393. Nota legal fija de retención en la fuente — texto reutilizable del formato original
+  doc.setFontSize(7.5);
+  const notaLegal = 'Con el fin de determinar el procedimiento y tarifa de retención en la fuente aplicable a los pagos y abonos en '
+    + 'cuenta certifico que en mi declaración de renta mis ingresos serán depurados en la cédula de rentas de trabajo '
+    + 'tomando el beneficio del 25% de renta exenta y no descontaré costos y gastos - artículo 103 E.T (rete fuente art 383 E.T)';
+  const notaLines = doc.splitTextToSize(notaLegal, pageW - margin*2);
+  doc.text(notaLines, margin, y);
+
+  const nombreArchivo = 'CuentaCobro_' + nombreNegocio.replace(/[^a-zA-Z0-9]/g,'_') + '_' + fechaHoy.toISOString().slice(0,10) + '.pdf';
+  doc.save(nombreArchivo);
+
+  closeModal('modal-cuenta-cobro');
+  toast('✅ Cuenta de cobro generada: ' + nombreArchivo);
+};
+
 let distDetalleId = null;
 window.verDetalleDistribuidor = (id) => {
   distDetalleId = distDetalleId === id ? null : id;
@@ -5110,6 +5343,7 @@ function renderDistribuidores() {
             + (isOpen?'▲ Ocultar':'▼ Ver historial ('+d.ventas.length+')') + '</button>'
           + '<button class="btn btn-sm" onclick="editarDistribuidor(\'' + d.id + '\')">✏️ Editar</button>'
           + '<button class="btn btn-sm btn-danger" onclick="eliminarDistribuidor(\'' + d.id + '\')">✕</button>'
+        + (d.saldoPendiente > 0 ? '<button class="btn btn-sm" style="color:var(--blue);border-color:#BFDBFE" onclick="generarCuentaDeCobro(\'' + d.id + '\')">📄 Cuenta de cobro</button>' : '')
         + '</div>'
         + (isOpen ? historialHtml : '')
       + '</div>';
