@@ -2087,6 +2087,47 @@ function renderDashboard() {
       <div class="bar-lbl">${cNames[k]}</div>
     </div>`).join('');
 
+  // 383. FLUJO DE CAJA — cuánto entró en efectivo vs. transferencia en el período
+  //      Tomamos el pago inicial de cada venta del período (campo 'pagado'),
+  //      más cualquier abono fechado dentro del período (puede ser de una venta
+  //      de un período anterior que se está cobrando ahora).
+  let cajaEfectivo = 0, cajaTransferencia = 0;
+  pv.forEach(v => {
+    const pagadoV = Number(v.pagado||0);
+    if(pagadoV > 0) {
+      if(v.metodoPago === 'mixto') {
+        cajaEfectivo += Number(v.mixtoEfectivo||0);
+        cajaTransferencia += Number(v.mixtoTransferencia||0);
+      } else if(v.metodoPago === 'transferencia') {
+        cajaTransferencia += pagadoV;
+      } else {
+        cajaEfectivo += pagadoV;
+      }
+    }
+  });
+  // 384. Abonos fechados dentro del período, vengan de cualquier venta (incluso de períodos anteriores)
+  DATA.ventas.forEach(v => {
+    (v.abonos||[]).forEach(a => {
+      if(!a.fecha || a.fecha < inicio || a.fecha > fin) return;
+      if(a.metodoPago === 'transferencia') cajaTransferencia += Number(a.valor||0);
+      else cajaEfectivo += Number(a.valor||0);
+    });
+  });
+  const cajaTotal = cajaEfectivo + cajaTransferencia;
+  const pctEfectivo = cajaTotal > 0 ? Math.round((cajaEfectivo/cajaTotal)*100) : 0;
+  const pctTransferencia = 100 - pctEfectivo;
+
+  const cajaHtml = `
+    <div style="display:flex;justify-content:space-between;margin-bottom:10px">
+      <span style="font-size:12px;color:var(--ink-2)">💵 Efectivo: <strong>${fmt(cajaEfectivo)}</strong> (${pctEfectivo}%)</span>
+      <span style="font-size:12px;color:var(--ink-2)">📲 Transferencia: <strong>${fmt(cajaTransferencia)}</strong> (${pctTransferencia}%)</span>
+    </div>
+    <div style="display:flex;height:10px;border-radius:6px;overflow:hidden;background:var(--surface-2)">
+      <div style="width:${pctEfectivo}%;background:var(--lime-accent)"></div>
+      <div style="width:${pctTransferencia}%;background:#93C5FD"></div>
+    </div>
+    <div style="font-size:11px;color:var(--ink-3);margin-top:8px">Total recibido en el período: ${fmt(cajaTotal)}</div>`;
+
   // 373. Top productos del período — ahora acumulamos también el margen real
   //      rankingTop: 'ingresos' (default) o 'margen' — controlado por toggle en la UI
   const pm={};
@@ -2207,6 +2248,10 @@ function renderDashboard() {
       <div class="card">
         <div class="card-title">Ventas por canal</div>
         <div class="bar-chart">${barHtml}</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Flujo de caja — ${label}</div>
+        ${cajaHtml}
       </div>
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
