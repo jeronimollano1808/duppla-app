@@ -1523,6 +1523,43 @@ let ajusteProductoId = null;    // ID del producto que se está ajustando
 //     toLocaleString('es-CO') usa el formato colombiano: punto para miles, coma para decimales
 const fmt = n => '$' + Number(n||0).toLocaleString('es-CO');
 
+// ============================================================
+// 365. MARGEN REAL POR VENTA — fuente única de verdad
+// Calcula la ganancia (precio - costo histórico) de cualquier venta
+// independientemente de si es normal, manual, múltiple o combo.
+// Devuelve null si no hay costo conocido (ventas manuales o
+// ventas viejas registradas antes de este cambio).
+// ============================================================
+function calcularMargenVenta(v) {
+  // Venta múltiple: sumamos el margen de cada línea
+  if(v.esMultiple && v.productosVenta?.length) {
+    let margen = 0, tieneCosto = false;
+    v.productosVenta.forEach(p => {
+      if(p.costoUnit != null) {
+        margen += (Number(p.precio||0) - Number(p.costoUnit||0)) * Number(p.cant||0);
+        tieneCosto = true;
+      }
+    });
+    return tieneCosto ? margen : null;
+  }
+  // Combo: sumamos el margen de cada producto del combo
+  if(v.esCombo && v.productosCombo?.length) {
+    let costoTotal = 0, tieneCosto = false;
+    v.productosCombo.forEach(p => {
+      if(p.costoUnit != null) {
+        costoTotal += Number(p.costoUnit||0) * Number(p.cant||0);
+        tieneCosto = true;
+      }
+    });
+    return tieneCosto ? (Number(v.total||0) - costoTotal) : null;
+  }
+  // Venta manual: sin costo conocido (producto fuera de catálogo)
+  if(v.esManual || v.costoUnit == null) return null;
+  // Venta normal: precio - costo histórico, multiplicado por cantidad
+  return (Number(v.precio||0) - Number(v.costoUnit||0)) * Number(v.cant||1);
+}
+
+
 // 99. fmtCOP igual que fmt pero agrega la etiqueta COP al final
 const fmtCOP = n => n > 0 ? '$' + Number(n).toLocaleString('es-CO') + ' COP' : 'N/D';
 
@@ -1980,17 +2017,16 @@ function renderDashboard() {
   const totalHoy = hoyV.reduce((s,v)=>s+Number(v.total||0),0);
   const carteraPeriodo = pv.reduce((s,v)=>s+Number(v.saldo||0),0);
 
-  // 234. Ganancia bruta del período
+  // 372. Ganancia bruta del período usando costo histórico (costoUnit) por venta
   let costoVendidoPeriodo = 0;
   pv.forEach(v => {
+    const margenReal = calcularMargenVenta(v);
+    if(margenReal !== null) {
+      costoVendidoPeriodo += Number(v.total||0) - margenReal;
+      return;
+    }
     const prod = DATA.inventario.find(p => p.id === v.prodId);
     if(prod?.costo) costoVendidoPeriodo += Number(prod.costo) * Number(v.cant||1);
-    if(v.esCombo && v.productosCombo) {
-      v.productosCombo.forEach(item => {
-        const p = DATA.inventario.find(x => x.id === item.prodId);
-        if(p?.costo) costoVendidoPeriodo += Number(p.costo) * Number(item.cant||1);
-      });
-    }
   });
   const gananciaBruta = tv - costoVendidoPeriodo;
 
@@ -2051,23 +2087,42 @@ function renderDashboard() {
       <div class="bar-lbl">${cNames[k]}</div>
     </div>`).join('');
 
-  // 236. Top productos del período seleccionado
+  // 373. Top productos del período — ahora acumulamos también el margen real
+  //      rankingTop: 'ingresos' (default) o 'margen' — controlado por toggle en la UI
   const pm={};
   pv.forEach(v=>{
-    if(!pm[v.producto]) pm[v.producto]={cant:0,total:0};
+    // Para ventas múltiples, repartimos por cada producto de la línea
+    if(v.esMultiple && v.productosVenta?.length) {
+      v.productosVenta.forEach(p => {
+        if(!pm[p.nombre]) pm[p.nombre]={cant:0,total:0,margen:0,sinCosto:false};
+        pm[p.nombre].cant += Number(p.cant||0);
+        pm[p.nombre].total += Number(p.precio||0)*Number(p.cant||0);
+        if(p.costoUnit != null) pm[p.nombre].margen += (Number(p.precio||0)-Number(p.costoUnit||0))*Number(p.cant||0);
+        else pm[p.nombre].sinCosto = true;
+      });
+      return;
+    }
+    if(!pm[v.producto]) pm[v.producto]={cant:0,total:0,margen:0,sinCosto:false};
     pm[v.producto].cant+=Number(v.cant||0);
     pm[v.producto].total+=Number(v.total||0);
+    const margenV = calcularMargenVenta(v);
+    if(margenV !== null) pm[v.producto].margen += margenV;
+    else pm[v.producto].sinCosto = true;
   });
-  const top = Object.entries(pm).sort((a,b)=>b[1].total-a[1].total).slice(0,5);
-  const maxT = top.length ? top[0][1].total : 1;
+  const ordenarPor = window.dashRankingPor || 'ingresos';
+  const top = Object.entries(pm).sort((a,b)=> ordenarPor==='margen' ? b[1].margen-a[1].margen : b[1].total-a[1].total).slice(0,5);
+  const maxT = top.length ? Math.max(...top.map(t=>ordenarPor==='margen'?t[1].margen:t[1].total), 1) : 1;
   const topHtml = top.length ? top.map(([n,d],i) => `
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
       <span style="width:20px;height:20px;border-radius:50%;background:var(--surface-3);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--ink-2);flex-shrink:0">${i+1}</span>
       <div style="flex:1;min-width:0">
         <div style="font-size:12px;font-weight:500;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:4px">${n}</div>
-        <div class="prog"><div class="prog-fill prog-lime" style="width:${Math.round((d.total/maxT)*100)}%"></div></div>
+        <div class="prog"><div class="prog-fill prog-lime" style="width:${Math.max(2,Math.round(((ordenarPor==='margen'?d.margen:d.total)/maxT)*100))}%"></div></div>
       </div>
-      <span style="font-size:11px;color:var(--ink-3);white-space:nowrap">${fmt(d.total)}</span>
+      <div style="text-align:right;white-space:nowrap">
+        <div style="font-size:11px;color:var(--ink-3)">${fmt(d.total)}</div>
+        <div style="font-size:10px;color:${d.margen>=0?'var(--blue)':'var(--red)'}">${d.sinCosto?'margen parcial: ':'margen: '}${fmt(d.margen)}</div>
+      </div>
     </div>`).join('')
     : '<div class="empty-state" style="padding:16px"><div class="empty-state-text">Sin ventas en este período</div></div>';
 
@@ -2154,7 +2209,16 @@ function renderDashboard() {
         <div class="bar-chart">${barHtml}</div>
       </div>
       <div class="card">
-        <div class="card-title">Top productos — ${label}</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <div class="card-title" style="margin:0">Top productos — ${label}</div>
+          <!-- 374. Toggle para rankear por ingresos o por margen real -->
+          <div style="display:flex;gap:4px">
+            <button onclick="window.dashRankingPor='ingresos';renderDashboard()"
+              style="padding:3px 9px;border-radius:14px;border:1px solid ${ordenarPor==='ingresos'?'var(--ink)':'var(--border)'};background:${ordenarPor==='ingresos'?'var(--ink)':'transparent'};color:${ordenarPor==='ingresos'?'#fff':'var(--ink-3)'};font-size:10px;font-weight:600;cursor:pointer">Ingresos</button>
+            <button onclick="window.dashRankingPor='margen';renderDashboard()"
+              style="padding:3px 9px;border-radius:14px;border:1px solid ${ordenarPor==='margen'?'var(--ink)':'var(--border)'};background:${ordenarPor==='margen'?'var(--ink)':'transparent'};color:${ordenarPor==='margen'?'#fff':'var(--ink-3)'};font-size:10px;font-weight:600;cursor:pointer">Margen</button>
+          </div>
+        </div>
         ${topHtml}
       </div>
     </div>
@@ -2179,19 +2243,20 @@ function renderVentas() {
   const totalCobrado = DATA.ventas.reduce((s,v) => s + Number(v.pagado||v.total||0), 0);
   const totalVentas = DATA.ventas.length;
 
-  // 214. Ganancia bruta = ingresos de ventas - costo de los productos vendidos
-  //      Solo aplica para ventas del catálogo con producto registrado en inventario
+  // 371. Ganancia bruta usando el costo HISTÓRICO guardado en cada venta (costoUnit)
+  //      en vez del costo actual del inventario — más preciso si el costo cambió.
+  //      Para ventas registradas antes de este cambio (sin costoUnit), usamos el
+  //      costo actual del inventario como aproximación de respaldo.
   let costoVendido = 0;
   DATA.ventas.forEach(v => {
+    const margenReal = calcularMargenVenta(v);
+    if(margenReal !== null) {
+      costoVendido += Number(v.total||0) - margenReal;
+      return;
+    }
+    // Fallback: venta vieja sin costoUnit guardado — aproximamos con costo actual
     const prod = DATA.inventario.find(p => p.id === v.prodId);
     if(prod?.costo) costoVendido += Number(prod.costo) * Number(v.cant||1);
-    // Para combos sumamos el costo de cada producto incluido
-    if(v.esCombo && v.productosCombo) {
-      v.productosCombo.forEach(item => {
-        const p = DATA.inventario.find(x => x.id === item.prodId);
-        if(p?.costo) costoVendido += Number(p.costo) * Number(item.cant||1);
-      });
-    }
   });
   const gananciaBruta = totalIngresos - costoVendido;
   const margenPct = totalIngresos > 0 ? Math.round((gananciaBruta/totalIngresos)*100) : 0;
@@ -2322,6 +2387,12 @@ function renderVentas() {
       productoCell = '<td>' + (v.producto||'') + manualBadge + '</td>';
     }
 
+    // 370. Calculamos el margen real de esta venta para mostrarlo en la tabla
+    const margenVenta = calcularMargenVenta(v);
+    const margenCell = margenVenta === null
+      ? '<td style="color:var(--ink-3);font-size:11px">N/D</td>'
+      : `<td style="font-weight:600;color:${margenVenta>=0?'var(--green)':'var(--red)'}">${fmt(margenVenta)}</td>`;
+
     return `<tr>
       <td style="color:var(--ink-3)">${v.fecha||''}</td>
       <td style="font-weight:500">${v.cliente||'—'}</td>
@@ -2329,6 +2400,7 @@ function renderVentas() {
       <td><span class="badge b-${v.canal||'web'}">${v.canal||''}</span></td>
       <td><span class="badge ${tpClass[tp]}">${tpLabel[tp]||tp}</span></td>
       <td style="font-weight:600;color:var(--lime)">${fmt(v.total)}</td>
+      ${margenCell}
       <td>${mpBadge}</td>
       ${saldoCell}
       <td><span class="badge ${epClass[ep]}">${epLabel[ep]||ep}</span></td>
@@ -2369,7 +2441,7 @@ function renderVentas() {
     <div class="card">
       ${DATA.ventas.length ?
         `<div class="table-wrap"><table class="tbl">
-          <thead><tr><th>Fecha</th><th>Cliente</th><th>Producto</th><th>Canal</th><th>Precio</th><th>Total</th><th>Método</th><th>Saldo</th><th>Estado</th><th></th></tr></thead>
+          <thead><tr><th>Fecha</th><th>Cliente</th><th>Producto</th><th>Canal</th><th>Precio</th><th>Total</th><th>Margen</th><th>Método</th><th>Saldo</th><th>Estado</th><th></th></tr></thead>
           <tbody>${rows}</tbody>
         </table></div>`
         : `<div class="empty-state"><div class="empty-state-icon">🛒</div><div class="empty-state-text">Sin ventas registradas</div></div>`}
@@ -2705,7 +2777,7 @@ window.guardarVenta = async () => {
       fecha, canal, producto:nombreManual, prodId:null, esManual:true,
       cant, precio, total, cliente, nota, tipoPrecio:'publico',
       metodoPago, pagado, saldo, estadoPago, abonos:[],
-      mixtoEfectivo, mixtoTransferencia,
+      mixtoEfectivo, mixtoTransferencia, costoUnit:null, // 369. Sin costo conocido — fuera de catálogo
       distribuidorId: distribuidorId || null, createdAt:serverTimestamp()
     });
     await pushNotif('💰 Nueva venta', nombreManual + (cliente?' — '+cliente:'') + ' · ' + fmt(total), 'venta', {seccion:'ventas'});
@@ -2730,11 +2802,14 @@ window.guardarVenta = async () => {
       const l = lineasValidas[0];
       const prod = DATA.inventario.find(p => p.id === l.prodId);
       await updateDoc(doc(db,'inventario',l.prodId), { stock: prod.stock - l.cant });
+      // 366. Guardamos el costo histórico del producto al momento de la venta
+      //      para que el margen no se distorsione si el costo cambia después
+      const costoUnit = Number(prod.costo)||0;
       await addDoc(collection(db,'ventas'), {
         fecha, canal, producto:prod.nombre, prodId:l.prodId, esManual:false,
         cant:l.cant, precio:l.precio, total, cliente, nota, tipoPrecio:l.tipoPrecio,
         metodoPago, pagado, saldo, estadoPago, abonos:[],
-        mixtoEfectivo, mixtoTransferencia,
+        mixtoEfectivo, mixtoTransferencia, costoUnit,
         distribuidorId: distribuidorId || null, createdAt:serverTimestamp()
       });
     } else {
@@ -2743,7 +2818,8 @@ window.guardarVenta = async () => {
       for(const l of lineasValidas) {
         const prod = DATA.inventario.find(p => p.id === l.prodId);
         await updateDoc(doc(db,'inventario',l.prodId), { stock: prod.stock - l.cant });
-        productosVenta.push({ prodId:l.prodId, nombre:prod.nombre, cant:l.cant, precio:l.precio, tipoPrecio:l.tipoPrecio });
+        // 367. Cada línea de la venta múltiple guarda su propio costo histórico
+        productosVenta.push({ prodId:l.prodId, nombre:prod.nombre, cant:l.cant, precio:l.precio, tipoPrecio:l.tipoPrecio, costoUnit:Number(prod.costo)||0 });
         if(prod.stock - l.cant <= (prod.stockMinimo||5))
           await pushNotif('⚠️ Stock bajo', prod.nombre + ' quedó con ' + (prod.stock-l.cant) + ' uds', 'stock', {seccion:'inventario', id:l.prodId});
       }
@@ -4375,9 +4451,11 @@ window.guardarVentaCombo = async () => {
   }
 
   // 194. Descontamos el stock de cada producto del combo
+  //      368. Guardamos también el costo histórico de cada producto del combo
   for(const item of productosCombo) {
     const prod = DATA.inventario.find(p => p.id === item.prodId);
     if(!prod) continue;
+    item.costoUnit = Number(prod.costo)||0;
     await updateDoc(doc(db,'inventario',item.prodId), { stock: prod.stock - item.cant });
     if(prod.stock - item.cant <= (prod.stockMinimo||5))
       await pushNotif('⚠️ Stock bajo', `${prod.nombre} quedó con ${prod.stock-item.cant} uds`, 'stock', {seccion:'inventario', id:item.prodId});
