@@ -3538,6 +3538,71 @@ function renderInventario() {
         </div>` : ''}
     </div>`;
 
+  // 398. PROYECCIÓN DE REPOSICIÓN
+  //      Ritmo de venta = unidades vendidas en los últimos N días / N días
+  //      Días para agotarse = stock actual / ritmo diario
+  //      Solo tiene sentido para productos que SÍ se están vendiendo (ritmo > 0)
+  const VENTANA_DIAS_RITMO = 30; // analizamos las ventas del último mes para el ritmo
+  const fechaCorteRitmo = new Date(HOY_ROT.getTime() - VENTANA_DIAS_RITMO*86400000).toISOString().slice(0,10);
+
+  function unidadesVendidasDesde(prodId, fechaCorte) {
+    let total = 0;
+    DATA.ventas.forEach(v => {
+      if(!v.fecha || v.fecha < fechaCorte) return;
+      if(v.prodId === prodId) total += Number(v.cant||0);
+      if(v.esMultiple && v.productosVenta) {
+        v.productosVenta.forEach(p => { if(p.prodId === prodId) total += Number(p.cant||0); });
+      }
+      if(v.esCombo && v.productosCombo) {
+        v.productosCombo.forEach(p => { if(p.prodId === prodId) total += Number(p.cant||0); });
+      }
+    });
+    return total;
+  }
+
+  const proyeccionReposicion = DATA.inventario
+    .map(p => {
+      const vendidasUltimoMes = unidadesVendidasDesde(p.id, fechaCorteRitmo);
+      const ritmoDiario = vendidasUltimoMes / VENTANA_DIAS_RITMO;
+      const diasParaAgotarse = ritmoDiario > 0 ? Math.floor(Number(p.stock||0) / ritmoDiario) : null;
+      return { ...p, vendidasUltimoMes, ritmoDiario, diasParaAgotarse };
+    })
+    // 399. Solo mostramos productos que se venden Y que se agotan en menos de 21 días
+    //      (umbral de alerta — tiempo razonable para gestionar un pedido nuevo)
+    .filter(p => p.diasParaAgotarse !== null && p.diasParaAgotarse <= 21)
+    .sort((a,b) => a.diasParaAgotarse - b.diasParaAgotarse);
+
+  const reposicionAbierta = window.inventarioReposicionAbierta || false;
+  let filasReposicion = '';
+  proyeccionReposicion.forEach(p => {
+    const critico = p.diasParaAgotarse <= 7;
+    filasReposicion += '<tr>'
+      + '<td style="font-weight:500">' + p.nombre + '</td>'
+      + '<td style="color:var(--ink-3)">' + (p.marca||'') + '</td>'
+      + '<td style="text-align:center">' + p.stock + '</td>'
+      + '<td style="text-align:center">' + p.vendidasUltimoMes + '</td>'
+      + '<td style="color:' + (critico?'var(--red)':'var(--amber)') + ';font-weight:600">' + (critico?'🔴 ':'🟡 ') + p.diasParaAgotarse + ' día' + (p.diasParaAgotarse!==1?'s':'') + '</td>'
+    + '</tr>';
+  });
+
+  const reposicionHtml = proyeccionReposicion.length === 0 ? '' : `
+    <div class="card" style="margin-bottom:16px;border-left:3px solid var(--red)">
+      <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="window.inventarioReposicionAbierta=${!reposicionAbierta};renderInventario()">
+        <div>
+          <div class="card-title" style="margin:0">📉 Próximos a agotarse — ${proyeccionReposicion.length} producto(s)</div>
+          <div style="font-size:11px;color:var(--ink-3);margin-top:4px">Según ritmo de venta de los últimos ${VENTANA_DIAS_RITMO} días · se agotan en 21 días o menos</div>
+        </div>
+        <span style="font-size:13px;color:var(--ink-3)">${reposicionAbierta?'▲':'▼'}</span>
+      </div>
+      ${reposicionAbierta ? `
+        <div class="table-wrap" style="margin-top:14px">
+          <table class="tbl">
+            <thead><tr><th>Producto</th><th>Marca</th><th>Stock actual</th><th>Vendidas (30d)</th><th>Se agota en</th></tr></thead>
+            <tbody>${filasReposicion}</tbody>
+          </table>
+        </div>` : ''}
+    </div>`;
+
   // 244. Filtramos inventario según búsqueda activa
   // 350. Ordenamos por marca luego por nombre alfabéticamente
   const inventarioOrdenado = [...DATA.inventario].sort((a,b) => {
@@ -3608,6 +3673,7 @@ function renderInventario() {
     ${alertHtml}
     ${capitalHtml}
     ${rotacionHtml}
+    ${reposicionHtml}
     <!-- 245. Barra de búsqueda de inventario -->
     <div style="position:relative;margin-bottom:14px">
       <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--ink-3);font-size:14px">🔍</span>
