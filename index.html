@@ -2321,7 +2321,7 @@ function renderDashboard() {
       </div>
       <div style="text-align:right;white-space:nowrap">
         <div style="font-size:11px;color:var(--ink-3)">${fmt(d.total)}</div>
-        <div style="font-size:10px;color:${d.margen>=0?'var(--blue)':'var(--red)'}">${d.sinCosto?'margen parcial: ':'margen: '}${fmt(d.margen)}</div>
+        <div style="font-size:10px;color:${!d.sinCosto || d.margen!==0 ? (d.margen>=0?'var(--blue)':'var(--red)') : 'var(--ink-3)'}">${(d.sinCosto && d.margen===0) ? 'margen N/D' : (d.sinCosto?'margen parcial: ':'margen: ')+fmt(d.margen)}</div>
       </div>
     </div>`).join('')
     : '<div class="empty-state" style="padding:16px"><div class="empty-state-text">Sin ventas en este período</div></div>';
@@ -2575,22 +2575,21 @@ function renderVentas() {
       ? `<td style="color:var(--red);font-size:12px">${fmt(v.saldo)}</td>`
       : `<td style="color:var(--ink-3);font-size:12px">—</td>`;
 
-    // 356. Para ventas múltiples, mostramos botón expandible con desglose por producto
+    // 422. Para ventas múltiples, mostramos siempre todos los productos en lista
+    //      vertical (sin necesidad de clic para expandir) — más claro de un vistazo
     let productoCell;
     if(v.esMultiple && v.productosVenta?.length) {
-      const isOpen = ventaDetalleId === v.id;
-      const desglose = v.productosVenta.map(p =>
-        '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:11px;border-bottom:1px solid var(--border)">'
-          + '<span style="color:var(--ink-2)">' + p.nombre + ' ×' + p.cant + '</span>'
-          + '<span style="font-weight:600;color:var(--ink)">' + fmt(p.precio*p.cant) + '</span>'
+      const filasProductos = v.productosVenta.map(p =>
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 0">'
+          + '<span style="font-size:12px;color:var(--ink);font-weight:500">' + p.nombre + '</span>'
+          + '<span style="font-size:11px;color:var(--ink-3);white-space:nowrap">×' + p.cant + ' &nbsp;<strong style="color:var(--ink-2)">' + fmt(p.precio*p.cant) + '</strong></span>'
         + '</div>'
       ).join('');
-      productoCell = '<td>'
-        + '<button onclick="toggleDetalleVenta(\'' + v.id + '\')" style="background:none;border:none;cursor:pointer;text-align:left;padding:0;display:flex;align-items:center;gap:5px">'
-          + '<span style="font-size:10px;color:var(--ink-3)">' + (isOpen?'▼':'▶') + '</span>'
-          + '<span style="font-weight:500;color:var(--ink)">📦 ' + v.productosVenta.length + ' productos</span>'
-        + '</button>'
-        + (isOpen ? '<div style="margin-top:6px;padding:8px;background:var(--surface-2);border-radius:8px;min-width:200px">' + desglose + '</div>' : '')
+      productoCell = '<td style="min-width:200px">'
+        + '<div style="display:flex;align-items:center;gap:5px;margin-bottom:4px">'
+          + '<span style="font-size:10px;font-weight:700;color:var(--lime);background:var(--lime-bg);padding:1px 7px;border-radius:10px">📦 ' + v.productosVenta.length + ' productos</span>'
+        + '</div>'
+        + '<div style="border-left:2px solid var(--lime-accent);padding-left:8px">' + filasProductos + '</div>'
       + '</td>';
     } else {
       productoCell = '<td>' + (v.producto||'') + manualBadge + '</td>';
@@ -3681,17 +3680,20 @@ function renderInventario() {
   const HOY_ROT = new Date();
   const UMBRAL_DIAS_MUERTO = 45; // más de 45 días sin venta = capital muerto
 
-  function ultimaVentaDeProducto(prodId) {
-    let ultima = null;
-    DATA.ventas.forEach(v => {
-      let incluye = false;
-      if(v.prodId === prodId) incluye = true;
-      if(v.esMultiple && v.productosVenta?.some(p => p.prodId === prodId)) incluye = true;
-      if(v.esCombo && v.productosCombo?.some(p => p.prodId === prodId)) incluye = true;
-      if(incluye && v.fecha && (!ultima || v.fecha > ultima)) ultima = v.fecha;
-    });
-    return ultima;
-  }
+  // 420. FIX RENDIMIENTO: precalculamos la última venta de TODOS los productos
+  //      en un solo recorrido de DATA.ventas, en vez de recorrer todas las ventas
+  //      una vez POR CADA producto (era O(productos × ventas), ahora es O(ventas))
+  const ultimaVentaPorProducto = {};
+  DATA.ventas.forEach(v => {
+    const registrar = (prodId, fecha) => {
+      if(!prodId || !fecha) return;
+      if(!ultimaVentaPorProducto[prodId] || fecha > ultimaVentaPorProducto[prodId]) ultimaVentaPorProducto[prodId] = fecha;
+    };
+    if(v.prodId) registrar(v.prodId, v.fecha);
+    if(v.esMultiple && v.productosVenta) v.productosVenta.forEach(p => registrar(p.prodId, v.fecha));
+    if(v.esCombo && v.productosCombo) v.productosCombo.forEach(p => registrar(p.prodId, v.fecha));
+  });
+  function ultimaVentaDeProducto(prodId) { return ultimaVentaPorProducto[prodId] || null; }
 
   const productosRotacion = DATA.inventario
     .filter(p => Number(p.stock||0) > 0) // solo productos con stock — sin stock no hay capital congelado
@@ -3745,24 +3747,25 @@ function renderInventario() {
   const VENTANA_DIAS_RITMO = 30; // analizamos las ventas del último mes para el ritmo
   const fechaCorteRitmo = new Date(HOY_ROT.getTime() - VENTANA_DIAS_RITMO*86400000).toISOString().slice(0,10);
 
-  function unidadesVendidasDesde(prodId, fechaCorte) {
-    let total = 0;
-    DATA.ventas.forEach(v => {
-      if(!v.fecha || v.fecha < fechaCorte) return;
-      if(v.prodId === prodId) total += Number(v.cant||0);
-      if(v.esMultiple && v.productosVenta) {
-        v.productosVenta.forEach(p => { if(p.prodId === prodId) total += Number(p.cant||0); });
-      }
-      if(v.esCombo && v.productosCombo) {
-        v.productosCombo.forEach(p => { if(p.prodId === prodId) total += Number(p.cant||0); });
-      }
-    });
-    return total;
-  }
+  // 421. FIX RENDIMIENTO: igual que arriba, un solo recorrido de ventas precalcula
+  //      las unidades vendidas por producto en la ventana, en vez de recorrer
+  //      todas las ventas una vez por cada producto del inventario
+  const vendidasPorProductoEnVentana = {};
+  DATA.ventas.forEach(v => {
+    if(!v.fecha || v.fecha < fechaCorteRitmo) return;
+    const acumular = (prodId, cant) => {
+      if(!prodId) return;
+      vendidasPorProductoEnVentana[prodId] = (vendidasPorProductoEnVentana[prodId]||0) + Number(cant||0);
+    };
+    if(v.prodId) acumular(v.prodId, v.cant);
+    if(v.esMultiple && v.productosVenta) v.productosVenta.forEach(p => acumular(p.prodId, p.cant));
+    if(v.esCombo && v.productosCombo) v.productosCombo.forEach(p => acumular(p.prodId, p.cant));
+  });
+  function unidadesVendidasDesde(prodId) { return vendidasPorProductoEnVentana[prodId] || 0; }
 
   const proyeccionReposicion = DATA.inventario
     .map(p => {
-      const vendidasUltimoMes = unidadesVendidasDesde(p.id, fechaCorteRitmo);
+      const vendidasUltimoMes = unidadesVendidasDesde(p.id);
       const ritmoDiario = vendidasUltimoMes / VENTANA_DIAS_RITMO;
       const diasParaAgotarse = ritmoDiario > 0 ? Math.floor(Number(p.stock||0) / ritmoDiario) : null;
       return { ...p, vendidasUltimoMes, ritmoDiario, diasParaAgotarse };
