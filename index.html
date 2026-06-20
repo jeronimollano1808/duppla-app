@@ -3474,6 +3474,70 @@ function renderInventario() {
       </div>
     </div>`;
 
+  // 396. ROTACIÓN DE INVENTARIO / CAPITAL MUERTO
+  //      Para cada producto buscamos la fecha de su última venta (considerando
+  //      ventas normales, múltiples y combos) y calculamos cuánto capital
+  //      (a costo) está "congelado" en productos sin movimiento reciente.
+  const HOY_ROT = new Date();
+  const UMBRAL_DIAS_MUERTO = 45; // más de 45 días sin venta = capital muerto
+
+  function ultimaVentaDeProducto(prodId) {
+    let ultima = null;
+    DATA.ventas.forEach(v => {
+      let incluye = false;
+      if(v.prodId === prodId) incluye = true;
+      if(v.esMultiple && v.productosVenta?.some(p => p.prodId === prodId)) incluye = true;
+      if(v.esCombo && v.productosCombo?.some(p => p.prodId === prodId)) incluye = true;
+      if(incluye && v.fecha && (!ultima || v.fecha > ultima)) ultima = v.fecha;
+    });
+    return ultima;
+  }
+
+  const productosRotacion = DATA.inventario
+    .filter(p => Number(p.stock||0) > 0) // solo productos con stock — sin stock no hay capital congelado
+    .map(p => {
+      const ultimaFecha = ultimaVentaDeProducto(p.id);
+      const diasSinVenta = ultimaFecha ? Math.floor((HOY_ROT - new Date(ultimaFecha)) / 86400000) : null;
+      const capitalCongelado = Number(p.costo||0) * Number(p.stock||0);
+      return { ...p, ultimaFecha, diasSinVenta, capitalCongelado };
+    })
+    .filter(p => p.diasSinVenta === null || p.diasSinVenta > UMBRAL_DIAS_MUERTO)
+    .sort((a,b) => b.capitalCongelado - a.capitalCongelado);
+
+  const capitalMuertoTotal = productosRotacion.reduce((s,p) => s + p.capitalCongelado, 0);
+
+  // 397. Sección colapsable — no la mostramos siempre abierta para no saturar la página
+  const rotacionAbierta = window.inventarioRotacionAbierta || false;
+  let filasRotacion = '';
+  productosRotacion.forEach(p => {
+    const sinVentaNunca = p.diasSinVenta === null;
+    filasRotacion += '<tr>'
+      + '<td style="font-weight:500">' + p.nombre + '</td>'
+      + '<td style="color:var(--ink-3)">' + (p.marca||'') + '</td>'
+      + '<td style="text-align:center">' + p.stock + '</td>'
+      + '<td style="color:' + (sinVentaNunca?'var(--red)':'var(--amber)') + '">' + (sinVentaNunca ? 'Nunca vendido' : 'hace ' + p.diasSinVenta + ' días') + '</td>'
+      + '<td style="font-weight:600;color:var(--blue)">' + fmt(p.capitalCongelado) + '</td>'
+    + '</tr>';
+  });
+
+  const rotacionHtml = productosRotacion.length === 0 ? '' : `
+    <div class="card" style="margin-bottom:16px;border-left:3px solid var(--amber)">
+      <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="window.inventarioRotacionAbierta=${!rotacionAbierta};renderInventario()">
+        <div>
+          <div class="card-title" style="margin:0">🧊 Capital muerto — ${productosRotacion.length} producto(s) sin movimiento</div>
+          <div style="font-size:11px;color:var(--ink-3);margin-top:4px">Más de ${UMBRAL_DIAS_MUERTO} días sin venderse · ${fmt(capitalMuertoTotal)} congelados a precio de costo</div>
+        </div>
+        <span style="font-size:13px;color:var(--ink-3)">${rotacionAbierta?'▲':'▼'}</span>
+      </div>
+      ${rotacionAbierta ? `
+        <div class="table-wrap" style="margin-top:14px">
+          <table class="tbl">
+            <thead><tr><th>Producto</th><th>Marca</th><th>Stock</th><th>Última venta</th><th>Capital congelado</th></tr></thead>
+            <tbody>${filasRotacion}</tbody>
+          </table>
+        </div>` : ''}
+    </div>`;
+
   // 244. Filtramos inventario según búsqueda activa
   // 350. Ordenamos por marca luego por nombre alfabéticamente
   const inventarioOrdenado = [...DATA.inventario].sort((a,b) => {
@@ -3543,6 +3607,7 @@ function renderInventario() {
     </div>
     ${alertHtml}
     ${capitalHtml}
+    ${rotacionHtml}
     <!-- 245. Barra de búsqueda de inventario -->
     <div style="position:relative;margin-bottom:14px">
       <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--ink-3);font-size:14px">🔍</span>
