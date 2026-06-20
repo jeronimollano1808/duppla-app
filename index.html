@@ -4927,23 +4927,64 @@ window.verDetalleDistribuidor = (id) => {
 function renderDistribuidores() {
   const tipoIco   = { gimnasio:'🏋️', persona:'👤', tienda:'🏪' };
   const tipoLabel = { gimnasio:'Gimnasio', persona:'Persona distribuidora', tienda:'Tienda / Local' };
+  const hoy = new Date();
 
+  // 375. Para cada distribuidor calculamos margen real, frecuencia y recencia
+  //      Reutilizamos calcularMargenVenta() — misma fuente de verdad que en Ventas/Dashboard
   const distData = DATA.distribuidores.map(d => {
     const ventas = DATA.ventas.filter(v => v.distribuidorId === d.id);
     const total  = ventas.reduce((s,v) => s + Number(v.total||0), 0);
+    const saldoPendiente = ventas.reduce((s,v) => s + Number(v.saldo||0), 0);
     const sorted = [...ventas].sort((a,b) => b.fecha > a.fecha ? 1 : -1);
     const ultima = sorted.length ? sorted[0] : null;
-    return { ...d, ventas, total, ultima };
-  }).sort((a,b) => b.total - a.total);
 
-  const totalGeneral  = DATA.ventas.filter(v => v.canal === 'distribuidor').reduce((s,v) => s+Number(v.total||0), 0);
+    // 376. Margen real: suma de calcularMargenVenta de cada venta vinculada
+    //      margenConocido = false si ninguna venta tiene costo histórico (todo N/D)
+    let margen = 0, margenConocido = false;
+    ventas.forEach(v => {
+      const m = calcularMargenVenta(v);
+      if(m !== null) { margen += m; margenConocido = true; }
+    });
+
+    // 377. Días desde la última compra — para detectar distribuidores "fríos"
+    const diasDesdeUltima = ultima ? Math.floor((hoy - new Date(ultima.fecha)) / 86400000) : null;
+
+    // 378. Producto más vendido a este distribuidor
+    const prodCount = {};
+    ventas.forEach(v => {
+      if(v.esMultiple && v.productosVenta) {
+        v.productosVenta.forEach(p => { prodCount[p.nombre] = (prodCount[p.nombre]||0) + Number(p.cant||0); });
+      } else {
+        prodCount[v.producto] = (prodCount[v.producto]||0) + Number(v.cant||0);
+      }
+    });
+    const topProductoEntry = Object.entries(prodCount).sort((a,b)=>b[1]-a[1])[0];
+    const topProducto = topProductoEntry ? topProductoEntry[0] : null;
+
+    return { ...d, ventas, total, saldoPendiente, ultima, margen, margenConocido, diasDesdeUltima, topProducto };
+  });
+
+  // 379. Orden controlado por toggle: por valor comprado o por margen real
+  const ordenDist = window.distRankingPor || 'total';
+  distData.sort((a,b) => ordenDist === 'margen' ? b.margen - a.margen : b.total - a.total);
+
+  const totalGeneral   = DATA.ventas.filter(v => v.canal === 'distribuidor').reduce((s,v) => s+Number(v.total||0), 0);
   const totalVinculado = distData.reduce((s,d) => s + d.total, 0);
+  const margenTotal    = distData.reduce((s,d) => s + d.margen, 0);
 
   const resumenHtml =
-    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">'
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px">'
     + '<div class="metric-card"><div class="metric-label">Total canal dist.</div><div class="metric-value" style="font-size:18px;color:var(--lime)">' + fmt(totalGeneral) + '</div><div class="metric-sub">todas las ventas dist.</div></div>'
     + '<div class="metric-card"><div class="metric-label">Vinculado</div><div class="metric-value" style="font-size:18px;color:var(--blue)">' + fmt(totalVinculado) + '</div><div class="metric-sub">con distribuidor asignado</div></div>'
+    + '<div class="metric-card"><div class="metric-label">Margen real total</div><div class="metric-value" style="font-size:18px;color:' + (margenTotal>=0?'var(--green)':'var(--red)') + '">' + fmt(margenTotal) + '</div><div class="metric-sub">lo que deja a Duppla</div></div>'
     + '<div class="metric-card"><div class="metric-label">Distribuidores</div><div class="metric-value" style="font-size:18px">' + DATA.distribuidores.length + '</div><div class="metric-sub">registrados</div></div>'
+    + '</div>';
+
+  // 380. Toggle de orden — "¿cuál distribuidor vale la pena?" se responde rankeando por margen
+  const togglesHtml =
+    '<div style="display:flex;justify-content:flex-end;gap:4px;margin-bottom:12px">'
+      + '<button onclick="window.distRankingPor=\'total\';renderDistribuidores()" style="padding:4px 11px;border-radius:14px;border:1px solid ' + (ordenDist==='total'?'var(--ink)':'var(--border)') + ';background:' + (ordenDist==='total'?'var(--ink)':'transparent') + ';color:' + (ordenDist==='total'?'#fff':'var(--ink-3)') + ';font-size:11px;font-weight:600;cursor:pointer">Por valor comprado</button>'
+      + '<button onclick="window.distRankingPor=\'margen\';renderDistribuidores()" style="padding:4px 11px;border-radius:14px;border:1px solid ' + (ordenDist==='margen'?'var(--ink)':'var(--border)') + ';background:' + (ordenDist==='margen'?'var(--ink)':'transparent') + ';color:' + (ordenDist==='margen'?'#fff':'var(--ink-3)') + ';font-size:11px;font-weight:600;cursor:pointer">Por margen real</button>'
     + '</div>';
 
   let cardsHtml = '';
@@ -4952,10 +4993,20 @@ function renderDistribuidores() {
       + '<div class="empty-state-text">Sin distribuidores registrados</div>'
       + '<div class="empty-state-sub">Agrega tu primer gimnasio o distribuidor con el botón de arriba</div></div></div>';
   } else {
-    distData.forEach(d => {
+    distData.forEach((d, idx) => {
       const ico   = tipoIco[d.tipo]   || '👤';
       const label = tipoLabel[d.tipo] || '';
       const isOpen = distDetalleId === d.id;
+
+      // 381. Badge de recencia — alerta visual si lleva muchos días sin comprar
+      let recenciaHtml = '';
+      if(d.diasDesdeUltima !== null) {
+        const frio = d.diasDesdeUltima > 30;
+        recenciaHtml = '<div style="font-size:10px;color:' + (frio?'var(--amber)':'var(--ink-3)') + ';font-weight:' + (frio?'600':'400') + '">'
+          + (frio ? '⚠️ ' : '') + 'Última compra: hace ' + d.diasDesdeUltima + ' día' + (d.diasDesdeUltima!==1?'s':'') + '</div>';
+      } else {
+        recenciaHtml = '<div style="font-size:10px;color:var(--ink-3)">Sin compras aún</div>';
+      }
 
       let historialHtml = '';
       if(isOpen) {
@@ -4965,38 +5016,48 @@ function renderDistribuidores() {
         } else {
           let filas = '';
           ventasOrd.forEach(v => {
-            const pagado = Number(v.saldo||0) > 0;
+            const pendiente = Number(v.saldo||0) > 0;
+            const margenV = calcularMargenVenta(v);
             filas += '<tr>'
               + '<td style="color:var(--ink-3)">' + (v.fecha||'') + '</td>'
               + '<td style="font-weight:500">' + (v.producto||'') + '</td>'
               + '<td style="text-align:center">' + (v.cant||1) + '</td>'
               + '<td style="font-weight:600;color:var(--lime)">' + fmt(v.total) + '</td>'
+              + '<td style="color:' + (margenV===null?'var(--ink-3)':margenV>=0?'var(--green)':'var(--red)') + '">' + (margenV===null?'N/D':fmt(margenV)) + '</td>'
               + '<td><span style="padding:2px 8px;border-radius:12px;font-size:10px;font-weight:600;background:'
-                + (pagado?'var(--amber-bg)':'#F0FDF4') + ';color:' + (pagado?'var(--amber)':'var(--green)') + '">'
-                + (pagado?'Pendiente':'Pagado') + '</span></td>'
+                + (pendiente?'var(--amber-bg)':'#F0FDF4') + ';color:' + (pendiente?'var(--amber)':'var(--green)') + '">'
+                + (pendiente?'Pendiente':'Pagado') + '</span></td>'
             + '</tr>';
           });
           historialHtml = '<div class="table-wrap" style="margin-top:12px"><table class="tbl">'
-            + '<thead><tr><th>Fecha</th><th>Producto</th><th>Cant.</th><th>Total</th><th>Estado</th></tr></thead>'
+            + '<thead><tr><th>Fecha</th><th>Producto</th><th>Cant.</th><th>Total</th><th>Margen</th><th>Estado</th></tr></thead>'
             + '<tbody>' + filas + '</tbody></table></div>';
         }
       }
 
+      // 382. Medalla visual para el top 3 del ranking activo — refuerza "quién vale la pena"
+      const medalla = idx===0?'🥇':idx===1?'🥈':idx===2?'🥉':null;
+
       cardsHtml += '<div class="card" style="margin-bottom:12px">'
         + '<div style="display:flex;justify-content:space-between;align-items:flex-start">'
           + '<div style="display:flex;align-items:center;gap:12px;flex:1">'
-            + '<div style="width:40px;height:40px;border-radius:10px;background:var(--lime-bg);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">' + ico + '</div>'
+            + '<div style="width:40px;height:40px;border-radius:10px;background:var(--lime-bg);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;position:relative">'
+              + ico + (medalla?'<span style="position:absolute;top:-6px;right:-6px;font-size:14px">'+medalla+'</span>':'')
+            + '</div>'
             + '<div style="flex:1;min-width:0">'
               + '<div style="font-size:14px;font-weight:700;color:var(--ink)">' + d.nombre + '</div>'
               + '<div style="font-size:11px;color:var(--ink-3);margin-top:2px">' + label
                 + (d.ciudad?' · '+d.ciudad:'') + (d.telefono?' · '+d.telefono:'') + '</div>'
-              + (d.notas?'<div style="font-size:11px;color:var(--ink-3);margin-top:2px">'+d.notas+'</div>':'')
+              + (d.topProducto?'<div style="font-size:10px;color:var(--ink-3);margin-top:2px">Más compra: '+d.topProducto+'</div>':'')
+              + recenciaHtml
             + '</div>'
           + '</div>'
           + '<div style="text-align:right;flex-shrink:0;margin-left:12px">'
             + '<div style="font-size:18px;font-weight:800;color:var(--lime)">' + fmt(d.total) + '</div>'
-            + '<div style="font-size:11px;color:var(--ink-3)">' + d.ventas.length + ' venta(s)</div>'
-            + (d.ultima?'<div style="font-size:10px;color:var(--ink-3)">Última: '+d.ultima.fecha+'</div>':'')
+            + '<div style="font-size:11px;color:var(--ink-3)">' + d.ventas.length + ' compra(s)</div>'
+            + '<div style="font-size:11px;font-weight:600;color:' + (d.margen>=0?'var(--green)':'var(--red)') + ';margin-top:2px">'
+              + (d.margenConocido?'margen: '+fmt(d.margen):'margen N/D') + '</div>'
+            + (d.saldoPendiente>0?'<div style="font-size:10px;color:var(--red)">debe: '+fmt(d.saldoPendiente)+'</div>':'')
           + '</div>'
         + '</div>'
         + '<div style="display:flex;gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">'
@@ -5012,10 +5073,11 @@ function renderDistribuidores() {
 
   document.getElementById('page-distribuidores').innerHTML =
     '<div class="page-header">'
-      + '<div><div class="page-title">Distribuidores</div><div class="page-sub">Gimnasios y distribuidores vinculados</div></div>'
+      + '<div><div class="page-title">Distribuidores</div><div class="page-sub">Gimnasios y distribuidores vinculados — rentabilidad real</div></div>'
       + '<button class="btn btn-lime btn-sm" onclick="abrirNuevoDistribuidor()">+ Agregar</button>'
     + '</div>'
     + resumenHtml
+    + togglesHtml
     + cardsHtml;
 }
 
