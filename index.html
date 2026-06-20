@@ -4418,12 +4418,44 @@ const MESES = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agos
 
 function renderMetas() {
   const hoy = new Date();
+
+  // 412. PUNTO DE EQUILIBRIO — cuánto hay que vender para cubrir los gastos fijos
+  //      Fórmula: Punto de equilibrio ($) = Gastos fijos / % margen promedio
+  //      El % margen promedio se calcula con las ventas de los últimos 90 días
+  //      que sí tienen costo histórico conocido (calcularMargenVenta != null)
+  const fechaCorte90 = new Date(hoy.getTime() - 90*86400000).toISOString().slice(0,10);
+  let ingresosConCosto = 0, margenConCosto = 0;
+  DATA.ventas.forEach(v => {
+    if(!v.fecha || v.fecha < fechaCorte90) return;
+    const m = calcularMargenVenta(v);
+    if(m !== null) { margenConCosto += m; ingresosConCosto += Number(v.total||0); }
+  });
+  const margenPctPromedio = ingresosConCosto > 0 ? (margenConCosto/ingresosConCosto) : null;
+
   const cards = DATA.metas.map(m => {
     const [anio,mes] = (m.mes||'').split('-');
     const tv = DATA.ventas.filter(v=>v.fecha?.slice(0,7)===m.mes).reduce((s,v)=>s+Number(v.total||0),0);
     const tg = DATA.gastos.filter(g=>g.fecha?.slice(0,7)===m.mes).reduce((s,g)=>s+Number(g.valor||0),0);
     const pv = m.ventasMeta>0 ? Math.min(100,Math.round((tv/m.ventasMeta)*100)) : 0;
     const pg = m.gastoMax>0 ? Math.min(100,Math.round((tg/m.gastoMax)*100)) : 0;
+
+    // 413. Punto de equilibrio de este mes específico, usando su gastoMax como gasto fijo
+    //      Si no hay margen histórico conocido o no hay presupuesto de gastos, no se muestra
+    let equilibrioHtml = '';
+    if(margenPctPromedio !== null && margenPctPromedio > 0 && Number(m.gastoMax||0) > 0) {
+      const puntoEquilibrio = m.gastoMax / margenPctPromedio;
+      const yaSuperoEquilibrio = tv >= puntoEquilibrio;
+      equilibrioHtml = `
+        <div style="background:${yaSuperoEquilibrio?'#F0FDF4':'var(--surface-2)'};border:1px solid ${yaSuperoEquilibrio?'#BBF7D0':'var(--border)'};border-radius:10px;padding:10px 12px;margin-bottom:12px">
+          <div style="font-size:11px;font-weight:700;color:${yaSuperoEquilibrio?'var(--green)':'var(--ink-2)'};text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px">
+            ${yaSuperoEquilibrio?'✅ Punto de equilibrio superado':'⚖️ Punto de equilibrio'}
+          </div>
+          <div style="font-size:12px;color:var(--ink-2)">
+            Necesitas vender <strong>${fmt(puntoEquilibrio)}</strong> para cubrir tus gastos fijos
+            (con margen promedio del ${Math.round(margenPctPromedio*100)}%)
+          </div>
+        </div>`;
+    }
 
     // 353. Calculamos cuánto falta para cumplir la meta de ventas
     const faltante = Math.max(0, Number(m.ventasMeta||0) - tv);
@@ -4478,6 +4510,7 @@ function renderMetas() {
           </div>
           <div class="prog"><div class="prog-fill ${pv>=100?'prog-lime':pv>=70?'prog-amber':'prog-blue'}" style="width:${pv}%"></div></div>
         </div>
+        ${equilibrioHtml}
         ${faltanteHtml}
         ${m.gastoMax>0?`
           <div style="margin-bottom:12px">
