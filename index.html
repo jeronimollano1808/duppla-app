@@ -1659,38 +1659,59 @@ function numeroALetras(n) {
 }
 
 
-// Calcula la ganancia (precio - costo histórico) de cualquier venta
+// Calcula la ganancia (precio - costo) de cualquier venta
 // independientemente de si es normal, manual, múltiple o combo.
-// Devuelve null si no hay costo conocido (ventas manuales o
-// ventas viejas registradas antes de este cambio).
+//
+// 423. RETROACTIVIDAD: para ventas anteriores a la mejora de costo histórico
+// (sin costoUnit guardado), usamos el costo ACTUAL del producto en inventario
+// como mejor aproximación disponible — en vez de devolver null. Esto significa
+// que el margen de ventas viejas puede no ser exacto si el costo cambió desde
+// entonces, pero es preferible a no mostrar nada. Solo devolvemos null cuando
+// es imposible saber el costo (venta manual, o producto ya no existe en inventario).
 // ============================================================
 function calcularMargenVenta(v) {
-  // Venta múltiple: sumamos el margen de cada línea
+  // Venta múltiple: sumamos el margen de cada línea, con fallback por línea
   if(v.esMultiple && v.productosVenta?.length) {
-    let margen = 0, tieneCosto = false;
+    let margen = 0, algunaConCosto = false;
     v.productosVenta.forEach(p => {
-      if(p.costoUnit != null) {
-        margen += (Number(p.precio||0) - Number(p.costoUnit||0)) * Number(p.cant||0);
-        tieneCosto = true;
+      let costo = p.costoUnit;
+      if(costo == null) {
+        const prod = DATA.inventario.find(x => x.id === p.prodId);
+        costo = prod ? Number(prod.costo||0) : null;
+      }
+      if(costo != null) {
+        margen += (Number(p.precio||0) - Number(costo||0)) * Number(p.cant||0);
+        algunaConCosto = true;
       }
     });
-    return tieneCosto ? margen : null;
+    return algunaConCosto ? margen : null;
   }
-  // Combo: sumamos el margen de cada producto del combo
+  // Combo: sumamos el costo de cada producto del combo, con fallback
   if(v.esCombo && v.productosCombo?.length) {
-    let costoTotal = 0, tieneCosto = false;
+    let costoTotal = 0, algunaConCosto = false;
     v.productosCombo.forEach(p => {
-      if(p.costoUnit != null) {
-        costoTotal += Number(p.costoUnit||0) * Number(p.cant||0);
-        tieneCosto = true;
+      let costo = p.costoUnit;
+      if(costo == null) {
+        const prod = DATA.inventario.find(x => x.id === p.prodId);
+        costo = prod ? Number(prod.costo||0) : null;
+      }
+      if(costo != null) {
+        costoTotal += Number(costo||0) * Number(p.cant||0);
+        algunaConCosto = true;
       }
     });
-    return tieneCosto ? (Number(v.total||0) - costoTotal) : null;
+    return algunaConCosto ? (Number(v.total||0) - costoTotal) : null;
   }
-  // Venta manual: sin costo conocido (producto fuera de catálogo)
-  if(v.esManual || v.costoUnit == null) return null;
-  // Venta normal: precio - costo histórico, multiplicado por cantidad
-  return (Number(v.precio||0) - Number(v.costoUnit||0)) * Number(v.cant||1);
+  // Venta manual: sin costo conocido (producto fuera de catálogo) — nunca hay fallback posible
+  if(v.esManual) return null;
+  // 424. Venta normal: usamos costoUnit histórico si existe, si no, el costo actual del producto
+  let costo = v.costoUnit;
+  if(costo == null) {
+    const prod = DATA.inventario.find(x => x.id === v.prodId);
+    if(!prod) return null; // producto eliminado del inventario — no hay forma de saber el costo
+    costo = Number(prod.costo||0);
+  }
+  return (Number(v.precio||0) - Number(costo||0)) * Number(v.cant||1);
 }
 
 
@@ -2321,7 +2342,7 @@ function renderDashboard() {
       </div>
       <div style="text-align:right;white-space:nowrap">
         <div style="font-size:11px;color:var(--ink-3)">${fmt(d.total)}</div>
-        <div style="font-size:10px;color:${!d.sinCosto || d.margen!==0 ? (d.margen>=0?'var(--blue)':'var(--red)') : 'var(--ink-3)'}">${(d.sinCosto && d.margen===0) ? 'margen N/D' : (d.sinCosto?'margen parcial: ':'margen: ')+fmt(d.margen)}</div>
+        <div style="font-size:10px;color:${d.sinCosto?'var(--ink-3)':(d.margen>=0?'var(--blue)':'var(--red)')}">${d.sinCosto?'margen N/D':'margen: '+fmt(d.margen)}</div>
       </div>
     </div>`).join('')
     : '<div class="empty-state" style="padding:16px"><div class="empty-state-text">Sin ventas en este período</div></div>';
@@ -3722,22 +3743,26 @@ function renderInventario() {
     + '</tr>';
   });
 
+  // 425. FIX RENDIMIENTO: la tabla siempre se construye pero queda oculta con
+  //      display:none — el toggle solo cambia visibilidad vía JS puro, sin
+  //      llamar a renderInventario() y reconstruir toda la página de nuevo.
   const rotacionHtml = productosRotacion.length === 0 ? '' : `
     <div class="card" style="margin-bottom:16px;border-left:3px solid var(--amber)">
-      <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="window.inventarioRotacionAbierta=${!rotacionAbierta};renderInventario()">
+      <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="toggleSeccionInventario('inv-rotacion-body','inv-rotacion-flecha')">
         <div>
           <div class="card-title" style="margin:0">🧊 Capital muerto — ${productosRotacion.length} producto(s) sin movimiento</div>
           <div style="font-size:11px;color:var(--ink-3);margin-top:4px">Más de ${UMBRAL_DIAS_MUERTO} días sin venderse · ${fmt(capitalMuertoTotal)} congelados a precio de costo</div>
         </div>
-        <span style="font-size:13px;color:var(--ink-3)">${rotacionAbierta?'▲':'▼'}</span>
+        <span id="inv-rotacion-flecha" style="font-size:13px;color:var(--ink-3)">▼</span>
       </div>
-      ${rotacionAbierta ? `
+      <div id="inv-rotacion-body" style="display:none">
         <div class="table-wrap" style="margin-top:14px">
           <table class="tbl">
             <thead><tr><th>Producto</th><th>Marca</th><th>Stock</th><th>Última venta</th><th>Capital congelado</th></tr></thead>
             <tbody>${filasRotacion}</tbody>
           </table>
-        </div>` : ''}
+        </div>
+      </div>
     </div>`;
 
   // 398. PROYECCIÓN DE REPOSICIÓN
@@ -3790,20 +3815,21 @@ function renderInventario() {
 
   const reposicionHtml = proyeccionReposicion.length === 0 ? '' : `
     <div class="card" style="margin-bottom:16px;border-left:3px solid var(--red)">
-      <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="window.inventarioReposicionAbierta=${!reposicionAbierta};renderInventario()">
+      <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="toggleSeccionInventario('inv-reposicion-body','inv-reposicion-flecha')">
         <div>
           <div class="card-title" style="margin:0">📉 Próximos a agotarse — ${proyeccionReposicion.length} producto(s)</div>
           <div style="font-size:11px;color:var(--ink-3);margin-top:4px">Según ritmo de venta de los últimos ${VENTANA_DIAS_RITMO} días · se agotan en 21 días o menos</div>
         </div>
-        <span style="font-size:13px;color:var(--ink-3)">${reposicionAbierta?'▲':'▼'}</span>
+        <span id="inv-reposicion-flecha" style="font-size:13px;color:var(--ink-3)">▼</span>
       </div>
-      ${reposicionAbierta ? `
+      <div id="inv-reposicion-body" style="display:none">
         <div class="table-wrap" style="margin-top:14px">
           <table class="tbl">
             <thead><tr><th>Producto</th><th>Marca</th><th>Stock actual</th><th>Vendidas (30d)</th><th>Se agota en</th></tr></thead>
             <tbody>${filasReposicion}</tbody>
           </table>
-        </div>` : ''}
+        </div>
+      </div>
     </div>`;
 
   // 244. Filtramos inventario según búsqueda activa
@@ -3900,6 +3926,18 @@ function renderInventario() {
 
 // 345. Actualiza solo la tabla de inventario sin reconstruir toda la página
 //      Esto preserva el foco del buscador mientras el usuario escribe
+// 426. Toggle de secciones de inventario (capital muerto / reposición)
+//      Pura manipulación de DOM — NO llama a renderInventario(), así que
+//      es instantáneo sin importar cuántos productos o ventas haya.
+window.toggleSeccionInventario = (idBody, idFlecha) => {
+  const body = document.getElementById(idBody);
+  const flecha = document.getElementById(idFlecha);
+  if(!body) return;
+  const abierto = body.style.display !== 'none';
+  body.style.display = abierto ? 'none' : 'block';
+  if(flecha) flecha.textContent = abierto ? '▼' : '▲';
+};
+
 window.actualizarTablaInventario = () => {
   const filtrado = busquedaInventario
     ? DATA.inventario.filter(p =>
