@@ -2358,7 +2358,15 @@ function renderDashboard() {
         if(!pm[p.nombre]) pm[p.nombre]={cant:0,total:0,margen:0,sinCosto:false};
         pm[p.nombre].cant += Number(p.cant||0);
         pm[p.nombre].total += Number(p.precio||0)*Number(p.cant||0);
-        if(p.costoUnit != null) pm[p.nombre].margen += (Number(p.precio||0)-Number(p.costoUnit||0))*Number(p.cant||0);
+        // 430. FIX: aplicamos el mismo fallback al costo actual del inventario
+        //      que ya usa calcularMargenVenta() — antes esta rama solo miraba
+        //      p.costoUnit y quedaba en N/D para ventas múltiples viejas.
+        let costo = p.costoUnit;
+        if(costo == null) {
+          const prod = DATA.inventario.find(x => x.id === p.prodId);
+          costo = prod ? Number(prod.costo||0) : null;
+        }
+        if(costo != null) pm[p.nombre].margen += (Number(p.precio||0)-Number(costo||0))*Number(p.cant||0);
         else pm[p.nombre].sinCosto = true;
       });
       return;
