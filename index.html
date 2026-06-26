@@ -6771,6 +6771,21 @@ window.registrarDistribuidorDesdeVentas = async (nombre) => {
   toast('✅ ' + nombre + ' registrado — ' + ventasAVincular.length + ' venta(s) vinculada(s)');
 };
 
+// ============================================================
+// 546. DESVINCULAR VENTA DE UN DISTRIBUIDOR
+// Quita el distribuidorId de una venta SIN borrarla — útil cuando una
+// venta quedó vinculada por error (ej: nombre de cliente coincidía con
+// el del distribuidor pero era otra persona, o un combo/venta distinta).
+// La venta sigue existiendo normal, solo deja de contar para este distribuidor.
+// ============================================================
+window.desvincularVentaDistribuidor = async (ventaId) => {
+  const v = DATA.ventas.find(x => x.id === ventaId);
+  if(!v) return;
+  if(!confirm('¿Desvincular esta venta (' + (v.producto||'') + ' — ' + fmt(v.total) + ') de este distribuidor? La venta no se borra, solo deja de contar aquí.')) return;
+  await updateDoc(doc(db,'ventas',ventaId), { distribuidorId: null });
+  toast('✅ Venta desvinculada');
+};
+
 window.eliminarDistribuidor = async (id) => {
   const d = DATA.distribuidores.find(x => x.id === id);
   if(!confirm('¿Eliminar ' + (d?.nombre||'este distribuidor') + '? Las ventas vinculadas no se borran.')) return;
@@ -7484,8 +7499,13 @@ function renderDistribuidores() {
           ventasOrd.forEach(v => {
             const pendiente = saldoReal(v) > 0;
             const margenV = calcularMargenVenta(v);
+            // 545. Mostramos el nombre del CLIENTE de cada venta — si aparece
+            //      un nombre distinto al del distribuidor, es la pista de
+            //      una vinculación incorrecta. También agregamos botón para
+            //      desvincular sin borrar la venta.
             filas += '<tr>'
               + '<td style="color:var(--ink-3)">' + (v.fecha||'') + '</td>'
+              + '<td style="font-weight:500;color:' + ((v.cliente||'').trim().toLowerCase() !== d.nombre.trim().toLowerCase() ? 'var(--red)' : 'var(--ink)') + '">' + (v.cliente||'—') + '</td>'
               + '<td style="font-weight:500">' + (v.producto||'') + '</td>'
               + '<td style="text-align:center">' + (v.cant||1) + '</td>'
               + '<td style="font-weight:600;color:var(--lime)">' + fmt(v.total) + '</td>'
@@ -7493,10 +7513,11 @@ function renderDistribuidores() {
               + '<td><span style="padding:2px 8px;border-radius:12px;font-size:10px;font-weight:600;background:'
                 + (pendiente?'var(--amber-bg)':'#F0FDF4') + ';color:' + (pendiente?'var(--amber)':'var(--green)') + '">'
                 + (pendiente?'Pendiente':'Pagado') + '</span></td>'
+              + '<td><button class="btn btn-xs btn-danger" onclick="desvincularVentaDistribuidor(\'' + v.id + '\')" title="Quitar esta venta de este distribuidor">Desvincular</button></td>'
             + '</tr>';
           });
           historialHtml = '<div class="table-wrap" style="margin-top:12px"><table class="tbl">'
-            + '<thead><tr><th>Fecha</th><th>Producto</th><th>Cant.</th><th>Total</th><th>Margen</th><th>Estado</th></tr></thead>'
+            + '<thead><tr><th>Fecha</th><th>Cliente</th><th>Producto</th><th>Cant.</th><th>Total</th><th>Margen</th><th>Estado</th><th></th></tr></thead>'
             + '<tbody>' + filas + '</tbody></table></div>';
         }
       }
