@@ -762,6 +762,8 @@ body{
     <div class="page" id="page-combos"></div>
     <!-- 306. Página de deudores -->
     <div class="page" id="page-deudores"></div>
+    <!-- 490. Página de consignación -->
+    <div class="page" id="page-consignacion"></div>
     <!-- 328. Página de distribuidores -->
     <div class="page" id="page-distribuidores"></div>
 
@@ -804,6 +806,126 @@ body{
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('modal-distribuidor')">Cancelar</button>
       <button class="btn btn-lime" onclick="guardarDistribuidor()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- 491. MODAL: NUEVA TIENDA DE CONSIGNACIÓN -->
+<div class="modal-bg" id="modal-tienda-consig">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <span class="modal-title" id="tc-titulo">Nueva tienda</span>
+      <button class="modal-close" onclick="closeModal('modal-tienda-consig')">✕</button>
+    </div>
+    <input type="hidden" id="tc-id" value="">
+    <div class="f-group">
+      <label class="f-label">Nombre de la tienda *</label>
+      <input type="text" id="tc-nombre" class="f-input" placeholder="Ej: Tienda Naturista El Roble">
+    </div>
+    <div class="f-row">
+      <div class="f-group">
+        <label class="f-label">Teléfono</label>
+        <input type="text" id="tc-telefono" class="f-input" placeholder="Ej: 3001234567">
+      </div>
+      <div class="f-group">
+        <label class="f-label">Ciudad</label>
+        <input type="text" id="tc-ciudad" class="f-input" placeholder="Ej: Medellín">
+      </div>
+    </div>
+    <div class="f-group">
+      <label class="f-label">Notas</label>
+      <input type="text" id="tc-notas" class="f-input" placeholder="Contacto, dirección, observaciones...">
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-tienda-consig')">Cancelar</button>
+      <button class="btn btn-lime" onclick="guardarTiendaConsignacion()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- 492. MODAL: DEJAR PRODUCTOS EN CONSIGNACIÓN -->
+<div class="modal-bg" id="modal-dejar-consig">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-header">
+      <span class="modal-title">Dejar productos en consignación</span>
+      <button class="modal-close" onclick="closeModal('modal-dejar-consig')">✕</button>
+    </div>
+    <input type="hidden" id="dc-tienda-id" value="">
+    <div id="dc-tienda-nombre" style="background:var(--surface-2);border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:13px;font-weight:600;color:var(--ink)"></div>
+    <div class="f-group">
+      <label class="f-label">Fecha</label>
+      <input type="date" id="dc-fecha" class="f-input">
+    </div>
+    <!-- 493. Buscador de producto — mismo patrón usado en Ventas/Combos/Pedidos -->
+    <div class="f-group">
+      <label class="f-label">Producto *</label>
+      <input type="text" id="dc-busqueda" class="f-input" placeholder="🔍 Buscar producto..." oninput="filtrarProductosConsignacion(this.value)">
+      <div id="dc-resultados" style="max-height:140px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--surface);margin-top:4px;display:none"></div>
+      <div id="dc-seleccionado" style="display:none;margin-top:6px;padding:8px 10px;background:var(--lime-bg);border-radius:8px;font-size:12px;font-weight:600;color:var(--lime)"></div>
+      <input type="hidden" id="dc-prod-id" value="">
+    </div>
+    <div class="f-group">
+      <label class="f-label">Cantidad a dejar *</label>
+      <input type="number" id="dc-cantidad" class="f-input" min="1" placeholder="Ej: 5">
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-dejar-consig')">Cancelar</button>
+      <button class="btn btn-lime" onclick="guardarDejarConsignacion()">Dejar en consignación</button>
+    </div>
+  </div>
+</div>
+
+<!-- 494. MODAL: REPORTAR VENTA O DEVOLUCIÓN DE CONSIGNACIÓN -->
+<div class="modal-bg" id="modal-reportar-consig">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <span class="modal-title" id="rc-titulo">Reportar</span>
+      <button class="modal-close" onclick="closeModal('modal-reportar-consig')">✕</button>
+    </div>
+    <input type="hidden" id="rc-item-id" value="">
+    <div id="rc-info" style="background:var(--surface-2);border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:13px;color:var(--ink-2)"></div>
+    <!-- 495. Tipo de reporte: venta (genera ingreso) o devolución (vuelve al stock) -->
+    <div class="f-group">
+      <label class="f-label">¿Qué pasó?</label>
+      <div style="display:flex;gap:8px">
+        <button type="button" id="rc-tipo-venta" onclick="setTipoReporteConsig('venta')"
+          style="flex:1;padding:9px;border-radius:var(--radius);border:2px solid var(--ink);background:var(--ink);color:#fff;font-size:13px;font-weight:600;cursor:pointer">
+          💰 Se vendió
+        </button>
+        <button type="button" id="rc-tipo-devolucion" onclick="setTipoReporteConsig('devolucion')"
+          style="flex:1;padding:9px;border-radius:var(--radius);border:2px solid var(--border);background:var(--surface-2);color:var(--ink-2);font-size:13px;font-weight:600;cursor:pointer">
+          ↩️ Me lo devuelven
+        </button>
+      </div>
+    </div>
+    <div class="f-group">
+      <label class="f-label">Cantidad *</label>
+      <input type="number" id="rc-cantidad" class="f-input" min="1">
+    </div>
+    <!-- 496. Campos solo visibles cuando el reporte es una venta -->
+    <div id="rc-venta-campos">
+      <div class="f-row">
+        <div class="f-group">
+          <label class="f-label">Precio de venta unitario ($)</label>
+          <input type="number" id="rc-precio" class="f-input" oninput="previoCOP('rc-precio','prev-rc-precio')">
+          <div id="prev-rc-precio" style="font-size:11px;margin-top:3px;font-weight:600"></div>
+        </div>
+        <div class="f-group">
+          <label class="f-label">Método de pago</label>
+          <select id="rc-metodo-pago" class="f-input">
+            <option value="efectivo">💵 Efectivo</option>
+            <option value="transferencia">📲 Transferencia</option>
+          </select>
+        </div>
+      </div>
+      <div class="f-group">
+        <label class="f-label">Fecha de la venta</label>
+        <input type="date" id="rc-fecha">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-reportar-consig')">Cancelar</button>
+      <button class="btn btn-lime" onclick="guardarReporteConsignacion()">Confirmar</button>
     </div>
   </div>
 </div>
@@ -1744,7 +1866,8 @@ let DATA = {
   notificaciones:[], combos:[],
   consumos:[],
   distribuidores:[],  // 326. distribuidores: gimnasios y distribuidores vinculados
-  cierres:[]  // 415. cierres: snapshots mensuales inmutables (corte contable)
+  cierres:[],  // 415. cierres: snapshots mensuales inmutables (corte contable)
+  tiendasConsignacion:[], consignaciones:[]  // 488. consignación física en tiendas
 };
 let currentPage = 'dashboard';  // Página activa
 let ajusteProductoId = null;    // ID del producto que se está ajustando
@@ -2050,6 +2173,8 @@ const MENU = [
   { id:'combos', label:'Combos', ico:'🎁', group:'Operaciones' },
   // 305. Deudores — clientes que deben + consumo interno Ángel/Jero
   { id:'deudores', label:'Deudores', ico:'💳', group:'Negocio' },
+  // 489. Consignación — tiendas físicas que tienen productos sin haberlos comprado aún
+  { id:'consignacion', label:'Consignación', ico:'🏪', group:'Negocio' },
 ];
 
 // ============================================================
@@ -2112,7 +2237,7 @@ document.getElementById('li-pass')?.addEventListener('keydown', e => {
 // Cada cambio en Firebase actualiza DATA y redibuja la página
 // ============================================================
 function startListeners() {
-  const cols = ['ventas','inventario','gastos','proveedores','pedidos','metas','combos','consumos','distribuidores','cierres'];
+  const cols = ['ventas','inventario','gastos','proveedores','pedidos','metas','combos','consumos','distribuidores','cierres','tiendasConsignacion','consignaciones'];
   cols.forEach(col => {
     const q = query(collection(db, col), orderBy('createdAt','desc'));
     onSnapshot(q, snap => {
@@ -2122,6 +2247,7 @@ function startListeners() {
       if(currentPage === 'clientes' && col === 'ventas') renderPage('clientes');
       if(currentPage === 'deudores' && (col === 'ventas' || col === 'consumos')) renderPage('deudores');
       if(currentPage === 'distribuidores' && (col === 'ventas' || col === 'distribuidores')) renderPage('distribuidores');
+      if(currentPage === 'consignacion' && (col === 'consignaciones' || col === 'tiendasConsignacion' || col === 'ventas')) renderPage('consignacion');
       if(col === 'inventario') checkStockAlerts();
     });
   });
@@ -2184,7 +2310,8 @@ function renderPage(id) {
     gastos:renderGastos, proveedores:renderProveedores,
     pedidos:renderPedidos, metas:renderMetas, combos:renderCombos,
     deudores:renderDeudores,
-    distribuidores:renderDistribuidores
+    distribuidores:renderDistribuidores,
+    consignacion:renderConsignacion
   };
   if(renders[id]) renders[id]();
 }
@@ -4600,7 +4727,7 @@ window.editarProducto = (id) => {
     const marcaInput = document.getElementById('p-marca');
     if(marcaInput) marcaInput.value = prod.marca || '';
 
-    document.getElementById('modal-producto-title').textContent = 'Editar — ' + prod.nombre;
+    document.getElementById('modal-producto-title').textContent = 'Editar ��� ' + prod.nombre;
     document.getElementById('btn-guardar-producto').textContent = 'Guardar cambios';
   }, 50);
 };
@@ -6468,6 +6595,334 @@ window.eliminarDistribuidor = async (id) => {
 };
 
 // ============================================================
+// 497. CONSIGNACIÓN — tiendas físicas con productos prestados
+// El producto sale del stock de Duppla pero NO genera venta/ingreso
+// hasta que la tienda reporta que vendió algo. Lo que no se vende
+// puede devolverse y vuelve al stock normal.
+// ============================================================
+
+// --- Gestión de tiendas ---
+window.abrirNuevaTiendaConsig = () => {
+  document.getElementById('tc-id').value = '';
+  document.getElementById('tc-nombre').value = '';
+  document.getElementById('tc-telefono').value = '';
+  document.getElementById('tc-ciudad').value = '';
+  document.getElementById('tc-notas').value = '';
+  document.getElementById('tc-titulo').textContent = 'Nueva tienda';
+  openModal('modal-tienda-consig');
+};
+
+window.editarTiendaConsig = (id) => {
+  const t = DATA.tiendasConsignacion.find(x => x.id === id);
+  if(!t) return;
+  openModal('modal-tienda-consig');
+  setTimeout(() => {
+    document.getElementById('tc-id').value = id;
+    document.getElementById('tc-nombre').value = t.nombre || '';
+    document.getElementById('tc-telefono').value = t.telefono || '';
+    document.getElementById('tc-ciudad').value = t.ciudad || '';
+    document.getElementById('tc-notas').value = t.notas || '';
+    document.getElementById('tc-titulo').textContent = 'Editar — ' + t.nombre;
+  }, 30);
+};
+
+window.guardarTiendaConsignacion = async () => {
+  const nombre = document.getElementById('tc-nombre').value.trim();
+  if(!nombre) { alert('El nombre es obligatorio'); return; }
+  const id = document.getElementById('tc-id').value;
+  const data = {
+    nombre,
+    telefono: document.getElementById('tc-telefono').value.trim(),
+    ciudad: document.getElementById('tc-ciudad').value.trim(),
+    notas: document.getElementById('tc-notas').value.trim(),
+  };
+  if(id) {
+    await updateDoc(doc(db,'tiendasConsignacion',id), data);
+    toast('✅ Tienda actualizada');
+  } else {
+    await addDoc(collection(db,'tiendasConsignacion'), { ...data, createdAt: serverTimestamp() });
+    toast('✅ Tienda agregada');
+  }
+  closeModal('modal-tienda-consig');
+};
+
+window.eliminarTiendaConsig = async (id) => {
+  const t = DATA.tiendasConsignacion.find(x => x.id === id);
+  const tieneActivos = DATA.consignaciones.some(c => c.tiendaId === id && Number(c.cantidadActual||0) > 0);
+  if(tieneActivos) { alert('Esta tienda todavía tiene productos en consignación. Repórtalos como vendidos o devueltos antes de eliminarla.'); return; }
+  if(!confirm('¿Eliminar ' + (t?.nombre||'esta tienda') + '?')) return;
+  await deleteDoc(doc(db,'tiendasConsignacion',id));
+  toast('✅ Tienda eliminada');
+};
+
+// --- Dejar productos en consignación ---
+window.abrirDejarConsignacion = (tiendaId) => {
+  const t = DATA.tiendasConsignacion.find(x => x.id === tiendaId);
+  if(!t) return;
+  document.getElementById('dc-tienda-id').value = tiendaId;
+  document.getElementById('dc-tienda-nombre').textContent = '🏪 ' + t.nombre;
+  document.getElementById('dc-fecha').value = today();
+  document.getElementById('dc-busqueda').value = '';
+  document.getElementById('dc-resultados').style.display = 'none';
+  document.getElementById('dc-seleccionado').style.display = 'none';
+  document.getElementById('dc-prod-id').value = '';
+  document.getElementById('dc-cantidad').value = '';
+  openModal('modal-dejar-consig');
+};
+
+window.filtrarProductosConsignacion = (busq) => {
+  const res = document.getElementById('dc-resultados');
+  if(!busq.trim()) { res.style.display = 'none'; return; }
+  const candidatos = DATA.inventario.filter(p =>
+    p.nombre.toLowerCase().includes(busq.toLowerCase()) || (p.marca||'').toLowerCase().includes(busq.toLowerCase())
+  );
+  res.style.display = 'block';
+  if(candidatos.length === 0) {
+    res.innerHTML = '<div style="padding:10px;color:var(--ink-3);font-size:12px;text-align:center">Sin resultados</div>';
+    return;
+  }
+  res.innerHTML = agruparProductosPorMarca(candidatos.slice(0,20), function(p) {
+    return '<div onclick="seleccionarProductoConsignacion(\'' + p.id + '\')" style="padding:7px 10px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px" onmouseover="this.style.background=\'var(--surface-2)\'" onmouseout="this.style.background=\'var(--surface)\'">'
+      + '<div style="font-weight:500">' + p.nombre + '</div>'
+      + '<div style="color:var(--ink-3);font-size:11px">Stock disponible: ' + (p.stock||0) + '</div>'
+    + '</div>';
+  });
+};
+
+window.seleccionarProductoConsignacion = (prodId) => {
+  const prod = DATA.inventario.find(p => p.id === prodId);
+  if(!prod) return;
+  document.getElementById('dc-prod-id').value = prodId;
+  document.getElementById('dc-busqueda').value = prod.nombre;
+  document.getElementById('dc-resultados').style.display = 'none';
+  document.getElementById('dc-seleccionado').style.display = 'block';
+  document.getElementById('dc-seleccionado').textContent = '✅ ' + prod.nombre + ' (stock disponible: ' + (prod.stock||0) + ')';
+};
+
+window.guardarDejarConsignacion = async () => {
+  const tiendaId = document.getElementById('dc-tienda-id').value;
+  const prodId = document.getElementById('dc-prod-id').value;
+  const cantidad = Number(document.getElementById('dc-cantidad').value);
+  const fecha = document.getElementById('dc-fecha').value;
+  if(!prodId) { alert('Selecciona un producto'); return; }
+  if(!cantidad || cantidad <= 0) { alert('Ingresa una cantidad válida'); return; }
+
+  const prod = DATA.inventario.find(p => p.id === prodId);
+  if(!prod) { alert('Producto no encontrado'); return; }
+  if(Number(prod.stock||0) < cantidad) { alert('Stock insuficiente. Disponible: ' + prod.stock); return; }
+
+  // 498. El producto SALE del stock de Duppla, igual que con una venta o consumo,
+  //      pero NO se registra como venta — solo como "afuera en consignación".
+  //      Usamos FIFO si el producto tiene lotes, para saber el costo exacto
+  //      de lo que está prestado (igual que en ventas/consumos).
+  const fifo = consumirLotesFIFO(prod, cantidad);
+  const updateInv = construirUpdateStockUbicacion(prod, cantidad, (prod.stockJero||0) > 0 ? 'jero' : 'angel');
+  let costoUnit;
+  if(fifo) {
+    updateInv.lotes = fifo.lotesActualizados;
+    updateInv.costo = calcularCostoPromedioLotes(fifo.lotesActualizados) ?? prod.costo;
+    costoUnit = fifo.costoPromedioVenta != null ? fifo.costoPromedioVenta : Number(prod.costo)||0;
+  } else {
+    costoUnit = Number(prod.costo)||0;
+  }
+  await updateDoc(doc(db,'inventario',prodId), updateInv);
+
+  const t = DATA.tiendasConsignacion.find(x => x.id === tiendaId);
+  await addDoc(collection(db,'consignaciones'), {
+    tiendaId, tiendaNombre: t?.nombre || '',
+    prodId, prodNombre: prod.nombre,
+    cantidadInicial: cantidad,
+    cantidadActual: cantidad, // 499. Se va reduciendo con ventas/devoluciones reportadas
+    costoUnit,
+    fecha,
+    historialMovimientos: [], // [{tipo:'venta'|'devolucion', cantidad, fecha, ...}]
+    createdAt: serverTimestamp()
+  });
+
+  await pushNotif('🏪 Consignación', cantidad + 'x ' + prod.nombre + ' dejado en ' + (t?.nombre||''), 'consignacion', {seccion:'consignacion'});
+  closeModal('modal-dejar-consig');
+  toast('✅ Producto dejado en consignación');
+};
+
+// --- Reportar venta o devolución ---
+let tipoReporteConsigActual = 'venta';
+
+window.setTipoReporteConsig = (tipo) => {
+  tipoReporteConsigActual = tipo;
+  ['venta','devolucion'].forEach(k => {
+    const btn = document.getElementById('rc-tipo-' + k);
+    if(!btn) return;
+    const activo = k === tipo;
+    btn.style.background = activo ? 'var(--ink)' : 'var(--surface-2)';
+    btn.style.color = activo ? '#fff' : 'var(--ink-2)';
+    btn.style.borderColor = activo ? 'var(--ink)' : 'var(--border)';
+  });
+  document.getElementById('rc-venta-campos').style.display = tipo === 'venta' ? 'block' : 'none';
+};
+
+window.abrirReportarConsignacion = (itemId) => {
+  const item = DATA.consignaciones.find(c => c.id === itemId);
+  if(!item) return;
+  document.getElementById('rc-item-id').value = itemId;
+  document.getElementById('rc-titulo').textContent = 'Reportar — ' + item.prodNombre;
+  document.getElementById('rc-info').innerHTML =
+    'En <strong>' + item.tiendaNombre + '</strong> · Disponible: <strong>' + item.cantidadActual + '</strong> de ' + item.cantidadInicial + ' dejadas';
+  document.getElementById('rc-cantidad').value = '';
+  document.getElementById('rc-precio').value = '';
+  document.getElementById('prev-rc-precio').textContent = '';
+  document.getElementById('rc-fecha').value = today();
+  setTipoReporteConsig('venta');
+  openModal('modal-reportar-consig');
+};
+
+window.guardarReporteConsignacion = async () => {
+  const itemId = document.getElementById('rc-item-id').value;
+  const item = DATA.consignaciones.find(c => c.id === itemId);
+  if(!item) return;
+
+  const cantidad = Number(document.getElementById('rc-cantidad').value);
+  if(!cantidad || cantidad <= 0) { alert('Ingresa una cantidad válida'); return; }
+  if(cantidad > Number(item.cantidadActual||0)) { alert('No puedes reportar más de lo disponible (' + item.cantidadActual + ')'); return; }
+
+  const nuevaCantidadActual = Number(item.cantidadActual) - cantidad;
+  const movimiento = { tipo: tipoReporteConsigActual, cantidad, fecha: today() };
+
+  if(tipoReporteConsigActual === 'venta') {
+    // 500. Reportar venta: AHORA SÍ se genera el ingreso real para Duppla.
+    //      El producto ya había salido del stock cuando se dejó en consignación,
+    //      así que aquí NO se vuelve a descontar — solo se registra el ingreso.
+    const precio = Number(document.getElementById('rc-precio').value);
+    if(!precio || precio <= 0) { alert('Ingresa el precio de venta'); return; }
+    const fechaVenta = document.getElementById('rc-fecha').value || today();
+    const metodoPago = document.getElementById('rc-metodo-pago').value;
+    const total = precio * cantidad;
+
+    await addDoc(collection(db,'ventas'), {
+      fecha: fechaVenta, canal: 'distribuidor',
+      producto: item.prodNombre, prodId: item.prodId, esManual:false,
+      cant: cantidad, precio, total,
+      cliente: item.tiendaNombre,
+      tipoPrecio: 'distribuidor', metodoPago,
+      pagado: total, saldo: 0, estadoPago: 'pagado', // 501. Asumimos pago inmediato al reportar; se puede editar después si quedó a crédito
+      abonos: [],
+      costoUnit: item.costoUnit, // 502. Usamos el costo que ya se fijó al dejar el producto en consignación
+      esDeConsignacion: true, consignacionId: itemId,
+      createdAt: serverTimestamp()
+    });
+    movimiento.precio = precio;
+    movimiento.total = total;
+    await pushNotif('💰 Venta en consignación', item.tiendaNombre + ' vendió ' + cantidad + 'x ' + item.prodNombre, 'venta', {seccion:'consignacion'});
+  } else {
+    // 503. Devolución: el producto vuelve al stock de Duppla — sin afectar ingresos.
+    const prod = DATA.inventario.find(p => p.id === item.prodId);
+    if(prod) {
+      const sjActual = prod.stockJero != null ? prod.stockJero : (prod.stock||0);
+      const saActual = prod.stockAngel != null ? prod.stockAngel : 0;
+      const sjNuevo = sjActual + cantidad;
+      await updateDoc(doc(db,'inventario',item.prodId), { stockJero: sjNuevo, stockAngel: saActual, stock: sjNuevo + saActual });
+    }
+    await pushNotif('↩️ Devolución de consignación', item.tiendaNombre + ' devolvió ' + cantidad + 'x ' + item.prodNombre, 'consignacion', {seccion:'consignacion'});
+  }
+
+  await updateDoc(doc(db,'consignaciones',itemId), {
+    cantidadActual: nuevaCantidadActual,
+    historialMovimientos: [...(item.historialMovimientos||[]), movimiento]
+  });
+
+  closeModal('modal-reportar-consig');
+  toast('✅ Reporte registrado');
+};
+
+// ============================================================
+// 504. PÁGINA: CONSIGNACIÓN
+// Agrupa por tienda, muestra qué productos tiene cada una activos,
+// valor total en consignación, y permite reportar ventas/devoluciones.
+// ============================================================
+let consigTiendaAbiertaId = null;
+
+window.toggleTiendaConsig = (id) => {
+  consigTiendaAbiertaId = consigTiendaAbiertaId === id ? null : id;
+  renderConsignacion();
+};
+
+function renderConsignacion() {
+  // 505. Activos = los que aún tienen cantidadActual > 0 en alguna tienda
+  const activosTotal = DATA.consignaciones.filter(c => Number(c.cantidadActual||0) > 0);
+  const valorTotalConsignado = activosTotal.reduce((s,c) => s + Number(c.cantidadActual||0)*Number(c.costoUnit||0), 0);
+  const totalVendidoConsignacion = DATA.ventas.filter(v => v.esDeConsignacion).reduce((s,v)=>s+Number(v.total||0),0);
+
+  const resumenHtml = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px">'
+    + '<div class="metric-card"><div class="metric-label">Tiendas</div><div class="metric-value" style="font-size:18px">' + DATA.tiendasConsignacion.length + '</div><div class="metric-sub">registradas</div></div>'
+    + '<div class="metric-card"><div class="metric-label">Productos afuera</div><div class="metric-value" style="font-size:18px;color:var(--amber)">' + activosTotal.reduce((s,c)=>s+Number(c.cantidadActual||0),0) + '</div><div class="metric-sub">unidades en consignación</div></div>'
+    + '<div class="metric-card"><div class="metric-label">Valor en consignación</div><div class="metric-value" style="font-size:18px;color:var(--blue)">' + fmt(valorTotalConsignado) + '</div><div class="metric-sub">a precio de costo</div></div>'
+    + '<div class="metric-card"><div class="metric-label">Vendido vía consignación</div><div class="metric-value" style="font-size:18px;color:var(--lime)">' + fmt(totalVendidoConsignacion) + '</div><div class="metric-sub">ingresos confirmados</div></div>'
+  + '</div>';
+
+  let cardsHtml = '';
+  if(DATA.tiendasConsignacion.length === 0) {
+    cardsHtml = '<div class="card"><div class="empty-state"><div class="empty-state-icon">🏪</div>'
+      + '<div class="empty-state-text">Sin tiendas registradas</div>'
+      + '<div class="empty-state-sub">Agrega tu primera tienda con consignación</div></div></div>';
+  } else {
+    DATA.tiendasConsignacion.forEach(t => {
+      const itemsTienda = DATA.consignaciones.filter(c => c.tiendaId === t.id);
+      const itemsActivos = itemsTienda.filter(c => Number(c.cantidadActual||0) > 0);
+      const valorTienda = itemsActivos.reduce((s,c) => s + Number(c.cantidadActual||0)*Number(c.costoUnit||0), 0);
+      const isOpen = consigTiendaAbiertaId === t.id;
+
+      let detalleHtml = '';
+      if(isOpen) {
+        if(itemsActivos.length === 0) {
+          detalleHtml = '<div style="padding:14px;color:var(--ink-3);font-size:12px;text-align:center">Sin productos activos en esta tienda</div>';
+        } else {
+          let filas = '';
+          itemsActivos.forEach(item => {
+            filas += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">'
+              + '<div>'
+                + '<div style="font-size:13px;font-weight:500;color:var(--ink)">' + item.prodNombre + '</div>'
+                + '<div style="font-size:11px;color:var(--ink-3)">Dejado: ' + item.fecha + ' · ' + item.cantidadActual + ' de ' + item.cantidadInicial + ' disponibles</div>'
+              + '</div>'
+              + '<button class="btn btn-xs" style="color:var(--blue);border-color:#BFDBFE" onclick="abrirReportarConsignacion(\'' + item.id + '\')">Reportar</button>'
+            + '</div>';
+          });
+          detalleHtml = '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">' + filas + '</div>';
+        }
+      }
+
+      cardsHtml += '<div class="card" style="margin-bottom:12px">'
+        + '<div style="display:flex;justify-content:space-between;align-items:flex-start">'
+          + '<div style="display:flex;align-items:center;gap:12px;flex:1">'
+            + '<div style="width:40px;height:40px;border-radius:10px;background:var(--lime-bg);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">🏪</div>'
+            + '<div style="flex:1;min-width:0">'
+              + '<div style="font-size:14px;font-weight:700;color:var(--ink)">' + t.nombre + '</div>'
+              + '<div style="font-size:11px;color:var(--ink-3);margin-top:2px">' + (t.ciudad?t.ciudad+' · ':'') + (t.telefono||'') + '</div>'
+            + '</div>'
+          + '</div>'
+          + '<div style="text-align:right;flex-shrink:0;margin-left:12px">'
+            + '<div style="font-size:16px;font-weight:800;color:var(--blue)">' + fmt(valorTienda) + '</div>'
+            + '<div style="font-size:11px;color:var(--ink-3)">' + itemsActivos.length + ' producto(s) activo(s)</div>'
+          + '</div>'
+        + '</div>'
+        + '<div style="display:flex;gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">'
+          + '<button class="btn btn-sm" onclick="toggleTiendaConsig(\'' + t.id + '\')" style="flex:1">' + (isOpen?'▲ Ocultar':'▼ Ver productos ('+itemsActivos.length+')') + '</button>'
+          + '<button class="btn btn-sm btn-lime" onclick="abrirDejarConsignacion(\'' + t.id + '\')">+ Dejar producto</button>'
+          + '<button class="btn btn-sm" onclick="editarTiendaConsig(\'' + t.id + '\')">✏️</button>'
+          + '<button class="btn btn-sm btn-danger" onclick="eliminarTiendaConsig(\'' + t.id + '\')">✕</button>'
+        + '</div>'
+        + detalleHtml
+      + '</div>';
+    });
+  }
+
+  document.getElementById('page-consignacion').innerHTML =
+    '<div class="page-header">'
+      + '<div><div class="page-title">Consignación</div><div class="page-sub">Productos prestados a tiendas físicas</div></div>'
+      + '<button class="btn btn-lime btn-sm" onclick="abrirNuevaTiendaConsig()">+ Agregar tienda</button>'
+    + '</div>'
+    + resumenHtml
+    + cardsHtml;
+}
+
 // 387. CUENTA DE COBRO PDF — solo el saldo pendiente de un distribuidor
 // Replica el formato colombiano de referencia: encabezado, DEBE A,
 // suma en letras, tabla de productos pendientes, datos de consignación.
