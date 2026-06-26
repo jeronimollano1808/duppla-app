@@ -1348,17 +1348,74 @@ body{
       </div>
       <div class="f-group"><label class="f-label">Fecha</label><input type="date" id="pe-fecha" class="f-input"></div>
     </div>
-    <div class="f-group"><label class="f-label">Productos (descripción)</label><input type="text" id="pe-prods" class="f-input" placeholder="Ej: 20x Omega 3, 10x Proteína BSN"></div>
+    <!-- 473. Líneas de producto estructuradas — cada una con buscador, cantidad y costo -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <label class="f-label" style="margin:0">Productos del pedido *</label>
+      <div style="display:flex;gap:6px">
+        <button type="button" class="btn btn-sm" onclick="agregarLineaPedido()">+ Producto</button>
+        <button type="button" class="btn btn-sm" style="color:var(--blue);border-color:#BFDBFE" onclick="abrirNuevoProductoDesdePedido()">+ Producto nuevo</button>
+      </div>
+    </div>
+    <div id="pe-lineas-container"></div>
+    <div class="f-group"><label class="f-label">Notas adicionales (opcional)</label><input type="text" id="pe-prods" class="f-input" placeholder="Observaciones sobre el pedido completo"></div>
     <div class="f-row">
-      <div class="f-group"><label class="f-label">Total del pedido ($)</label><input type="number" id="pe-total" class="f-input" oninput="previoCOP('pe-total','prev-pe-total')">
+      <div class="f-group"><label class="f-label">Total del pedido ($)</label><input type="number" id="pe-total" class="f-input" readonly style="opacity:.7">
         <div id="prev-pe-total" style="font-size:11px;margin-top:4px;font-weight:600"></div>
       </div>
-      <div class="f-group"><label class="f-label">Costo de flete ($)</label><input type="number" id="pe-flete" class="f-input" value="0"></div>
+      <div class="f-group"><label class="f-label">Costo de flete ($)</label><input type="number" id="pe-flete" class="f-input" value="0" oninput="recalcularTotalPedido()"></div>
     </div>
     <div class="f-group"><label class="f-label">Notas</label><input type="text" id="pe-notas" class="f-input" placeholder="Observaciones, fechas estimadas..."></div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('modal-pedido')">Cancelar</button>
       <button class="btn btn-lime" onclick="guardarPedido()">Crear pedido</button>
+    </div>
+  </div>
+</div>
+
+<!-- 474. MODAL: PRODUCTO NUEVO RÁPIDO (desde Pedidos) -->
+<div class="modal-bg" id="modal-producto-rapido">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <span class="modal-title">Producto nuevo</span>
+      <button class="modal-close" onclick="closeModal('modal-producto-rapido')">✕</button>
+    </div>
+    <div style="background:var(--surface-2);border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:var(--ink-2)">
+      💡 Se crea con stock 0 — el stock y el costo de este pedido se agregan automáticamente cuando marques el pedido como "Recibido".
+    </div>
+    <div class="f-group">
+      <label class="f-label">Nombre *</label>
+      <input type="text" id="pr-nombre" class="f-input" placeholder="Ej: Creatina Monohidratada 500g">
+    </div>
+    <div class="f-row">
+      <div class="f-group">
+        <label class="f-label">Marca</label>
+        <input type="text" id="pr-marca" class="f-input" placeholder="Ej: BSN" list="marcas-datalist">
+      </div>
+      <div class="f-group">
+        <label class="f-label">Stock mínimo</label>
+        <input type="number" id="pr-minimo" class="f-input" value="5">
+      </div>
+    </div>
+    <div class="f-row">
+      <div class="f-group">
+        <label class="f-label">Precio público ($) *</label>
+        <input type="number" id="pr-pventa" class="f-input" oninput="previoCOP('pr-pventa','prev-pr-pventa')">
+        <div id="prev-pr-pventa" style="font-size:11px;margin-top:3px;font-weight:600"></div>
+      </div>
+      <div class="f-group">
+        <label class="f-label">Precio distribuidor ($)</label>
+        <input type="number" id="pr-pdist" class="f-input" oninput="previoCOP('pr-pdist','prev-pr-pdist')">
+        <div id="prev-pr-pdist" style="font-size:11px;margin-top:3px;font-weight:600"></div>
+      </div>
+    </div>
+    <div class="f-group">
+      <label class="f-label">Precio especial ($)</label>
+      <input type="number" id="pr-pesp" class="f-input" oninput="previoCOP('pr-pesp','prev-pr-pesp')">
+      <div id="prev-pr-pesp" style="font-size:11px;margin-top:3px;font-weight:600"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-producto-rapido')">Cancelar</button>
+      <button class="btn btn-lime" onclick="guardarProductoRapido()">Crear y usar en el pedido</button>
     </div>
   </div>
 </div>
@@ -4940,6 +4997,9 @@ function renderPedidos() {
       : `<div class="card"><div class="empty-state"><div class="empty-state-icon">📋</div><div class="empty-state-text">Sin pedidos registrados</div></div></div>`}`;
 }
 
+// 475. peLineas — estado de las líneas de productos del pedido en curso
+let peLineas = [];
+
 window.abrirModalPedido = () => {
   document.getElementById('pe-fecha').value = today();
   document.getElementById('pe-prods').value = '';
@@ -4947,6 +5007,8 @@ window.abrirModalPedido = () => {
   document.getElementById('pe-flete').value = '0';
   document.getElementById('pe-notas').value = '';
   document.getElementById('prev-pe-total').textContent = '';
+  peLineas = [{ prodId:'', cant:1, costo:0, busqueda:'' }];
+  renderLineasPedido();
 
   const sel = document.getElementById('pe-prov');
 
@@ -4965,6 +5027,170 @@ window.abrirModalPedido = () => {
   openModal('modal-pedido');
 };
 
+// ============================================================
+// 476. LÍNEAS DE PEDIDO — buscador de producto + cantidad + costo unitario
+// Mismo patrón visual que Ventas y Combos, agrupado por marca.
+// ============================================================
+function renderLineasPedido() {
+  let html = '';
+  peLineas.forEach((l, i) => {
+    const prod = DATA.inventario.find(p => p.id === l.prodId);
+    const busq = (l.busqueda||'').toLowerCase();
+    const candidatos = busq
+      ? DATA.inventario.filter(p => p.nombre.toLowerCase().includes(busq) || (p.marca||'').toLowerCase().includes(busq))
+      : DATA.inventario;
+
+    let contenido;
+    if(!l.prodId) {
+      const resultados = candidatos.length === 0
+        ? '<div style="padding:10px;color:var(--ink-3);font-size:12px;text-align:center">Sin resultados</div>'
+        : agruparProductosPorMarca(candidatos.slice(0,20), function(p) {
+            return '<div onclick="seleccionarProductoPedido(' + i + ',\'' + p.id + '\')" style="padding:7px 10px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px" onmouseover="this.style.background=\'var(--surface-2)\'" onmouseout="this.style.background=\'var(--surface)\'">'
+              + '<div style="font-weight:500">' + p.nombre + '</div>'
+              + '<div style="color:var(--ink-3);font-size:11px">Stock actual: ' + (p.stock||0) + '</div>'
+            + '</div>';
+          });
+      contenido = '<input type="text" class="f-input" placeholder="🔍 Buscar producto..." value="' + (l.busqueda||'').replace(/"/g,'&quot;') + '" '
+        + 'data-idx="' + i + '" oninput="actualizarBusquedaPedido(this)" style="font-size:13px;margin-bottom:6px">'
+        + (busq ? '<div style="max-height:150px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--surface)">' + resultados + '</div>' : '');
+    } else {
+      contenido = '<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--lime-bg);border-radius:8px;margin-bottom:8px">'
+        + '<span style="font-size:12px;font-weight:600;color:var(--lime);flex:1">' + prod.nombre + '</span>'
+        + '<button type="button" onclick="cambiarProductoPedido(' + i + ')" style="background:none;border:none;color:var(--ink-3);cursor:pointer;font-size:11px;text-decoration:underline">Cambiar</button>'
+        + '</div>'
+        + '<div style="display:grid;grid-template-columns:70px 1fr 1fr;gap:8px">'
+          + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Cant.</label>'
+            + '<input type="number" class="f-input" value="' + (l.cant||1) + '" min="1" data-idx="' + i + '" data-tipo="cant" oninput="actualizarDatosPedido(this)" style="font-size:13px;text-align:center;padding:7px 6px"></div>'
+          + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Costo unit. ($)</label>'
+            + '<input type="number" class="f-input" value="' + (l.costo||0) + '" data-idx="' + i + '" data-tipo="costo" oninput="actualizarDatosPedido(this)" style="font-size:13px;padding:7px 8px"></div>'
+          + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Subtotal</label>'
+            + '<div style="font-size:13px;font-weight:700;color:var(--lime);padding:7px 0">' + fmt((l.cant||1)*(l.costo||0)) + '</div></div>'
+        + '</div>';
+    }
+
+    const quitarBtn = peLineas.length > 1
+      ? '<button type="button" onclick="quitarLineaPedido(' + i + ')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px">✕</button>'
+      : '';
+
+    html += '<div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:10px;margin-bottom:8px">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+        + '<span style="font-size:11px;font-weight:600;color:var(--ink-3);text-transform:uppercase">Producto ' + (i+1) + '</span>'
+        + quitarBtn
+      + '</div>'
+      + contenido
+    + '</div>';
+  });
+  document.getElementById('pe-lineas-container').innerHTML = html;
+  recalcularTotalPedido();
+}
+
+window.agregarLineaPedido = () => {
+  peLineas.push({ prodId:'', cant:1, costo:0, busqueda:'' });
+  renderLineasPedido();
+};
+
+window.quitarLineaPedido = (i) => {
+  peLineas.splice(i, 1);
+  renderLineasPedido();
+};
+
+window.actualizarBusquedaPedido = (el) => {
+  const i = Number(el.dataset.idx);
+  peLineas[i].busqueda = el.value;
+  peLineas[i].prodId = '';
+  renderLineasPedido();
+  setTimeout(() => {
+    const input = document.querySelector('#pe-lineas-container input[type="text"][data-idx="' + i + '"]');
+    if(input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
+  }, 10);
+};
+
+window.seleccionarProductoPedido = (i, prodId) => {
+  const prod = DATA.inventario.find(p => p.id === prodId);
+  if(!prod) return;
+  peLineas[i].prodId = prodId;
+  peLineas[i].busqueda = prod.nombre;
+  // 477. Sugerimos el costo actual del producto como punto de partida — editable
+  peLineas[i].costo = Number(prod.costo)||0;
+  renderLineasPedido();
+};
+
+window.cambiarProductoPedido = (i) => {
+  peLineas[i].prodId = '';
+  peLineas[i].busqueda = '';
+  renderLineasPedido();
+};
+
+window.actualizarDatosPedido = (el) => {
+  const i = Number(el.dataset.idx);
+  if(el.dataset.tipo === 'cant') peLineas[i].cant = Number(el.value)||1;
+  if(el.dataset.tipo === 'costo') peLineas[i].costo = Number(el.value)||0;
+  recalcularTotalPedido();
+};
+
+window.recalcularTotalPedido = () => {
+  const subtotalProductos = peLineas.reduce((s,l) => s + (Number(l.cant||0)*Number(l.costo||0)), 0);
+  const flete = Number(document.getElementById('pe-flete')?.value)||0;
+  const total = subtotalProductos + flete;
+  document.getElementById('pe-total').value = total;
+  const prev = document.getElementById('prev-pe-total');
+  if(prev) prev.textContent = total > 0 ? '→ ' + fmt(total) + ' COP (productos: ' + fmt(subtotalProductos) + ' + flete: ' + fmt(flete) + ')' : '';
+};
+
+// ============================================================
+// 478. PRODUCTO NUEVO RÁPIDO — crear desde el modal de Pedidos
+// Se crea con stock 0; el stock real llega cuando el pedido se marca
+// como "Entregado" (función procesarRecepcionPedido).
+// ============================================================
+let peLineaParaProductoNuevo = null;
+
+window.abrirNuevoProductoDesdePedido = () => {
+  // 479. Recordamos cuál línea del pedido va a recibir este producto nuevo
+  //      (la última línea vacía, o creamos una nueva si todas tienen producto)
+  let idx = peLineas.findIndex(l => !l.prodId);
+  if(idx === -1) { peLineas.push({ prodId:'', cant:1, costo:0, busqueda:'' }); idx = peLineas.length-1; }
+  peLineaParaProductoNuevo = idx;
+
+  document.getElementById('pr-nombre').value = '';
+  document.getElementById('pr-marca').value = '';
+  document.getElementById('pr-minimo').value = '5';
+  document.getElementById('pr-pventa').value = '';
+  document.getElementById('pr-pdist').value = '';
+  document.getElementById('pr-pesp').value = '';
+  ['prev-pr-pventa','prev-pr-pdist','prev-pr-pesp'].forEach(id => { const el=document.getElementById(id); if(el) el.textContent=''; });
+  openModal('modal-producto-rapido');
+};
+
+window.guardarProductoRapido = async () => {
+  const nombre = document.getElementById('pr-nombre').value.trim();
+  const pventa = Number(document.getElementById('pr-pventa').value);
+  if(!nombre || !pventa) { alert('Nombre y precio público son requeridos'); return; }
+
+  const nuevoProd = {
+    nombre,
+    marca: document.getElementById('pr-marca').value.trim(),
+    stock: 0, stockJero: 0, stockAngel: 0, // 480. Arranca en 0 — llega con la entrega del pedido
+    costo: 0,
+    pventa,
+    pdist: Number(document.getElementById('pr-pdist').value)||0,
+    pesp: Number(document.getElementById('pr-pesp').value)||0,
+    stockMinimo: Number(document.getElementById('pr-minimo').value)||5,
+    createdAt: serverTimestamp()
+  };
+  const ref = await addDoc(collection(db,'inventario'), nuevoProd);
+
+  // 481. Insertamos el producto recién creado directo en DATA.inventario en
+  //      memoria (sin esperar el onSnapshot de Firestore) para poder
+  //      seleccionarlo inmediatamente en la línea del pedido sin demora.
+  DATA.inventario.push({ id: ref.id, ...nuevoProd });
+
+  if(peLineaParaProductoNuevo != null) {
+    seleccionarProductoPedido(peLineaParaProductoNuevo, ref.id);
+  }
+  closeModal('modal-producto-rapido');
+  toast('✅ Producto creado — selecciónalo en el pedido');
+};
+
 window.guardarPedido = async () => {
   // 270. Obtenemos el nombre del proveedor según el modo activo
   let proveedorId = null, proveedorNombre = '';
@@ -4980,11 +5206,27 @@ window.guardarPedido = async () => {
     if(!proveedorNombre) { alert('Ingresa el nombre del proveedor'); return; }
   }
 
+  // 482. Validamos que las líneas con producto tengan cantidad y costo válidos
+  const lineasValidas = peLineas.filter(l => l.prodId);
+  if(lineasValidas.length === 0) { alert('Agrega al menos un producto al pedido'); return; }
+  for(const l of lineasValidas) {
+    if(!l.cant || l.cant <= 0) { alert('Revisa la cantidad de ' + (DATA.inventario.find(p=>p.id===l.prodId)?.nombre||'un producto')); return; }
+    if(!l.costo || l.costo <= 0) { alert('Revisa el costo unitario de ' + (DATA.inventario.find(p=>p.id===l.prodId)?.nombre||'un producto')); return; }
+  }
+
+  const productosPedido = lineasValidas.map(l => ({
+    prodId: l.prodId,
+    nombre: DATA.inventario.find(p=>p.id===l.prodId)?.nombre || '',
+    cant: l.cant,
+    costo: l.costo
+  }));
+
   const total = Number(document.getElementById('pe-total').value)||0;
   await addDoc(collection(db,'pedidos'), {
     proveedorId, proveedorNombre,
     fecha: document.getElementById('pe-fecha').value,
-    prods: document.getElementById('pe-prods').value,
+    productosPedido, // 483. Líneas estructuradas — usadas al marcar "Entregado"
+    prods: document.getElementById('pe-prods').value, // Notas adicionales en texto libre
     total, flete: Number(document.getElementById('pe-flete').value)||0,
     notas: document.getElementById('pe-notas').value,
     estado: 'pendiente', createdAt: serverTimestamp()
@@ -4993,10 +5235,62 @@ window.guardarPedido = async () => {
   closeModal('modal-pedido');
 };
 
+// ============================================================
+// 484. PROCESAR RECEPCIÓN DE PEDIDO — al marcar "Entregado", cada línea
+// se convierte en un lote FIFO para su producto. Si el pedido no tiene
+// productosPedido (pedidos viejos, solo texto libre), no hace nada extra
+// — sigue funcionando exactamente como antes.
+// ============================================================
+async function procesarRecepcionPedido(pedido) {
+  if(!pedido.productosPedido || pedido.productosPedido.length === 0) return;
+
+  for(const item of pedido.productosPedido) {
+    const prod = DATA.inventario.find(p => p.id === item.prodId);
+    if(!prod) continue;
+
+    const nuevoLote = {
+      id: 'lote_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
+      cantidad: item.cant,
+      cantidadDisponible: item.cant,
+      costoUnitario: item.costo,
+      fecha: pedido.fecha || today(),
+      proveedor: pedido.proveedorNombre || null,
+    };
+    const lotesNuevos = [...(prod.lotes||[]), nuevoLote];
+    const sjActual = prod.stockJero != null ? prod.stockJero : (prod.stock||0);
+    const saActual = prod.stockAngel != null ? prod.stockAngel : 0;
+    const sjNuevo = sjActual + item.cant;
+    const costoPromedioNuevo = calcularCostoPromedioLotes(lotesNuevos);
+
+    await updateDoc(doc(db,'inventario',item.prodId), {
+      lotes: lotesNuevos,
+      stockJero: sjNuevo,
+      stockAngel: saActual,
+      stock: sjNuevo + saActual,
+      costo: costoPromedioNuevo != null ? costoPromedioNuevo : prod.costo,
+    });
+
+    // Actualizamos también en memoria para que el resto de la sesión vea el cambio
+    prod.lotes = lotesNuevos;
+    prod.stockJero = sjNuevo;
+    prod.stockAngel = saActual;
+    prod.stock = sjNuevo + saActual;
+    prod.costo = costoPromedioNuevo != null ? costoPromedioNuevo : prod.costo;
+  }
+
+  toast('✅ Pedido recibido — ' + pedido.productosPedido.length + ' producto(s) agregados al inventario como lotes nuevos');
+}
+
 window.cambiarEstadoPedido = async (id, estado) => {
-  await updateDoc(doc(db,'pedidos',id), { estado });
   const p = DATA.pedidos.find(x=>x.id===id);
-  if(p) await pushNotif('📋 Pedido actualizado', `${p.proveedorNombre} → ${EST[estado]?.l||estado}`, 'pedido', {seccion:'pedidos', id});
+  // 486. Guard de idempotencia: si ya estaba "recibido" y se vuelve a marcar
+  //      "recibido", NO reprocesamos — evita duplicar stock/lotes por error.
+  const yaEstabaRecibido = p?.estado === 'recibido';
+  await updateDoc(doc(db,'pedidos',id), { estado });
+  if(p) {
+    await pushNotif('📋 Pedido actualizado', `${p.proveedorNombre} → ${EST[estado]?.l||estado}`, 'pedido', {seccion:'pedidos', id});
+    if(estado === 'recibido' && !yaEstabaRecibido) await procesarRecepcionPedido(p);
+  }
 };
 
 // ============================================================
