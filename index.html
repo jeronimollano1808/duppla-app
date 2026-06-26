@@ -904,6 +904,8 @@ body{
           <label class="f-label">Precio de venta unitario ($)</label>
           <input type="number" id="rc-precio" class="f-input" oninput="previoCOP('rc-precio','prev-rc-precio')">
           <div id="prev-rc-precio" style="font-size:11px;margin-top:3px;font-weight:600"></div>
+          <!-- 513. Mostramos explícitamente el precio de distribuidor que se dejó acordado -->
+          <div id="rc-precio-dist-ref" style="font-size:10px;color:var(--ink-3);margin-top:4px"></div>
         </div>
         <div class="f-group">
           <label class="f-label">Método de pago</label>
@@ -6702,8 +6704,13 @@ function renderLineasConsignacion() {
         + '<div style="display:grid;grid-template-columns:70px 1fr 1fr;gap:8px">'
           + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Cant.</label>'
             + '<input type="number" class="f-input" value="' + (l.cant||1) + '" min="1" data-idx="' + i + '" data-tipo="cant" oninput="actualizarDatosLineaConsig(this)" style="font-size:13px;text-align:center;padding:7px 6px"></div>'
-          + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Precio venta ($)</label>'
-            + '<input type="number" class="f-input" value="' + (l.precioVenta||0) + '" data-idx="' + i + '" data-tipo="precio" oninput="actualizarDatosLineaConsig(this)" style="font-size:13px;padding:7px 8px"></div>'
+          + '<div>'
+            + '<label style="font-size:11px;color:var(--ink-3);display:flex;align-items:center;gap:4px;margin-bottom:3px">Precio venta ($)'
+              + (l.precioVenta !== Number(prod.pdist||0) ? '<button type="button" onclick="restaurarPrecioDistribuidor(' + i + ')" style="font-size:9px;color:var(--blue);background:none;border:none;cursor:pointer;text-decoration:underline;padding:0">usar dist.</button>' : '')
+            + '</label>'
+            + '<input type="number" class="f-input" value="' + (l.precioVenta||0) + '" data-idx="' + i + '" data-tipo="precio" oninput="actualizarDatosLineaConsig(this)" style="font-size:13px;padding:7px 8px">'
+            + '<div style="font-size:10px;margin-top:3px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#D97706;margin-right:3px"></span><span style="color:var(--ink-3)">Distribuidor: ' + fmt(prod.pdist||0) + '</span></div>'
+          + '</div>'
           + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Subtotal</label>'
             + '<div style="font-size:13px;font-weight:700;color:var(--lime);padding:7px 0">' + fmt((l.cant||1)*(l.precioVenta||0)) + '</div></div>'
         + '</div>';
@@ -6771,6 +6778,15 @@ window.actualizarDatosLineaConsig = (el) => {
     const input = document.querySelector('#dc-lineas-container input[data-idx="' + i + '"][data-tipo="' + el.dataset.tipo + '"]');
     if(input) { input.focus(); }
   }, 10);
+};
+
+// 512. restaurarPrecioDistribuidor — vuelve a poner el precio de distribuidor
+//      si el usuario lo cambió por error y quiere volver al valor sugerido
+window.restaurarPrecioDistribuidor = (i) => {
+  const prod = DATA.inventario.find(p => p.id === dcLineas[i].prodId);
+  if(!prod) return;
+  dcLineas[i].precioVenta = Number(prod.pdist)||0;
+  renderLineasConsignacion();
 };
 
 window.guardarDejarConsignacion = async () => {
@@ -6850,8 +6866,13 @@ window.abrirReportarConsignacion = (itemId) => {
     'En <strong>' + item.tiendaNombre + '</strong> · Disponible: <strong>' + item.cantidadActual + '</strong> de ' + item.cantidadInicial + ' dejadas';
   document.getElementById('rc-cantidad').value = '';
   // 511. Precargamos el precio acordado al dejar el producto — editable si vendió a otro valor
+  const prodItem = DATA.inventario.find(p => p.id === item.prodId);
   document.getElementById('rc-precio').value = item.precioSugerido || '';
   previoCOP('rc-precio','prev-rc-precio');
+  // 513. Texto explícito con el precio distribuidor de referencia
+  document.getElementById('rc-precio-dist-ref').innerHTML =
+    '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#D97706;margin-right:3px"></span>'
+    + 'Se dejó a distribuidor: ' + fmt(item.precioSugerido || prodItem?.pdist || 0);
   document.getElementById('rc-fecha').value = today();
   setTipoReporteConsig('venta');
   openModal('modal-reportar-consig');
