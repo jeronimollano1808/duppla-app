@@ -2958,18 +2958,9 @@ function renderVentas() {
     return (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0);
   });
 
-  // 242. Filtramos ventas según la búsqueda activa — debe ir ANTES de usarse en rows
-  const ventasFiltradas = busquedaVentas
-    ? ventasOrdenadas.filter(v =>
-        (v.cliente||'').toLowerCase().includes(busquedaVentas) ||
-        (v.producto||'').toLowerCase().includes(busquedaVentas) ||
-        (v.canal||'').toLowerCase().includes(busquedaVentas) ||
-        (v.fecha||'').includes(busquedaVentas) ||
-        String(v.total||'').includes(busquedaVentas)
-      )
-    : ventasOrdenadas;
-
-  const rows = ventasFiltradas.map(v => {
+  // 520. FIX: ya no filtramos en el servidor — el filtro ahora ocurre 100% en
+  //      el DOM (filtrarFilasVentas) para no perder el foco del input al escribir.
+  const rows = ventasOrdenadas.map(v => {
     // 79. Badge de tipo de precio
     const tpLabel = { publico:'Público', distribuidor:'Dist.', especial:'Especial' };
     const tpClass = { publico:'b-info', distribuidor:'b-warning', especial:'b-success' };
@@ -3040,7 +3031,8 @@ function renderVentas() {
       ? '<td style="color:var(--ink-3);font-size:11px">N/D</td>'
       : `<td style="font-weight:600;color:${margenVenta>=0?'var(--green)':'var(--red)'}">${fmt(margenVenta)}</td>`;
 
-    return `<tr>
+    // 519. data-* attributes para filtrar sin re-renderizar — mismo patrón usado en Inventario
+    return `<tr data-cliente="${(v.cliente||'').toLowerCase()}" data-producto="${(v.producto||'').toLowerCase()}" data-canal="${(v.canal||'').toLowerCase()}" data-fecha="${v.fecha||''}" data-total="${v.total||''}">
       <td style="color:var(--ink-3)">${v.fecha||''}</td>
       <td style="font-weight:500">${v.cliente||'—'}</td>
       ${productoCell}
@@ -3078,18 +3070,18 @@ function renderVentas() {
     <div style="position:relative;margin-bottom:14px">
       <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--ink-3);font-size:14px">🔍</span>
       <input type="text" id="search-ventas" class="f-input"
-        style="padding-left:36px;background:var(--surface)"
+        style="padding-left:36px;padding-right:36px;background:var(--surface)"
         placeholder="Buscar por cliente, producto, fecha, canal..."
-        value="${busquedaVentas}"
-        oninput="busquedaVentas=this.value.toLowerCase();renderVentas()">
-      ${busquedaVentas ? `<button onclick="busquedaVentas='';renderVentas()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--ink-3);font-size:16px">✕</button>` : ''}
+        oninput="filtrarFilasVentas(this.value)">
+      <button id="ventas-search-clear" onclick="document.getElementById('search-ventas').value='';filtrarFilasVentas('')"
+        style="display:none;position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--ink-3);font-size:16px">✕</button>
     </div>
-    ${busquedaVentas ? `<div style="font-size:12px;color:var(--ink-3);margin-bottom:10px">${ventasFiltradas.length} resultado(s) para "<strong>${busquedaVentas}</strong>"</div>` : ''}
+    <div id="ventas-search-info" style="font-size:12px;color:var(--ink-3);margin-bottom:10px"></div>
     <div class="card">
       ${DATA.ventas.length ?
         `<div class="table-wrap"><table class="tbl">
           <thead><tr><th>Fecha</th><th>Cliente</th><th>Producto</th><th>Canal</th><th>Precio</th><th>Total</th><th>Margen</th><th>Método</th><th>Saldo</th><th>Estado</th><th></th></tr></thead>
-          <tbody>${rows}</tbody>
+          <tbody id="ventas-tabla-body">${rows}</tbody>
         </table></div>`
         : `<div class="empty-state"><div class="empty-state-icon">🛒</div><div class="empty-state-text">Sin ventas registradas</div></div>`}
     </div>`;
@@ -4514,6 +4506,35 @@ window.actualizarTablaInventario = () => {
 
 // 352. Filtra filas del inventario en el DOM sin re-renderizar
 //      Mucho más rápido y no pierde el foco del input
+// 521. filtrarFilasVentas — mismo patrón de filtrado DOM usado en Inventario,
+//      para no perder el foco del input mientras se escribe.
+window.filtrarFilasVentas = (busq) => {
+  const normalizar = (s) => (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  busquedaVentas = normalizar(busq);
+  const tbody = document.getElementById('ventas-tabla-body');
+  if(!tbody) return;
+  let visibles = 0;
+  tbody.querySelectorAll('tr').forEach(tr => {
+    const cliente  = normalizar(tr.dataset.cliente  || '');
+    const producto = normalizar(tr.dataset.producto || '');
+    const canal    = normalizar(tr.dataset.canal    || '');
+    const fecha    = (tr.dataset.fecha || '').toLowerCase();
+    const total    = String(tr.dataset.total || '');
+    const match = !busquedaVentas
+      || cliente.includes(busquedaVentas)
+      || producto.includes(busquedaVentas)
+      || canal.includes(busquedaVentas)
+      || fecha.includes(busquedaVentas)
+      || total.includes(busquedaVentas);
+    tr.style.display = match ? '' : 'none';
+    if(match) visibles++;
+  });
+  const info = document.getElementById('ventas-search-info');
+  if(info) info.textContent = busquedaVentas ? visibles + ' resultado(s) para "' + busq + '"' : '';
+  const btnX = document.getElementById('ventas-search-clear');
+  if(btnX) btnX.style.display = busquedaVentas ? 'block' : 'none';
+};
+
 window.filtrarFilasInventario = (busq) => {
   // 487. FIX: normalizamos tildes/acentos para que buscar "creatina" encuentre
   //      "Creatina" y viceversa sin importar acentos — antes "café" no
