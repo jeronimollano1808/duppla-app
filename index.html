@@ -1546,19 +1546,20 @@ body{
       <span class="modal-title">Nueva meta mensual</span>
       <button class="modal-close" onclick="closeModal('modal-meta')">✕</button>
     </div>
-    <div class="f-group"><label class="f-label">Mes *</label><input type="month" id="me-mes" class="f-input"></div>
+    <div class="f-row">
+      <div class="f-group"><label class="f-label">Mes *</label><input type="month" id="me-mes" class="f-input"></div>
+      <!-- 526. Día de inicio del ciclo — DUPPLA no inicia el mes el día 1 -->
+      <div class="f-group">
+        <label class="f-label">¿Qué día inicia el mes? *</label>
+        <input type="number" id="me-dia-inicio" class="f-input" value="3" min="1" max="28">
+        <div style="font-size:11px;color:var(--ink-3);margin-top:3px">Ej: 3 = el mes corre del 3 al 2 del siguiente</div>
+      </div>
+    </div>
     <div class="f-row">
       <div class="f-group"><label class="f-label">Meta de ventas ($) *</label><input type="number" id="me-ventas" class="f-input"></div>
       <div class="f-group"><label class="f-label">Presupuesto máx. gastos ($)</label><input type="number" id="me-gastos" class="f-input" value="0"></div>
     </div>
     <div class="f-group"><label class="f-label">Notas</label><input type="text" id="me-notas" class="f-input" placeholder="Objetivos, compromisos..."></div>
-    <div class="modal-footer">
-      <button class="btn" onclick="closeModal('modal-meta')">Cancelar</button>
-      <button class="btn btn-lime" onclick="guardarMeta()">Guardar meta</button>
-    </div>
-  </div>
-</div>
-
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('modal-meta')">Cancelar</button>
       <button class="btn btn-lime" onclick="guardarMeta()">Guardar meta</button>
@@ -5459,6 +5460,23 @@ window.cambiarEstadoPedido = async (id, estado) => {
 // ============================================================
 const MESES = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
+// ============================================================
+// 522. CICLO DE MES PERSONALIZADO — DUPPLA no inicia el mes el día 1,
+// sino el día 3 (configurable). Esta función calcula el rango real
+// de fechas [inicio, fin] para una meta dada su mes y su día de corte.
+// Ej: mes='2026-06', diaInicio=3 → del 2026-06-03 al 2026-07-02
+// ============================================================
+function calcularRangoMeta(mesStr, diaInicio) {
+  diaInicio = Number(diaInicio) || 1;
+  const [anio, mes] = mesStr.split('-').map(Number);
+  const inicio = new Date(anio, mes-1, diaInicio);
+  // El fin es un día antes del mismo día del mes siguiente
+  const finExclusivo = new Date(anio, mes, diaInicio);
+  const fin = new Date(finExclusivo.getTime() - 86400000);
+  const fmtFecha = (d) => d.toISOString().slice(0,10);
+  return { inicio: fmtFecha(inicio), fin: fmtFecha(fin) };
+}
+
 function renderMetas() {
   const hoy = new Date();
 
@@ -5477,10 +5495,16 @@ function renderMetas() {
 
   const cards = DATA.metas.map(m => {
     const [anio,mes] = (m.mes||'').split('-');
-    const tv = DATA.ventas.filter(v=>v.fecha?.slice(0,7)===m.mes).reduce((s,v)=>s+Number(v.total||0),0);
-    const tg = DATA.gastos.filter(g=>g.fecha?.slice(0,7)===m.mes).reduce((s,g)=>s+Number(g.valor||0),0);
+    // 523. Usamos el rango de fechas real del ciclo (puede no coincidir con
+    //      el mes calendario si diaInicio != 1). Retrocompatible: metas viejas
+    //      sin diaInicio guardado asumen día 1 (mes calendario normal).
+    const diaInicio = m.diaInicio || 1;
+    const { inicio: rangoInicio, fin: rangoFin } = calcularRangoMeta(m.mes, diaInicio);
+    const tv = DATA.ventas.filter(v=>v.fecha >= rangoInicio && v.fecha <= rangoFin).reduce((s,v)=>s+Number(v.total||0),0);
+    const tg = DATA.gastos.filter(g=>g.fecha >= rangoInicio && g.fecha <= rangoFin).reduce((s,g)=>s+Number(g.valor||0),0);
     const pv = m.ventasMeta>0 ? Math.min(100,Math.round((tv/m.ventasMeta)*100)) : 0;
     const pg = m.gastoMax>0 ? Math.min(100,Math.round((tg/m.gastoMax)*100)) : 0;
+
 
     // 413. Punto de equilibrio de este mes específico, usando su gastoMax como gasto fijo
     //      Si no hay margen histórico conocido o no hay presupuesto de gastos, no se muestra
@@ -5505,7 +5529,10 @@ function renderMetas() {
     const metaCumplida = faltante === 0 && Number(m.ventasMeta||0) > 0;
 
     // 354. Si es el mes actual, calculamos días restantes y ritmo diario necesario
-    const esMesActual = m.mes === hoy.toISOString().slice(0,7);
+    //      524. esMesActual ahora se basa en si HOY cae dentro del rango real
+    //      del ciclo (no en si el string de mes coincide con el mes calendario)
+    const hoyStr = hoy.toISOString().slice(0,10);
+    const esMesActual = hoyStr >= rangoInicio && hoyStr <= rangoFin;
     let faltanteHtml = '';
     if(Number(m.ventasMeta||0) > 0) {
       if(metaCumplida) {
@@ -5515,9 +5542,8 @@ function renderMetas() {
           <span style="font-size:12px;font-weight:700;color:var(--ink)">¡Meta cumplida! Superaste por ${fmt(tv-m.ventasMeta)}</span>
         </div>`;
       } else if(esMesActual) {
-        const ultimoDiaMes = new Date(parseInt(anio), parseInt(mes), 0).getDate();
-        const diaActual = hoy.getDate();
-        const diasRestantes = Math.max(1, ultimoDiaMes - diaActual + 1);
+        // 525. Días restantes = desde hoy hasta el fin REAL del ciclo (rangoFin)
+        const diasRestantes = Math.max(1, Math.floor((new Date(rangoFin) - hoy) / 86400000) + 1);
         const ritmoDiario = faltante / diasRestantes;
         faltanteHtml = `
         <div style="background:var(--amber-bg);border:1px solid #FDE68A;border-radius:10px;padding:10px 12px;margin-bottom:12px">
@@ -5541,6 +5567,7 @@ function renderMetas() {
       <div class="list-card-header">
         <div>
           <div class="list-card-title">${MESES[parseInt(mes)]||m.mes} ${anio}</div>
+          ${diaInicio !== 1 ? `<div style="font-size:11px;color:var(--ink-3);margin-top:2px">📅 Del ${rangoInicio.split('-').reverse().join('/')} al ${rangoFin.split('-').reverse().join('/')}</div>` : ''}
           ${m.notas?`<div class="list-card-sub">${m.notas}</div>`:''}
         </div>
         <button class="btn btn-sm btn-danger" onclick="eliminarDoc('metas','${m.id}')">✕</button>
@@ -5623,6 +5650,7 @@ window.guardarMeta = async () => {
   if(!mes||!ventasMeta) { alert('Mes y meta de ventas son requeridos'); return; }
   await addDoc(collection(db,'metas'), {
     mes, ventasMeta,
+    diaInicio: Number(document.getElementById('me-dia-inicio').value)||1, // 527. Día de inicio del ciclo
     gastoMax:Number(document.getElementById('me-gastos').value)||0,
     notas:document.getElementById('me-notas').value,
     createdAt:serverTimestamp()
