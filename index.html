@@ -2124,6 +2124,17 @@ function consumirLotesFIFO(prod, cantidadAVender) {
   return { lotesActualizados, consumo, costoPromedioVenta };
 }
 
+// ============================================================
+// 544. saldoReal — fuente única de verdad para el saldo de una venta,
+// redondeado a entero (pesos colombianos no usan decimales). Evita que
+// residuos de aritmética flotante (de abonos sucesivos, por ejemplo
+// 0.1+0.2-0.3 que en JS no da exactamente 0) se muestren como "deuda
+// fantasma" en Distribuidores, Deudores, o cualquier suma agregada.
+// ============================================================
+function saldoReal(v) {
+  return Math.round(Number(v?.saldo||0));
+}
+
 function calcularMargenVenta(v) {
   // Venta múltiple: sumamos el margen de cada línea, con fallback por línea
   if(v.esMultiple && v.productosVenta?.length) {
@@ -2650,7 +2661,7 @@ function renderDashboard() {
   const util = tv - tg;
   const hoyV = DATA.ventas.filter(v => v.fecha === today());
   const totalHoy = hoyV.reduce((s,v)=>s+Number(v.total||0),0);
-  const carteraPeriodo = pv.reduce((s,v)=>s+Number(v.saldo||0),0);
+  const carteraPeriodo = Math.round(pv.reduce((s,v)=>s+Number(v.saldo||0),0));
 
   // 372. Ganancia bruta del período usando costo histórico (costoUnit) por venta
   let costoVendidoPeriodo = 0;
@@ -2907,7 +2918,7 @@ function renderDashboard() {
       <div class="metric-card">
         <div class="metric-label">Cartera pendiente</div>
         <div class="metric-value" style="color:${carteraPeriodo>0?'var(--red)':'var(--green)'}">${fmt(carteraPeriodo)}</div>
-        <div class="metric-sub">${pv.filter(v=>v.saldo>0).length} por cobrar</div>
+        <div class="metric-sub">${pv.filter(v=>saldoReal(v)>0).length} por cobrar</div>
       </div>
     </div>
     ${metaHtml}
@@ -2952,7 +2963,7 @@ function renderDashboard() {
 // ============================================================
 function renderVentas() {
   // 114. Cartera pendiente
-  const carteraPendiente = DATA.ventas.reduce((s,v) => s + Number(v.saldo||0), 0);
+  const carteraPendiente = Math.round(DATA.ventas.reduce((s,v) => s + Number(v.saldo||0), 0));
 
   // 213. Calculamos todas las métricas financieras de ventas
   const totalIngresos = DATA.ventas.reduce((s,v) => s + Number(v.total||0), 0);
@@ -3001,7 +3012,7 @@ function renderVentas() {
       <div class="metric-card">
         <div class="metric-label">Cartera pendiente</div>
         <div class="metric-value" style="font-size:18px;color:${carteraPendiente>0?'var(--red)':'var(--green)'}">${fmt(carteraPendiente)}</div>
-        <div class="metric-sub">${DATA.ventas.filter(v=>v.saldo>0).length} ventas por cobrar</div>
+        <div class="metric-sub">${DATA.ventas.filter(v=>saldoReal(v)>0).length} ventas por cobrar</div>
       </div>
       <div class="metric-card">
         <div class="metric-label">Ganancia bruta</div>
@@ -3053,14 +3064,19 @@ function renderVentas() {
     //      Si no existe (ventas viejas), lo calculamos del saldo
     // 285. El saldo es la fuente de verdad — si saldo es 0 siempre es 'pagado'
     //      independientemente de lo que diga estadoPago en Firebase
-    const saldoNum = Number(v.saldo||0);
+    // 541. FIX: redondeamos antes de comparar — saldos en pesos colombianos
+    //      no deberían tener decimales, pero residuos de aritmética flotante
+    //      (ej: abonos sucesivos) pueden dejar el saldo en algo como
+    //      0.00000001 o -0.00000001, que === 0 trata como "no pagado" o
+    //      que sumas posteriores acumulan como "deuda fantasma".
+    const saldoNum = Math.round(Number(v.saldo||0));
     const pagadoNum = Number(v.pagado||0);
-    const ep = saldoNum === 0 ? 'pagado'
+    const ep = saldoNum <= 0 ? 'pagado'
       : pagadoNum > 0 ? 'parcial'
       : 'pendiente';
 
     // 116. Botón de abono solo visible en ventas con saldo pendiente
-    const btnAbono = (v.saldo > 0)
+    const btnAbono = (saldoReal(v) > 0)
       ? `<button class="btn btn-xs" style="color:var(--amber);border-color:#FDE68A" onclick="abrirAbono('${v.id}')">+ Abono</button>`
       : '';
     // 246. Botón de historial de abonos — solo si tiene abonos registrados
@@ -3069,8 +3085,10 @@ function renderVentas() {
       : '';
 
     // 117. Mostramos el saldo pendiente si existe
-    const saldoCell = v.saldo > 0
-      ? `<td style="color:var(--red);font-size:12px">${fmt(v.saldo)}</td>`
+    // 543. Misma corrección de redondeo aplicada a la celda visual de saldo
+    const saldoRedondeado = Math.round(Number(v.saldo||0));
+    const saldoCell = saldoRedondeado > 0
+      ? `<td style="color:var(--red);font-size:12px">${fmt(saldoRedondeado)}</td>`
       : `<td style="color:var(--ink-3);font-size:12px">—</td>`;
 
     // 422. Para ventas múltiples, mostramos siempre todos los productos en lista
@@ -4043,7 +4061,7 @@ window.exportarReporte = () => {
     ['Total gastos', tg],
     ['Utilidad neta', tv - tg],
     ['Ventas realizadas', pv.length],
-    ['Cartera pendiente', pv.reduce((s,v)=>s+Number(v.saldo||0),0)],
+    ['Cartera pendiente', Math.round(pv.reduce((s,v)=>s+Number(v.saldo||0),0))],
     [],
     ['VENTAS'],
     ['Fecha','Cliente','Producto','Canal','Tipo precio','Método pago','Total','Pagado','Saldo','Estado'],
@@ -4085,7 +4103,7 @@ window.exportarReportePDF = () => {
 
   const tv = pv.reduce((s,v)=>s+Number(v.total||0),0);
   const tg = pg.reduce((s,g)=>s+Number(g.valor||0),0);
-  const cartera = pv.reduce((s,v)=>s+Number(v.saldo||0),0);
+  const cartera = Math.round(pv.reduce((s,v)=>s+Number(v.saldo||0),0));
 
   // 401. Margen real del período — reutilizamos calcularMargenVenta()
   let margenTotal = 0;
@@ -6486,7 +6504,7 @@ function renderDeudores() {
   const HOY_MORA = new Date();
   const UMBRAL_MORA_DIAS = 8;
   const deudaMap = {};
-  DATA.ventas.filter(function(v){ return Number(v.saldo||0) > 0; }).forEach(function(v) {
+  DATA.ventas.filter(function(v){ return saldoReal(v) > 0; }).forEach(function(v) {
     const key = v.cliente || 'Sin nombre';
     if(!deudaMap[key]) deudaMap[key] = { cliente:key, ventas:[], total:0 };
     deudaMap[key].ventas.push(v);
@@ -6619,8 +6637,8 @@ window.eliminarConsumo = async (id, prodId, cant) => {
 //      texto libre), pedimos el número solo al momento de enviar.
 // ============================================================
 window.abrirRecordatorioCobro = (nombreCliente) => {
-  const ventasCliente = DATA.ventas.filter(v => (v.cliente||'Sin nombre') === nombreCliente && Number(v.saldo||0) > 0);
-  const totalDeuda = ventasCliente.reduce((s,v) => s + Number(v.saldo||0), 0);
+  const ventasCliente = DATA.ventas.filter(v => (v.cliente||'Sin nombre') === nombreCliente && saldoReal(v) > 0);
+  const totalDeuda = Math.round(ventasCliente.reduce((s,v) => s + Number(v.saldo||0), 0));
   const HOY_M = new Date();
   let diasMora = 0;
   ventasCliente.forEach(v => {
@@ -7208,10 +7226,10 @@ window.generarCuentaDeCobro = (distribuidorId) => {
   if(!d) { alert('Distribuidor no encontrado'); return; }
 
   // 388. Solo incluimos las VENTAS con saldo pendiente — esto es un cobro, no un historial completo
-  const pendientes = DATA.ventas.filter(v => v.distribuidorId === distribuidorId && Number(v.saldo||0) > 0);
+  const pendientes = DATA.ventas.filter(v => v.distribuidorId === distribuidorId && saldoReal(v) > 0);
   if(pendientes.length === 0) { alert(d.nombre + ' no tiene saldo pendiente. No hay nada que cobrar.'); return; }
 
-  const totalCobro = pendientes.reduce((s,v) => s + Number(v.saldo||0), 0);
+  const totalCobro = Math.round(pendientes.reduce((s,v) => s + Number(v.saldo||0), 0));
 
   // 389. Abrimos modal para confirmar/completar datos fiscales antes de generar el PDF
   //      (NIT/CC del distribuidor y cuenta bancaria pueden no estar siempre registrados)
@@ -7238,8 +7256,8 @@ window.confirmarGenerarCuentaCobro = () => {
   // Guardamos la cuenta bancaria para no repetirla cada vez
   if(cuenta) localStorage.setItem('duppla_cuenta_bancaria', cuenta);
 
-  const pendientes = DATA.ventas.filter(v => v.distribuidorId === distribuidorId && Number(v.saldo||0) > 0);
-  const totalCobro = pendientes.reduce((s,v) => s + Number(v.saldo||0), 0);
+  const pendientes = DATA.ventas.filter(v => v.distribuidorId === distribuidorId && saldoReal(v) > 0);
+  const totalCobro = Math.round(pendientes.reduce((s,v) => s + Number(v.saldo||0), 0));
 
   // 391. Construcción del PDF con jsPDF — tamaño carta, replicando el formato de referencia
   const { jsPDF } = window.jspdf;
@@ -7358,7 +7376,10 @@ function renderDistribuidores() {
   const distData = DATA.distribuidores.map(d => {
     const ventas = DATA.ventas.filter(v => v.distribuidorId === d.id);
     const total  = ventas.reduce((s,v) => s + Number(v.total||0), 0);
-    const saldoPendiente = ventas.reduce((s,v) => s + Number(v.saldo||0), 0);
+    // 542. FIX: redondeamos la suma — sin esto, residuos de punto flotante
+    //      de ventas individuales (cada una técnicamente "pagada") podían
+    //      acumularse en una "deuda fantasma" de centavos al sumarlas.
+    const saldoPendiente = Math.round(ventas.reduce((s,v) => s + Number(v.saldo||0), 0));
     const sorted = [...ventas].sort((a,b) => b.fecha > a.fecha ? 1 : -1);
     const ultima = sorted.length ? sorted[0] : null;
 
@@ -7461,7 +7482,7 @@ function renderDistribuidores() {
         } else {
           let filas = '';
           ventasOrd.forEach(v => {
-            const pendiente = Number(v.saldo||0) > 0;
+            const pendiente = saldoReal(v) > 0;
             const margenV = calcularMargenVenta(v);
             filas += '<tr>'
               + '<td style="color:var(--ink-3)">' + (v.fecha||'') + '</td>'
