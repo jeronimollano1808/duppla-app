@@ -3174,10 +3174,10 @@ window.actualizarBusquedaLinea = (el) => {
   ventaLineas[i].busqueda = el.value;
   ventaLineas[i].prodId = '';
   renderLineasVenta();
-  // Mantenemos el foco en el input de búsqueda
+  // 472. FIX: buscar por data-idx, no por posición (mismo fix aplicado en Combos)
   setTimeout(() => {
-    const inputs = document.getElementById('v-lineas-container').querySelectorAll('input[type="text"]');
-    if(inputs[i]) { inputs[i].focus(); inputs[i].setSelectionRange(inputs[i].value.length, inputs[i].value.length); }
+    const input = document.querySelector('#v-lineas-container input[type="text"][data-idx="' + i + '"]');
+    if(input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
   }, 10);
 };
 
@@ -5368,9 +5368,12 @@ window.actualizarBusquedaCombo = (el) => {
   comboLineas[i].busqueda = el.value;
   comboLineas[i].prodId = '';
   renderLineasCombo();
+  // 472. FIX: buscamos el input por data-idx (no por posición) — si hay líneas
+  //      anteriores con producto ya elegido, no tienen input de texto visible,
+  //      y querySelectorAll(...)[i] apuntaría al input equivocado.
   setTimeout(() => {
-    const inputs = document.getElementById('combo-lineas').querySelectorAll('input[type="text"]');
-    if(inputs[i]) { inputs[i].focus(); inputs[i].setSelectionRange(inputs[i].value.length, inputs[i].value.length); }
+    const input = document.querySelector('#combo-lineas input[type="text"][data-idx="' + i + '"]');
+    if(input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
   }, 10);
 };
 
