@@ -4391,13 +4391,28 @@ window.actualizarTablaInventario = () => {
 // 352. Filtra filas del inventario en el DOM sin re-renderizar
 //      Mucho más rápido y no pierde el foco del input
 window.filtrarFilasInventario = (busq) => {
-  busquedaInventario = busq.toLowerCase();
+  // 487. FIX: normalizamos tildes/acentos para que buscar "creatina" encuentre
+  //      "Creatina" y viceversa sin importar acentos — antes "café" no
+  //      coincidía si buscabas "cafe" sin tilde, y al revés.
+  const normalizar = (s) => (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  busquedaInventario = normalizar(busq);
   const tbody = document.getElementById('inv-tabla-body');
   if(!tbody) return;
   let visibles = 0;
   tbody.querySelectorAll('tr').forEach(tr => {
-    const nombre = tr.dataset.nombre || '';
-    const marca  = tr.dataset.marca  || '';
+    // Las filas de encabezado de marca no tienen data-nombre — las tratamos
+    // como "siempre visibles si hay algún producto debajo que haga match"
+    // no aplica aquí porque no tenemos esa info por fila; las ocultamos
+    // solo cuando hay búsqueda activa, igual que antes.
+    const tieneDatos = tr.hasAttribute('data-nombre');
+    if(!tieneDatos) {
+      // Es una fila de encabezado de marca — la dejamos visible siempre,
+      // el usuario puede ver igual qué marca agrupa los resultados ocultos.
+      tr.style.display = '';
+      return;
+    }
+    const nombre = normalizar(tr.dataset.nombre || '');
+    const marca  = normalizar(tr.dataset.marca  || '');
     const match  = !busquedaInventario || nombre.includes(busquedaInventario) || marca.includes(busquedaInventario);
     tr.style.display = match ? '' : 'none';
     if(match) visibles++;
