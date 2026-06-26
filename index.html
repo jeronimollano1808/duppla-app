@@ -5526,7 +5526,10 @@ function renderMetas() {
     // 523. Usamos el rango de fechas real del ciclo (puede no coincidir con
     //      el mes calendario si diaInicio != 1). Retrocompatible: metas viejas
     //      sin diaInicio guardado asumen día 1 (mes calendario normal).
-    const diaInicio = m.diaInicio || 1;
+    // 534. FIX: las metas viejas sin diaInicio guardado ahora usan por defecto
+    //      el ciclo de DUPPLA (día 3), no el día 1 — ya que pediste que TODA
+    //      la app respete el ciclo 3-2, incluyendo metas ya creadas.
+    const diaInicio = m.diaInicio || DUPPLA_DIA_INICIO_MES;
     const { inicio: rangoInicio, fin: rangoFin } = calcularRangoMeta(m.mes, diaInicio);
     const tv = DATA.ventas.filter(v=>v.fecha >= rangoInicio && v.fecha <= rangoFin).reduce((s,v)=>s+Number(v.total||0),0);
     const tg = DATA.gastos.filter(g=>g.fecha >= rangoInicio && g.fecha <= rangoFin).reduce((s,g)=>s+Number(g.valor||0),0);
