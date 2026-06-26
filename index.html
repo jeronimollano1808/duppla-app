@@ -2518,6 +2518,12 @@ let dashPeriodo = 'mes';
 let dashFechaInicio = '';
 let dashFechaFin = '';
 
+// 528. CICLO DE MES DE DUPPLA — el mes del negocio NO inicia el día 1,
+// sino el día 3. Esta constante centraliza ese valor para que TODA la
+// app (Dashboard, "Este mes", "Mes anterior", reportes, punto de
+// equilibrio) use el mismo ciclo de forma consistente.
+const DUPPLA_DIA_INICIO_MES = 3;
+
 function getPeriodoFechas() {
   // 231. Calcula el rango de fechas según el período seleccionado
   const now = new Date();
@@ -2536,15 +2542,26 @@ function getPeriodoFechas() {
     return { label: `${mon.toLocaleDateString('es-CO',{day:'numeric',month:'short'})} – ${sun.toLocaleDateString('es-CO',{day:'numeric',month:'short'})}`, inicio:i, fin:f };
   }
   if(dashPeriodo === 'mes') {
-    const i = now.toISOString().slice(0,7) + '-01';
-    const f = new Date(now.getFullYear(), now.getMonth()+1, 0).toISOString().slice(0,10);
-    return { label: now.toLocaleDateString('es-CO',{month:'long',year:'numeric'}), inicio:i, fin:f };
+    // 529. "Este mes" usa el ciclo del día 3 — si hoy es antes del día 3,
+    //      el ciclo actual empezó el día 3 del mes ANTERIOR.
+    const mesParaCiclo = now.getDate() < DUPPLA_DIA_INICIO_MES
+      ? new Date(now.getFullYear(), now.getMonth()-1, 1)
+      : now;
+    const mesStr = mesParaCiclo.toISOString().slice(0,7);
+    const { inicio, fin } = calcularRangoMeta(mesStr, DUPPLA_DIA_INICIO_MES);
+    const labelMes = mesParaCiclo.toLocaleDateString('es-CO',{month:'long',year:'numeric'});
+    return { label: labelMes + ' (ciclo 3-2)', inicio, fin };
   }
   if(dashPeriodo === 'mes_anterior') {
-    const d = new Date(now.getFullYear(), now.getMonth()-1, 1);
-    const i = d.toISOString().slice(0,7) + '-01';
-    const f = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().slice(0,10);
-    return { label: d.toLocaleDateString('es-CO',{month:'long',year:'numeric'}), inicio:i, fin:f };
+    // 530. "Mes anterior" — mismo ciclo, un mes atrás del ciclo actual
+    const mesActualCiclo = now.getDate() < DUPPLA_DIA_INICIO_MES
+      ? new Date(now.getFullYear(), now.getMonth()-1, 1)
+      : now;
+    const mesAnteriorCiclo = new Date(mesActualCiclo.getFullYear(), mesActualCiclo.getMonth()-1, 1);
+    const mesStr = mesAnteriorCiclo.toISOString().slice(0,7);
+    const { inicio, fin } = calcularRangoMeta(mesStr, DUPPLA_DIA_INICIO_MES);
+    const labelMes = mesAnteriorCiclo.toLocaleDateString('es-CO',{month:'long',year:'numeric'});
+    return { label: labelMes + ' (ciclo 3-2)', inicio, fin };
   }
   if(dashPeriodo === 'anio') {
     const i = now.getFullYear() + '-01-01';
@@ -2554,10 +2571,13 @@ function getPeriodoFechas() {
   if(dashPeriodo === 'personalizado' && dashFechaInicio && dashFechaFin) {
     return { label: `${dashFechaInicio} → ${dashFechaFin}`, inicio:dashFechaInicio, fin:dashFechaFin };
   }
-  // Default: mes actual
-  const i = now.toISOString().slice(0,7) + '-01';
-  const f = new Date(now.getFullYear(), now.getMonth()+1, 0).toISOString().slice(0,10);
-  return { label: now.toLocaleDateString('es-CO',{month:'long',year:'numeric'}), inicio:i, fin:f };
+  // Default: mes actual (ciclo 3-2)
+  const mesParaCiclo = now.getDate() < DUPPLA_DIA_INICIO_MES
+    ? new Date(now.getFullYear(), now.getMonth()-1, 1)
+    : now;
+  const mesStr = mesParaCiclo.toISOString().slice(0,7);
+  const { inicio, fin } = calcularRangoMeta(mesStr, DUPPLA_DIA_INICIO_MES);
+  return { label: mesParaCiclo.toLocaleDateString('es-CO',{month:'long',year:'numeric'}) + ' (ciclo 3-2)', inicio, fin };
 }
 
 window.setDashPeriodo = (p) => {
@@ -2766,10 +2786,18 @@ function renderDashboard() {
   const ordenarPor = window.dashRankingPor || 'ingresos';
   const topHtml = generarTopProductosHtml(pm, ordenarPor);
 
-  // Meta del mes
-  const mesActual = new Date().toISOString().slice(0,7);
+  // Meta del mes — 531. usa el ciclo del día 3, igual que el resto de la app
+  const hoyParaMeta = new Date();
+  const mesParaCicloMeta = hoyParaMeta.getDate() < DUPPLA_DIA_INICIO_MES
+    ? new Date(hoyParaMeta.getFullYear(), hoyParaMeta.getMonth()-1, 1)
+    : hoyParaMeta;
+  const mesActual = mesParaCicloMeta.toISOString().slice(0,7);
   const metaActual = DATA.metas.find(m => m.mes === mesActual);
-  const tvMesActual = DATA.ventas.filter(v=>v.fecha?.slice(0,7)===mesActual).reduce((s,v)=>s+Number(v.total||0),0);
+  let tvMesActual = 0;
+  if(metaActual) {
+    const rangoMeta = calcularRangoMeta(mesActual, metaActual.diaInicio || DUPPLA_DIA_INICIO_MES);
+    tvMesActual = DATA.ventas.filter(v=>v.fecha >= rangoMeta.inicio && v.fecha <= rangoMeta.fin).reduce((s,v)=>s+Number(v.total||0),0);
+  }
   const metaHtml = metaActual ? `
     <div class="card" style="margin-bottom:16px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
@@ -5602,7 +5630,11 @@ function renderMetas() {
   }).join('');
 
   // 416. CIERRE DE MES — historial de snapshots ya generados, más reciente primero
-  const mesActualStr = hoy.toISOString().slice(0,7);
+  // 533. mesActualStr usa el ciclo del día 3, igual que abrirCierreMes()
+  const mesParaCicloStr = hoy.getDate() < DUPPLA_DIA_INICIO_MES
+    ? new Date(hoy.getFullYear(), hoy.getMonth()-1, 1)
+    : hoy;
+  const mesActualStr = mesParaCicloStr.toISOString().slice(0,7);
   const cierresOrd = [...DATA.cierres].sort((a,b) => b.mes > a.mes ? 1 : -1);
   const yaExisteCierreMesActual = cierresOrd.some(c => c.mes === mesActualStr);
 
@@ -5665,9 +5697,14 @@ window.guardarMeta = async () => {
 // ============================================================
 window.abrirCierreMes = () => {
   const hoy = new Date();
-  const mesActual = hoy.toISOString().slice(0,7);
-  const ventasMes = DATA.ventas.filter(v => v.fecha?.slice(0,7) === mesActual);
-  const gastosMes = DATA.gastos.filter(g => g.fecha?.slice(0,7) === mesActual);
+  // 532. Cierre de mes también respeta el ciclo del día 3
+  const mesParaCicloCierre = hoy.getDate() < DUPPLA_DIA_INICIO_MES
+    ? new Date(hoy.getFullYear(), hoy.getMonth()-1, 1)
+    : hoy;
+  const mesActual = mesParaCicloCierre.toISOString().slice(0,7);
+  const { inicio: rangoInicioCierre, fin: rangoFinCierre } = calcularRangoMeta(mesActual, DUPPLA_DIA_INICIO_MES);
+  const ventasMes = DATA.ventas.filter(v => v.fecha >= rangoInicioCierre && v.fecha <= rangoFinCierre);
+  const gastosMes = DATA.gastos.filter(g => g.fecha >= rangoInicioCierre && g.fecha <= rangoFinCierre);
   const ingresos = ventasMes.reduce((s,v)=>s+Number(v.total||0),0);
   const gastosTotal = gastosMes.reduce((s,g)=>s+Number(g.valor||0),0);
   let margenTotal = 0;
@@ -5676,6 +5713,7 @@ window.abrirCierreMes = () => {
 
   document.getElementById('cierre-mes-preview').innerHTML =
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:12px">'
+    + '<div style="grid-column:1/-1;color:var(--ink-3);font-size:11px">Ciclo: ' + rangoInicioCierre + ' al ' + rangoFinCierre + '</div>'
     + '<div>Ingresos: <strong>' + fmt(ingresos) + '</strong></div>'
     + '<div>Gastos: <strong>' + fmt(gastosTotal) + '</strong></div>'
     + '<div>Utilidad neta: <strong>' + fmt(ingresos-gastosTotal) + '</strong></div>'
