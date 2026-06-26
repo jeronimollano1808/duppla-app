@@ -3515,9 +3515,12 @@ window.guardarVenta = async () => {
     for(const l of lineasValidas) {
       const prod = DATA.inventario.find(p => p.id === l.prodId);
       if(!prod) { alert('Producto no encontrado: ' + l.nombre); return; }
-      // 455. Validamos contra el stock de la UBICACIÓN elegida, no solo el total
-      //      (puede haber 10 en total pero solo 2 donde Jero quiere descontar)
-      const ubicacionLinea = l.ubicacion || ((prod.stockJero||0) > 0 ? 'jero' : 'angel');
+      // 535. FIX: si el producto NUNCA tuvo stockJero/stockAngel asignados
+      //      (ambos undefined), todo el stock legacy vive en 'jero' por
+      //      convención — antes el fallback caía mal a 'angel' con 0
+      //      disponible, bloqueando ventas de productos con stock real.
+      const tieneUbicacionAsignada = prod.stockJero != null || prod.stockAngel != null;
+      const ubicacionLinea = l.ubicacion || (!tieneUbicacionAsignada ? 'jero' : ((prod.stockJero||0) > 0 ? 'jero' : 'angel'));
       const stockEnUbicacion = ubicacionLinea === 'angel'
         ? (prod.stockAngel != null ? prod.stockAngel : 0)
         : (prod.stockJero != null ? prod.stockJero : prod.stock||0);
@@ -3531,7 +3534,8 @@ window.guardarVenta = async () => {
       const prod = DATA.inventario.find(p => p.id === l.prodId);
       // 453. Descontamos del stock de la ubicación elegida (Jero/Ángel) si el
       //      producto tiene reparto; si no, simplemente descuenta del total.
-      const ubicacionFinal1 = l.ubicacion || ((prod.stockJero||0) > 0 ? 'jero' : 'angel');
+      const tieneUbic1 = prod.stockJero != null || prod.stockAngel != null;
+      const ubicacionFinal1 = l.ubicacion || (!tieneUbic1 ? 'jero' : ((prod.stockJero||0) > 0 ? 'jero' : 'angel'));
       const updateStock1 = construirUpdateStockUbicacion(prod, l.cant, ubicacionFinal1);
 
       // 470. FIFO: si el producto tiene lotes, consumimos del más antiguo primero
@@ -3562,7 +3566,8 @@ window.guardarVenta = async () => {
       const productosVenta = [];
       for(const l of lineasValidas) {
         const prod = DATA.inventario.find(p => p.id === l.prodId);
-        const ubicacionFinal2 = l.ubicacion || ((prod.stockJero||0) > 0 ? 'jero' : 'angel');
+        const tieneUbic2 = prod.stockJero != null || prod.stockAngel != null;
+        const ubicacionFinal2 = l.ubicacion || (!tieneUbic2 ? 'jero' : ((prod.stockJero||0) > 0 ? 'jero' : 'angel'));
         const updateStock2 = construirUpdateStockUbicacion(prod, l.cant, ubicacionFinal2);
 
         // 470. Mismo tratamiento FIFO para cada línea de una venta múltiple
@@ -6931,7 +6936,10 @@ window.guardarDejarConsignacion = async () => {
   for(const l of lineasValidas) {
     const prod = DATA.inventario.find(p => p.id === l.prodId);
     const fifo = consumirLotesFIFO(prod, l.cant);
-    const updateInv = construirUpdateStockUbicacion(prod, l.cant, (prod.stockJero||0) > 0 ? 'jero' : 'angel');
+    // 536. Mismo fix de ubicación aplicado en Ventas
+    const tieneUbicConsig = prod.stockJero != null || prod.stockAngel != null;
+    const ubicacionConsig = !tieneUbicConsig ? 'jero' : ((prod.stockJero||0) > 0 ? 'jero' : 'angel');
+    const updateInv = construirUpdateStockUbicacion(prod, l.cant, ubicacionConsig);
     let costoUnit;
     if(fifo) {
       updateInv.lotes = fifo.lotesActualizados;
