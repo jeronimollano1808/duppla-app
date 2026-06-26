@@ -1580,6 +1580,59 @@ body{
   </div>
 </div>
 
+<!-- 461. MODAL: REGISTRAR LOTE NUEVO (sistema FIFO) -->
+<div class="modal-bg" id="modal-lote">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <span class="modal-title" id="lote-title">Registrar lote nuevo</span>
+      <button class="modal-close" onclick="closeModal('modal-lote')">✕</button>
+    </div>
+    <input type="hidden" id="lote-prod-id" value="">
+    <div style="background:var(--surface-2);border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:var(--ink-2)">
+      💡 Cada lote guarda su propio costo. Al vender, se descuenta primero del lote más antiguo (FIFO), así el margen de cada venta es exacto.
+    </div>
+    <div class="f-row">
+      <div class="f-group">
+        <label class="f-label">Cantidad recibida *</label>
+        <input type="number" id="lote-cantidad" class="f-input" min="1" placeholder="Ej: 20">
+      </div>
+      <div class="f-group">
+        <label class="f-label">Costo unitario ($) *</label>
+        <input type="number" id="lote-costo" class="f-input" placeholder="Ej: 20000" oninput="previoCOP('lote-costo','prev-lote-costo')">
+        <div id="prev-lote-costo" style="font-size:11px;margin-top:3px;font-weight:600"></div>
+      </div>
+    </div>
+    <div class="f-row">
+      <div class="f-group">
+        <label class="f-label">Fecha de llegada</label>
+        <input type="date" id="lote-fecha" class="f-input">
+      </div>
+      <div class="f-group">
+        <label class="f-label">Proveedor (opcional)</label>
+        <input type="text" id="lote-proveedor" class="f-input" placeholder="Ej: Amazon, NSS...">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-lote')">Cancelar</button>
+      <button class="btn btn-lime" onclick="guardarLote()">Registrar lote</button>
+    </div>
+  </div>
+</div>
+
+<!-- 462. MODAL: VER LOTES DE UN PRODUCTO -->
+<div class="modal-bg" id="modal-ver-lotes">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header">
+      <span class="modal-title" id="ver-lotes-title">Lotes del producto</span>
+      <button class="modal-close" onclick="closeModal('modal-ver-lotes')">✕</button>
+    </div>
+    <div id="ver-lotes-contenido"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-ver-lotes')">Cerrar</button>
+    </div>
+  </div>
+</div>
+
 <!-- ============================================================
      36. JAVASCRIPT — LÓGICA DE LA APP
      Todo el código JS en un módulo ES para usar imports modernos
@@ -1790,6 +1843,68 @@ function construirUpdateStockUbicacion(prod, cantDescontar, ubicacion) {
   if(ubicacion === 'angel') saNuevo = Math.max(0, saActual - cantDescontar);
   else sjNuevo = Math.max(0, sjActual - cantDescontar);
   return { stockJero: sjNuevo, stockAngel: saNuevo, stock: sjNuevo + saNuevo };
+}
+
+// ============================================================
+// 456. SISTEMA DE LOTES FIFO (First In, First Out)
+// Cada producto puede tener lotes: [{ id, cantidad, cantidadDisponible,
+// costoUnitario, fecha, proveedor }]. Al vender, se descuenta SIEMPRE del
+// lote más antiguo con disponibilidad > 0 primero. Una venta puede cruzar
+// varios lotes si el más viejo no alcanza para cubrir la cantidad vendida.
+// Productos SIN lotes (campo lotes ausente o vacío) siguen usando el
+// campo 'costo' de siempre — este sistema es 100% aditivo, no reemplaza nada.
+// ============================================================
+
+// 457. Calcula el costo promedio ponderado de todos los lotes con disponibilidad
+//      Este valor reemplaza a 'costo' como referencia general del producto
+//      una vez que tiene al menos un lote registrado.
+function calcularCostoPromedioLotes(lotes) {
+  const activos = (lotes||[]).filter(l => Number(l.cantidadDisponible||0) > 0);
+  if(activos.length === 0) return null;
+  const totalUnidades = activos.reduce((s,l) => s + Number(l.cantidadDisponible||0), 0);
+  if(totalUnidades === 0) return null;
+  const totalValor = activos.reduce((s,l) => s + Number(l.cantidadDisponible||0)*Number(l.costoUnitario||0), 0);
+  return totalValor / totalUnidades;
+}
+
+// 458. Dado un producto y una cantidad a vender, calcula de qué lote(s) sale
+//      y devuelve: el array de lotes actualizado (con cantidadDisponible
+//      descontada) y el desglose de qué salió de dónde con su costo exacto.
+//      Si el producto no tiene lotes, devuelve null (caller debe usar el
+//      flujo viejo basado en 'costo').
+function consumirLotesFIFO(prod, cantidadAVender) {
+  if(!prod.lotes || prod.lotes.length === 0) return null;
+
+  // Ordenamos por fecha ascendente — el más antiguo primero (FIFO real)
+  const lotesOrdenados = [...prod.lotes].sort((a,b) => (a.fecha||'') < (b.fecha||'') ? -1 : 1);
+  let restante = cantidadAVender;
+  const consumo = []; // [{ loteId, cantidad, costoUnitario }]
+  const lotesActualizados = prod.lotes.map(l => ({...l}));
+
+  for(const lote of lotesOrdenados) {
+    if(restante <= 0) break;
+    const disponible = Number(lote.cantidadDisponible||0);
+    if(disponible <= 0) continue;
+    const tomar = Math.min(disponible, restante);
+    consumo.push({ loteId: lote.id, cantidad: tomar, costoUnitario: Number(lote.costoUnitario||0) });
+    // Reflejamos el descuento en la copia que vamos a guardar
+    const idx = lotesActualizados.findIndex(l => l.id === lote.id);
+    if(idx >= 0) lotesActualizados[idx].cantidadDisponible = disponible - tomar;
+    restante -= tomar;
+  }
+
+  // 459. Si no había suficiente en los lotes, el resto se considera "sin lote"
+  //      (puede pasar si el stock total y la suma de lotes están desincronizados)
+  if(restante > 0) {
+    consumo.push({ loteId: null, cantidad: restante, costoUnitario: null });
+  }
+
+  // 460. Costo promedio ponderado de ESTA venta específica (puede mezclar 2+ lotes)
+  const unidadesConCosto = consumo.filter(c => c.costoUnitario != null).reduce((s,c)=>s+c.cantidad,0);
+  const valorConCosto = consumo.filter(c => c.costoUnitario != null).reduce((s,c)=>s+c.cantidad*c.costoUnitario,0);
+  const costoPromedioVenta = unidadesConCosto > 0 ? (valorConCosto/unidadesConCosto) : null;
+
+  return { lotesActualizados, consumo, costoPromedioVenta };
 }
 
 function calcularMargenVenta(v) {
@@ -3215,15 +3330,28 @@ window.guardarVenta = async () => {
       // 453. Descontamos del stock de la ubicación elegida (Jero/Ángel) si el
       //      producto tiene reparto; si no, simplemente descuenta del total.
       const ubicacionFinal1 = l.ubicacion || ((prod.stockJero||0) > 0 ? 'jero' : 'angel');
-      await updateDoc(doc(db,'inventario',l.prodId), construirUpdateStockUbicacion(prod, l.cant, ubicacionFinal1));
-      // 366. Guardamos el costo histórico del producto al momento de la venta
-      //      para que el margen no se distorsione si el costo cambia después
-      const costoUnit = Number(prod.costo)||0;
+      const updateStock1 = construirUpdateStockUbicacion(prod, l.cant, ubicacionFinal1);
+
+      // 470. FIFO: si el producto tiene lotes, consumimos del más antiguo primero
+      //      y usamos ese costo exacto en vez del costo promedio/actual.
+      const fifo1 = consumirLotesFIFO(prod, l.cant);
+      let costoUnit;
+      if(fifo1) {
+        updateStock1.lotes = fifo1.lotesActualizados;
+        updateStock1.costo = calcularCostoPromedioLotes(fifo1.lotesActualizados) ?? prod.costo;
+        costoUnit = fifo1.costoPromedioVenta != null ? fifo1.costoPromedioVenta : Number(prod.costo)||0;
+      } else {
+        // 366. Sin lotes: seguimos usando el costo histórico tal como antes
+        costoUnit = Number(prod.costo)||0;
+      }
+      await updateDoc(doc(db,'inventario',l.prodId), updateStock1);
+
       await addDoc(collection(db,'ventas'), {
         fecha, canal, producto:prod.nombre, prodId:l.prodId, esManual:false,
         cant:l.cant, precio:l.precio, total, cliente, nota, tipoPrecio:l.tipoPrecio,
         metodoPago, pagado, saldo, estadoPago, abonos:[],
         mixtoEfectivo, mixtoTransferencia, costoUnit,
+        loteConsumo: fifo1 ? fifo1.consumo : null, // 471. Trazabilidad: de qué lote(s) salió exactamente
         ubicacionStock: ubicacionFinal1, // 454. Registramos de dónde salió, para trazabilidad
         distribuidorId: distribuidorId || null, createdAt:serverTimestamp()
       });
@@ -3233,9 +3361,22 @@ window.guardarVenta = async () => {
       for(const l of lineasValidas) {
         const prod = DATA.inventario.find(p => p.id === l.prodId);
         const ubicacionFinal2 = l.ubicacion || ((prod.stockJero||0) > 0 ? 'jero' : 'angel');
-        await updateDoc(doc(db,'inventario',l.prodId), construirUpdateStockUbicacion(prod, l.cant, ubicacionFinal2));
+        const updateStock2 = construirUpdateStockUbicacion(prod, l.cant, ubicacionFinal2);
+
+        // 470. Mismo tratamiento FIFO para cada línea de una venta múltiple
+        const fifo2 = consumirLotesFIFO(prod, l.cant);
+        let costoUnitLinea;
+        if(fifo2) {
+          updateStock2.lotes = fifo2.lotesActualizados;
+          updateStock2.costo = calcularCostoPromedioLotes(fifo2.lotesActualizados) ?? prod.costo;
+          costoUnitLinea = fifo2.costoPromedioVenta != null ? fifo2.costoPromedioVenta : Number(prod.costo)||0;
+        } else {
+          costoUnitLinea = Number(prod.costo)||0;
+        }
+        await updateDoc(doc(db,'inventario',l.prodId), updateStock2);
+
         // 367. Cada línea de la venta múltiple guarda su propio costo histórico
-        productosVenta.push({ prodId:l.prodId, nombre:prod.nombre, cant:l.cant, precio:l.precio, tipoPrecio:l.tipoPrecio, costoUnit:Number(prod.costo)||0, ubicacionStock:ubicacionFinal2 });
+        productosVenta.push({ prodId:l.prodId, nombre:prod.nombre, cant:l.cant, precio:l.precio, tipoPrecio:l.tipoPrecio, costoUnit:costoUnitLinea, ubicacionStock:ubicacionFinal2, loteConsumo: fifo2 ? fifo2.consumo : null });
         const stockRestante = (prod.stockJero||0) + (prod.stockAngel||0) - l.cant;
         if(stockRestante <= (prod.stockMinimo||5))
           await pushNotif('⚠️ Stock bajo', prod.nombre + ' quedó con ' + stockRestante + ' uds', 'stock', {seccion:'inventario', id:l.prodId});
@@ -4074,10 +4215,13 @@ function renderInventario() {
       </td>
       <td style="color:${margen>=30?'var(--green)':margen>=15?'var(--amber)':'var(--red)'}">${margen!==null?margen+'%':'—'}</td>
       <td>
-        <div style="display:flex;gap:5px">
+        <div style="display:flex;gap:5px;flex-wrap:wrap">
           <!-- 83. Botón editar: carga los datos del producto en el formulario para modificarlos -->
           <button class="btn btn-xs" onclick="editarProducto('${p.id}')">✏️ Editar</button>
           <button class="btn btn-xs" onclick="abrirAjuste('${p.id}','${p.nombre.replace(/'/g,"\\'")}',${p.stock})">± Stock</button>
+          <!-- 469. Botones del sistema de lotes FIFO -->
+          <button class="btn btn-xs" style="color:var(--blue);border-color:#BFDBFE" onclick="abrirModalLote('${p.id}')">+ Lote</button>
+          ${(p.lotes && p.lotes.length > 0) ? '<button class="btn btn-xs" style="color:var(--lime);border-color:#C8E05A" onclick="verLotesProducto(\'' + p.id + '\')">📦 ' + p.lotes.length + '</button>' : ''}
           <button class="btn btn-xs btn-danger" onclick="eliminarDoc('inventario','${p.id}')">✕</button>
         </div>
       </td>
@@ -4440,6 +4584,110 @@ window.aplicarAjuste = async () => {
     stock: sjNuevo + saNuevo // 446. stock sigue siendo el TOTAL — todo lo que ya lo usa sigue funcionando igual
   });
   closeModal('modal-ajuste');
+};
+
+// ============================================================
+// 463. REGISTRAR LOTE NUEVO — abre el modal y precarga campos
+// ============================================================
+window.abrirModalLote = (prodId) => {
+  const prod = DATA.inventario.find(p => p.id === prodId);
+  if(!prod) return;
+  document.getElementById('lote-prod-id').value = prodId;
+  document.getElementById('lote-title').textContent = 'Registrar lote — ' + prod.nombre;
+  document.getElementById('lote-cantidad').value = '';
+  document.getElementById('lote-costo').value = '';
+  document.getElementById('prev-lote-costo').textContent = '';
+  document.getElementById('lote-fecha').value = today();
+  document.getElementById('lote-proveedor').value = '';
+  openModal('modal-lote');
+};
+
+window.guardarLote = async () => {
+  const prodId = document.getElementById('lote-prod-id').value;
+  const prod = DATA.inventario.find(p => p.id === prodId);
+  if(!prod) { alert('Producto no encontrado'); return; }
+
+  const cantidad = Number(document.getElementById('lote-cantidad').value);
+  const costoUnitario = Number(document.getElementById('lote-costo').value);
+  const fecha = document.getElementById('lote-fecha').value;
+  if(!cantidad || cantidad <= 0) { alert('Ingresa una cantidad válida'); return; }
+  if(!costoUnitario || costoUnitario <= 0) { alert('Ingresa un costo unitario válido'); return; }
+  if(!fecha) { alert('Selecciona una fecha'); return; }
+
+  // 464. Creamos el lote nuevo y lo agregamos al array existente
+  const nuevoLote = {
+    id: 'lote_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
+    cantidad,
+    cantidadDisponible: cantidad,
+    costoUnitario,
+    fecha,
+    proveedor: document.getElementById('lote-proveedor').value.trim() || null,
+  };
+  const lotesActuales = prod.lotes || [];
+  const lotesNuevos = [...lotesActuales, nuevoLote];
+
+  // 465. El stock total sube con la cantidad recibida (se suma a Jero por
+  //      defecto, igual que el resto del flujo de inventario manual).
+  const sjActual = prod.stockJero != null ? prod.stockJero : (prod.stock||0);
+  const saActual = prod.stockAngel != null ? prod.stockAngel : 0;
+  const sjNuevo = sjActual + cantidad;
+
+  // 466. El costo promedio ponderado de TODOS los lotes activos reemplaza
+  //      al campo 'costo' general — así todo lo que usa prod.costo (alertas,
+  //      capital invertido, fallback de margen) queda actualizado automáticamente.
+  const costoPromedioNuevo = calcularCostoPromedioLotes(lotesNuevos);
+
+  await updateDoc(doc(db,'inventario',prodId), {
+    lotes: lotesNuevos,
+    stockJero: sjNuevo,
+    stockAngel: saActual,
+    stock: sjNuevo + saActual,
+    costo: costoPromedioNuevo != null ? costoPromedioNuevo : prod.costo,
+  });
+
+  closeModal('modal-lote');
+  toast('✅ Lote registrado — ' + cantidad + ' uds. a ' + fmt(costoUnitario) + ' c/u');
+};
+
+// ============================================================
+// 467. VER LOTES — modal de solo lectura con el detalle de cada lote
+// ============================================================
+window.verLotesProducto = (prodId) => {
+  const prod = DATA.inventario.find(p => p.id === prodId);
+  if(!prod) return;
+  document.getElementById('ver-lotes-title').textContent = 'Lotes — ' + prod.nombre;
+
+  const lotes = prod.lotes || [];
+  if(lotes.length === 0) {
+    document.getElementById('ver-lotes-contenido').innerHTML =
+      '<div class="empty-state" style="padding:20px"><div class="empty-state-text">Este producto no tiene lotes registrados</div>'
+      + '<div class="empty-state-sub">Usa el costo general (' + fmt(prod.costo||0) + ') hasta que registres el primer lote</div></div>';
+  } else {
+    // 468. Ordenamos por fecha — el más antiguo (el que se consume primero) arriba
+    const lotesOrd = [...lotes].sort((a,b) => (a.fecha||'') < (b.fecha||'') ? -1 : 1);
+    let filas = '';
+    lotesOrd.forEach((l, i) => {
+      const agotado = Number(l.cantidadDisponible||0) <= 0;
+      const esElProximo = !agotado && i === lotesOrd.findIndex(x => Number(x.cantidadDisponible||0) > 0);
+      filas += '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);' + (agotado?'opacity:.5':'') + '">'
+        + '<div>'
+          + '<div style="font-size:13px;font-weight:600;color:var(--ink)">' + (l.fecha||'') + (l.proveedor?' · '+l.proveedor:'') + '</div>'
+          + '<div style="font-size:11px;color:var(--ink-3)">Costo: ' + fmt(l.costoUnitario||0) + ' c/u'
+            + (esElProximo ? ' <span style="color:var(--lime);font-weight:600">· próximo en usarse</span>' : '') + '</div>'
+        + '</div>'
+        + '<div style="text-align:right">'
+          + '<div style="font-size:14px;font-weight:700;color:' + (agotado?'var(--ink-3)':'var(--ink)') + '">' + (l.cantidadDisponible||0) + ' / ' + (l.cantidad||0) + '</div>'
+          + '<div style="font-size:10px;color:var(--ink-3)">disponibles</div>'
+        + '</div>'
+      + '</div>';
+    });
+    const costoProm = calcularCostoPromedioLotes(lotes);
+    document.getElementById('ver-lotes-contenido').innerHTML =
+      '<div style="background:var(--lime-bg);border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:12px">'
+        + 'Costo promedio ponderado actual: <strong>' + fmt(costoProm||0) + '</strong>'
+      + '</div>' + filas;
+  }
+  openModal('modal-ver-lotes');
 };
 
 // ============================================================
