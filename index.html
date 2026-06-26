@@ -845,7 +845,7 @@ body{
 
 <!-- 492. MODAL: DEJAR PRODUCTOS EN CONSIGNACIÓN -->
 <div class="modal-bg" id="modal-dejar-consig">
-  <div class="modal" style="max-width:440px">
+  <div class="modal" style="max-width:480px">
     <div class="modal-header">
       <span class="modal-title">Dejar productos en consignación</span>
       <button class="modal-close" onclick="closeModal('modal-dejar-consig')">✕</button>
@@ -856,18 +856,13 @@ body{
       <label class="f-label">Fecha</label>
       <input type="date" id="dc-fecha" class="f-input">
     </div>
-    <!-- 493. Buscador de producto — mismo patrón usado en Ventas/Combos/Pedidos -->
-    <div class="f-group">
-      <label class="f-label">Producto *</label>
-      <input type="text" id="dc-busqueda" class="f-input" placeholder="🔍 Buscar producto..." oninput="filtrarProductosConsignacion(this.value)">
-      <div id="dc-resultados" style="max-height:140px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--surface);margin-top:4px;display:none"></div>
-      <div id="dc-seleccionado" style="display:none;margin-top:6px;padding:8px 10px;background:var(--lime-bg);border-radius:8px;font-size:12px;font-weight:600;color:var(--lime)"></div>
-      <input type="hidden" id="dc-prod-id" value="">
+    <!-- 506. Líneas de producto múltiples — mismo patrón que Ventas/Pedidos -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <label class="f-label" style="margin:0">Productos a dejar *</label>
+      <button type="button" class="btn btn-sm" onclick="agregarLineaConsignacion()">+ Producto</button>
     </div>
-    <div class="f-group">
-      <label class="f-label">Cantidad a dejar *</label>
-      <input type="number" id="dc-cantidad" class="f-input" min="1" placeholder="Ej: 5">
-    </div>
+    <div id="dc-lineas-container"></div>
+    <div style="font-size:11px;color:var(--ink-3);margin-top:6px">💡 El precio sugerido es el de distribuidor — puedes editarlo si la tienda vende a otro valor.</div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('modal-dejar-consig')">Cancelar</button>
       <button class="btn btn-lime" onclick="guardarDejarConsignacion()">Dejar en consignación</button>
@@ -6656,92 +6651,178 @@ window.eliminarTiendaConsig = async (id) => {
 };
 
 // --- Dejar productos en consignación ---
+// 506. dcLineas — estado de las líneas de productos a dejar en consignación
+let dcLineas = [];
+
 window.abrirDejarConsignacion = (tiendaId) => {
   const t = DATA.tiendasConsignacion.find(x => x.id === tiendaId);
   if(!t) return;
   document.getElementById('dc-tienda-id').value = tiendaId;
   document.getElementById('dc-tienda-nombre').textContent = '🏪 ' + t.nombre;
   document.getElementById('dc-fecha').value = today();
-  document.getElementById('dc-busqueda').value = '';
-  document.getElementById('dc-resultados').style.display = 'none';
-  document.getElementById('dc-seleccionado').style.display = 'none';
-  document.getElementById('dc-prod-id').value = '';
-  document.getElementById('dc-cantidad').value = '';
+  dcLineas = [{ prodId:'', cant:1, precioVenta:0, busqueda:'' }];
+  renderLineasConsignacion();
   openModal('modal-dejar-consig');
 };
 
-window.filtrarProductosConsignacion = (busq) => {
-  const res = document.getElementById('dc-resultados');
-  if(!busq.trim()) { res.style.display = 'none'; return; }
-  const candidatos = DATA.inventario.filter(p =>
-    p.nombre.toLowerCase().includes(busq.toLowerCase()) || (p.marca||'').toLowerCase().includes(busq.toLowerCase())
-  );
-  res.style.display = 'block';
-  if(candidatos.length === 0) {
-    res.innerHTML = '<div style="padding:10px;color:var(--ink-3);font-size:12px;text-align:center">Sin resultados</div>';
-    return;
-  }
-  res.innerHTML = agruparProductosPorMarca(candidatos.slice(0,20), function(p) {
-    return '<div onclick="seleccionarProductoConsignacion(\'' + p.id + '\')" style="padding:7px 10px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px" onmouseover="this.style.background=\'var(--surface-2)\'" onmouseout="this.style.background=\'var(--surface)\'">'
-      + '<div style="font-weight:500">' + p.nombre + '</div>'
-      + '<div style="color:var(--ink-3);font-size:11px">Stock disponible: ' + (p.stock||0) + '</div>'
+// ============================================================
+// 507. LÍNEAS DE CONSIGNACIÓN — buscador + cantidad + precio sugerido
+// El precio se precarga con el de distribuidor (es lo que normalmente
+// se deja en tiendas), pero queda editable por si la tienda vende a
+// otro valor.
+// ============================================================
+function renderLineasConsignacion() {
+  let html = '';
+  dcLineas.forEach((l, i) => {
+    const prod = DATA.inventario.find(p => p.id === l.prodId);
+    const busq = (l.busqueda||'').toLowerCase();
+    const candidatos = busq
+      ? DATA.inventario.filter(p => p.nombre.toLowerCase().includes(busq) || (p.marca||'').toLowerCase().includes(busq))
+      : DATA.inventario;
+
+    let contenido;
+    if(!l.prodId) {
+      const resultados = candidatos.length === 0
+        ? '<div style="padding:10px;color:var(--ink-3);font-size:12px;text-align:center">Sin resultados</div>'
+        : agruparProductosPorMarca(candidatos.slice(0,20), function(p) {
+            return '<div onclick="seleccionarProductoLineaConsig(' + i + ',\'' + p.id + '\')" style="padding:7px 10px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px" onmouseover="this.style.background=\'var(--surface-2)\'" onmouseout="this.style.background=\'var(--surface)\'">'
+              + '<div style="font-weight:500">' + p.nombre + '</div>'
+              + '<div style="color:var(--ink-3);font-size:11px">Stock disponible: ' + (p.stock||0) + ' · Dist: ' + fmt(p.pdist||0) + '</div>'
+            + '</div>';
+          });
+      contenido = '<input type="text" class="f-input" placeholder="🔍 Buscar producto..." value="' + (l.busqueda||'').replace(/"/g,'&quot;') + '" '
+        + 'data-idx="' + i + '" oninput="actualizarBusquedaLineaConsig(this)" style="font-size:13px;margin-bottom:6px">'
+        + (busq ? '<div style="max-height:150px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--surface)">' + resultados + '</div>' : '');
+    } else {
+      contenido = '<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--lime-bg);border-radius:8px;margin-bottom:8px">'
+        + '<span style="font-size:12px;font-weight:600;color:var(--lime);flex:1">' + prod.nombre + '</span>'
+        + '<span style="font-size:11px;color:var(--ink-3)">stock: ' + (prod.stock||0) + '</span>'
+        + '<button type="button" onclick="cambiarProductoLineaConsig(' + i + ')" style="background:none;border:none;color:var(--ink-3);cursor:pointer;font-size:11px;text-decoration:underline">Cambiar</button>'
+        + '</div>'
+        + '<div style="display:grid;grid-template-columns:70px 1fr 1fr;gap:8px">'
+          + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Cant.</label>'
+            + '<input type="number" class="f-input" value="' + (l.cant||1) + '" min="1" data-idx="' + i + '" data-tipo="cant" oninput="actualizarDatosLineaConsig(this)" style="font-size:13px;text-align:center;padding:7px 6px"></div>'
+          + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Precio venta ($)</label>'
+            + '<input type="number" class="f-input" value="' + (l.precioVenta||0) + '" data-idx="' + i + '" data-tipo="precio" oninput="actualizarDatosLineaConsig(this)" style="font-size:13px;padding:7px 8px"></div>'
+          + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Subtotal</label>'
+            + '<div style="font-size:13px;font-weight:700;color:var(--lime);padding:7px 0">' + fmt((l.cant||1)*(l.precioVenta||0)) + '</div></div>'
+        + '</div>';
+    }
+
+    const quitarBtn = dcLineas.length > 1
+      ? '<button type="button" onclick="quitarLineaConsignacion(' + i + ')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px">✕</button>'
+      : '';
+
+    html += '<div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:10px;margin-bottom:8px">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+        + '<span style="font-size:11px;font-weight:600;color:var(--ink-3);text-transform:uppercase">Producto ' + (i+1) + '</span>'
+        + quitarBtn
+      + '</div>'
+      + contenido
     + '</div>';
   });
+  document.getElementById('dc-lineas-container').innerHTML = html;
+}
+
+window.agregarLineaConsignacion = () => {
+  dcLineas.push({ prodId:'', cant:1, precioVenta:0, busqueda:'' });
+  renderLineasConsignacion();
 };
 
-window.seleccionarProductoConsignacion = (prodId) => {
+window.quitarLineaConsignacion = (i) => {
+  dcLineas.splice(i, 1);
+  renderLineasConsignacion();
+};
+
+window.actualizarBusquedaLineaConsig = (el) => {
+  const i = Number(el.dataset.idx);
+  dcLineas[i].busqueda = el.value;
+  dcLineas[i].prodId = '';
+  renderLineasConsignacion();
+  setTimeout(() => {
+    const input = document.querySelector('#dc-lineas-container input[type="text"][data-idx="' + i + '"]');
+    if(input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
+  }, 10);
+};
+
+window.seleccionarProductoLineaConsig = (i, prodId) => {
   const prod = DATA.inventario.find(p => p.id === prodId);
   if(!prod) return;
-  document.getElementById('dc-prod-id').value = prodId;
-  document.getElementById('dc-busqueda').value = prod.nombre;
-  document.getElementById('dc-resultados').style.display = 'none';
-  document.getElementById('dc-seleccionado').style.display = 'block';
-  document.getElementById('dc-seleccionado').textContent = '✅ ' + prod.nombre + ' (stock disponible: ' + (prod.stock||0) + ')';
+  dcLineas[i].prodId = prodId;
+  dcLineas[i].busqueda = prod.nombre;
+  // 508. Precio sugerido = precio distribuidor — editable después
+  dcLineas[i].precioVenta = Number(prod.pdist)||0;
+  renderLineasConsignacion();
+};
+
+window.cambiarProductoLineaConsig = (i) => {
+  dcLineas[i].prodId = '';
+  dcLineas[i].busqueda = '';
+  renderLineasConsignacion();
+};
+
+window.actualizarDatosLineaConsig = (el) => {
+  const i = Number(el.dataset.idx);
+  if(el.dataset.tipo === 'cant') dcLineas[i].cant = Number(el.value)||1;
+  if(el.dataset.tipo === 'precio') dcLineas[i].precioVenta = Number(el.value)||0;
+  // Solo actualizamos el subtotal sin perder el foco del input que se está editando
+  renderLineasConsignacion();
+  setTimeout(() => {
+    const input = document.querySelector('#dc-lineas-container input[data-idx="' + i + '"][data-tipo="' + el.dataset.tipo + '"]');
+    if(input) { input.focus(); }
+  }, 10);
 };
 
 window.guardarDejarConsignacion = async () => {
   const tiendaId = document.getElementById('dc-tienda-id').value;
-  const prodId = document.getElementById('dc-prod-id').value;
-  const cantidad = Number(document.getElementById('dc-cantidad').value);
   const fecha = document.getElementById('dc-fecha').value;
-  if(!prodId) { alert('Selecciona un producto'); return; }
-  if(!cantidad || cantidad <= 0) { alert('Ingresa una cantidad válida'); return; }
-
-  const prod = DATA.inventario.find(p => p.id === prodId);
-  if(!prod) { alert('Producto no encontrado'); return; }
-  if(Number(prod.stock||0) < cantidad) { alert('Stock insuficiente. Disponible: ' + prod.stock); return; }
-
-  // 498. El producto SALE del stock de Duppla, igual que con una venta o consumo,
-  //      pero NO se registra como venta — solo como "afuera en consignación".
-  //      Usamos FIFO si el producto tiene lotes, para saber el costo exacto
-  //      de lo que está prestado (igual que en ventas/consumos).
-  const fifo = consumirLotesFIFO(prod, cantidad);
-  const updateInv = construirUpdateStockUbicacion(prod, cantidad, (prod.stockJero||0) > 0 ? 'jero' : 'angel');
-  let costoUnit;
-  if(fifo) {
-    updateInv.lotes = fifo.lotesActualizados;
-    updateInv.costo = calcularCostoPromedioLotes(fifo.lotesActualizados) ?? prod.costo;
-    costoUnit = fifo.costoPromedioVenta != null ? fifo.costoPromedioVenta : Number(prod.costo)||0;
-  } else {
-    costoUnit = Number(prod.costo)||0;
-  }
-  await updateDoc(doc(db,'inventario',prodId), updateInv);
-
   const t = DATA.tiendasConsignacion.find(x => x.id === tiendaId);
-  await addDoc(collection(db,'consignaciones'), {
-    tiendaId, tiendaNombre: t?.nombre || '',
-    prodId, prodNombre: prod.nombre,
-    cantidadInicial: cantidad,
-    cantidadActual: cantidad, // 499. Se va reduciendo con ventas/devoluciones reportadas
-    costoUnit,
-    fecha,
-    historialMovimientos: [], // [{tipo:'venta'|'devolucion', cantidad, fecha, ...}]
-    createdAt: serverTimestamp()
-  });
 
-  await pushNotif('🏪 Consignación', cantidad + 'x ' + prod.nombre + ' dejado en ' + (t?.nombre||''), 'consignacion', {seccion:'consignacion'});
+  // 509. Validamos todas las líneas con producto seleccionado
+  const lineasValidas = dcLineas.filter(l => l.prodId);
+  if(lineasValidas.length === 0) { alert('Selecciona al menos un producto'); return; }
+  for(const l of lineasValidas) {
+    const prod = DATA.inventario.find(p => p.id === l.prodId);
+    if(!prod) { alert('Producto no encontrado'); return; }
+    if(!l.cant || l.cant <= 0) { alert('Revisa la cantidad de ' + prod.nombre); return; }
+    if(Number(prod.stock||0) < l.cant) { alert('Stock insuficiente para ' + prod.nombre + '. Disponible: ' + prod.stock); return; }
+    if(!l.precioVenta || l.precioVenta <= 0) { alert('Ingresa el precio de venta para ' + prod.nombre); return; }
+  }
+
+  // 498. Cada producto SALE del stock de Duppla, igual que con una venta o
+  //      consumo, pero NO se registra como venta — solo como "afuera en
+  //      consignación". Usamos FIFO si el producto tiene lotes.
+  for(const l of lineasValidas) {
+    const prod = DATA.inventario.find(p => p.id === l.prodId);
+    const fifo = consumirLotesFIFO(prod, l.cant);
+    const updateInv = construirUpdateStockUbicacion(prod, l.cant, (prod.stockJero||0) > 0 ? 'jero' : 'angel');
+    let costoUnit;
+    if(fifo) {
+      updateInv.lotes = fifo.lotesActualizados;
+      updateInv.costo = calcularCostoPromedioLotes(fifo.lotesActualizados) ?? prod.costo;
+      costoUnit = fifo.costoPromedioVenta != null ? fifo.costoPromedioVenta : Number(prod.costo)||0;
+    } else {
+      costoUnit = Number(prod.costo)||0;
+    }
+    await updateDoc(doc(db,'inventario',l.prodId), updateInv);
+
+    await addDoc(collection(db,'consignaciones'), {
+      tiendaId, tiendaNombre: t?.nombre || '',
+      prodId: l.prodId, prodNombre: prod.nombre,
+      cantidadInicial: l.cant,
+      cantidadActual: l.cant, // 499. Se va reduciendo con ventas/devoluciones reportadas
+      costoUnit,
+      precioSugerido: l.precioVenta, // 510. Precio acordado para esta entrega — precarga al reportar venta
+      fecha,
+      historialMovimientos: [],
+      createdAt: serverTimestamp()
+    });
+  }
+
+  const resumenProductos = lineasValidas.map(l => l.cant + 'x ' + (DATA.inventario.find(p=>p.id===l.prodId)?.nombre||'')).join(', ');
+  await pushNotif('🏪 Consignación', resumenProductos + ' dejado en ' + (t?.nombre||''), 'consignacion', {seccion:'consignacion'});
   closeModal('modal-dejar-consig');
-  toast('✅ Producto dejado en consignación');
+  toast('✅ ' + lineasValidas.length + ' producto(s) dejado(s) en consignación');
 };
 
 // --- Reportar venta o devolución ---
@@ -6768,8 +6849,9 @@ window.abrirReportarConsignacion = (itemId) => {
   document.getElementById('rc-info').innerHTML =
     'En <strong>' + item.tiendaNombre + '</strong> · Disponible: <strong>' + item.cantidadActual + '</strong> de ' + item.cantidadInicial + ' dejadas';
   document.getElementById('rc-cantidad').value = '';
-  document.getElementById('rc-precio').value = '';
-  document.getElementById('prev-rc-precio').textContent = '';
+  // 511. Precargamos el precio acordado al dejar el producto — editable si vendió a otro valor
+  document.getElementById('rc-precio').value = item.precioSugerido || '';
+  previoCOP('rc-precio','prev-rc-precio');
   document.getElementById('rc-fecha').value = today();
   setTipoReporteConsig('venta');
   openModal('modal-reportar-consig');
