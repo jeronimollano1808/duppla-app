@@ -1502,6 +1502,35 @@ body{
     <div class="f-group"><label class="f-label">Cliente</label>
       <input type="text" id="vc-cliente" class="f-input" placeholder="Nombre del cliente">
     </div>
+    <!-- 435. Método de pago en venta de combo — mismo patrón usado en Ventas normales -->
+    <div class="f-group">
+      <label class="f-label">Método de pago</label>
+      <div style="display:flex;gap:8px">
+        <button type="button" id="vc-mp-efectivo" onclick="setMetodoPagoCombo('efectivo')"
+          style="flex:1;padding:8px;border-radius:var(--radius);border:2px solid var(--ink);background:var(--ink);color:#fff;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">
+          💵 Efectivo
+        </button>
+        <button type="button" id="vc-mp-transferencia" onclick="setMetodoPagoCombo('transferencia')"
+          style="flex:1;padding:8px;border-radius:var(--radius);border:2px solid var(--border);background:var(--surface-2);color:var(--ink-2);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">
+          📲 Transferencia
+        </button>
+        <button type="button" id="vc-mp-mixto" onclick="setMetodoPagoCombo('mixto')"
+          style="flex:1;padding:8px;border-radius:var(--radius);border:2px solid var(--border);background:var(--surface-2);color:var(--ink-2);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">
+          🔀 Mixto
+        </button>
+      </div>
+    </div>
+    <!-- 436. Desglose efectivo/transferencia cuando el pago es mixto -->
+    <div class="f-row" id="vc-mixto-grupo" style="display:none">
+      <div class="f-group">
+        <label class="f-label">💵 Efectivo ($)</label>
+        <input type="number" id="vc-mixto-efectivo" class="f-input" placeholder="0" oninput="calcMixtoCombo()">
+      </div>
+      <div class="f-group">
+        <label class="f-label">📲 Transferencia ($)</label>
+        <input type="number" id="vc-mixto-transferencia" class="f-input" placeholder="0" oninput="calcMixtoCombo()">
+      </div>
+    </div>
     <div class="f-row">
       <div class="f-group">
         <label class="f-label">Pagó ahora ($)</label>
@@ -1518,14 +1547,30 @@ body{
       <button class="btn btn-lime" onclick="guardarVentaCombo()">Registrar venta</button>
     </div>
   </div>
+
 </div>
 
 <!-- Modal: Ajuste de stock -->
 <div class="modal-bg" id="modal-ajuste">
-  <div class="modal" style="max-width:340px">
+  <div class="modal" style="max-width:380px">
     <div class="modal-header">
       <span class="modal-title" id="ajuste-title">Ajustar stock</span>
       <button class="modal-close" onclick="closeModal('modal-ajuste')">✕</button>
+    </div>
+    <!-- 442. Selector de ubicación — el stock está dividido entre Jero y Ángel -->
+    <div id="ajuste-desglose-actual" style="background:var(--surface-2);border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:var(--ink-2)"></div>
+    <div class="f-group">
+      <label class="f-label">¿En cuál ubicación?</label>
+      <div style="display:flex;gap:8px">
+        <button type="button" id="aj-loc-jero" onclick="setUbicacionAjuste('jero')"
+          style="flex:1;padding:9px;border-radius:var(--radius);border:2px solid var(--ink);background:var(--ink);color:#fff;font-size:13px;font-weight:600;cursor:pointer">
+          👤 Jero
+        </button>
+        <button type="button" id="aj-loc-angel" onclick="setUbicacionAjuste('angel')"
+          style="flex:1;padding:9px;border-radius:var(--radius);border:2px solid var(--border);background:var(--surface-2);color:var(--ink-2);font-size:13px;font-weight:600;cursor:pointer">
+          👤 Ángel
+        </button>
+      </div>
     </div>
     <div class="f-group"><label class="f-label">Cantidad a sumar (+) o restar (−)</label><input type="number" id="aj-delta" class="f-input" placeholder="Ej: 10 ó −5"></div>
     <div class="modal-footer">
@@ -1708,6 +1753,44 @@ window.setDashRankingPor = (tipo) => {
     btn.style.borderColor = activo ? 'var(--ink)' : 'var(--border)';
   });
 };
+
+// ============================================================
+// 432. agruparProductosPorMarca — helper reutilizable para buscadores
+// Recibe una lista de productos y un callback que genera el HTML de
+// una fila individual; devuelve el HTML completo agrupado por marca,
+// con la marca como encabezado de sección dentro de la lista de resultados.
+// Usado en: buscador de Ventas, buscador de Combos.
+// ============================================================
+function agruparProductosPorMarca(productos, renderFila) {
+  const grupos = {};
+  productos.forEach(p => {
+    const marca = p.marca || 'Sin marca';
+    if(!grupos[marca]) grupos[marca] = [];
+    grupos[marca].push(p);
+  });
+  const marcasOrdenadas = Object.keys(grupos).sort();
+  let html = '';
+  marcasOrdenadas.forEach(marca => {
+    html += '<div style="padding:5px 10px;background:var(--surface-2);font-size:10px;font-weight:700;color:var(--ink-3);text-transform:uppercase;letter-spacing:.04em;position:sticky;top:0">' + marca + '</div>';
+    grupos[marca].forEach(p => { html += renderFila(p); });
+  });
+  return html;
+}
+
+// ============================================================
+// 450. construirUpdateStockUbicacion — descuenta stock de Jero o Ángel
+// específicamente, y mantiene el campo 'stock' como el TOTAL siempre,
+// para no romper ninguna lógica existente (alertas, capital, margen, etc.)
+// que ya usa prod.stock como fuente de verdad del total.
+// ============================================================
+function construirUpdateStockUbicacion(prod, cantDescontar, ubicacion) {
+  const sjActual = prod.stockJero != null ? prod.stockJero : (prod.stock||0);
+  const saActual = prod.stockAngel != null ? prod.stockAngel : 0;
+  let sjNuevo = sjActual, saNuevo = saActual;
+  if(ubicacion === 'angel') saNuevo = Math.max(0, saActual - cantDescontar);
+  else sjNuevo = Math.max(0, sjActual - cantDescontar);
+  return { stockJero: sjNuevo, stockAngel: saNuevo, stock: sjNuevo + saNuevo };
+}
 
 function calcularMargenVenta(v) {
   // Venta múltiple: sumamos el margen de cada línea, con fallback por línea
@@ -2132,6 +2215,7 @@ window.toggleDetalleVenta = (id) => {
 let metodoPagoVenta = 'efectivo';
 let metodoPagoAbono = 'efectivo';
 let metodoPagoEdit  = 'efectivo';
+let metodoPagoCombo = 'efectivo'; // 438. Método de pago en venta de combos
 
 let dashPeriodo = 'mes';
 let dashFechaInicio = '';
@@ -2816,6 +2900,29 @@ window.calcMixtoEdit = () => {
   document.getElementById('ev-pagado').value = ef + tr;
 };
 
+// 439. setMetodoPagoCombo — toggle método de pago en venta de combo
+window.setMetodoPagoCombo = (tipo) => {
+  metodoPagoCombo = tipo;
+  ['efectivo','transferencia','mixto'].forEach(k => {
+    const btn = document.getElementById('vc-mp-' + k);
+    if(!btn) return;
+    const activo = k === tipo;
+    btn.style.background = activo ? 'var(--ink)' : 'var(--surface-2)';
+    btn.style.color = activo ? '#fff' : 'var(--ink-2)';
+    btn.style.borderColor = activo ? 'var(--ink)' : 'var(--border)';
+  });
+  const grupo = document.getElementById('vc-mixto-grupo');
+  if(grupo) grupo.style.display = tipo === 'mixto' ? 'flex' : 'none';
+};
+
+// 440. calcMixtoCombo — suma efectivo + transferencia y actualiza pagado en venta de combo
+window.calcMixtoCombo = () => {
+  const ef = Number(document.getElementById('vc-mixto-efectivo').value)||0;
+  const tr = Number(document.getElementById('vc-mixto-transferencia').value)||0;
+  document.getElementById('vc-pagado').value = ef + tr;
+  calcSaldoCombo();
+};
+
 window.setTipoProducto = (tipo) => {
   const esInv = tipo === 'inventario';
   document.getElementById('seccion-inventario').style.display = esInv ? 'block' : 'none';
@@ -2846,18 +2953,21 @@ function renderLineasVenta() {
     let contenido = '';
 
     if(!l.prodId) {
-      // Lista de resultados de búsqueda
-      let resultados = '';
-      prods.slice(0,8).forEach(function(p) {
-        resultados += '<div onclick="seleccionarProductoLinea(' + i + ',\'' + p.id + '\')" '
-          + 'style="padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px" '
-          + 'onmouseover="this.style.background=\'var(--surface-2)\'" onmouseout="this.style.background=\'var(--surface)\'">'
-          + '<div style="font-weight:500;color:var(--ink)">' + p.nombre + '</div>'
-          + '<div style="color:var(--ink-3);font-size:11px">' + (p.marca||'') + ' · Stock: ' + p.stock + ' · ' + fmt(p.pventa) + '</div>'
-          + '</div>';
-      });
-      if(prods.length === 0) resultados = '<div style="padding:10px;color:var(--ink-3);font-size:12px;text-align:center">Sin resultados</div>';
-      contenido = '<div style="max-height:130px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--surface);margin-bottom:8px">' + resultados + '</div>';
+      // 433. Lista de resultados agrupados por marca
+      let resultados;
+      if(prods.length === 0) {
+        resultados = '<div style="padding:10px;color:var(--ink-3);font-size:12px;text-align:center">Sin resultados</div>';
+      } else {
+        resultados = agruparProductosPorMarca(prods.slice(0,20), function(p) {
+          return '<div onclick="seleccionarProductoLinea(' + i + ',\'' + p.id + '\')" '
+            + 'style="padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px" '
+            + 'onmouseover="this.style.background=\'var(--surface-2)\'" onmouseout="this.style.background=\'var(--surface)\'">'
+            + '<div style="font-weight:500;color:var(--ink)">' + p.nombre + '</div>'
+            + '<div style="color:var(--ink-3);font-size:11px">Stock: ' + p.stock + ' · ' + fmt(p.pventa) + '</div>'
+            + '</div>';
+        });
+      }
+      contenido = '<div style="max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--surface);margin-bottom:8px">' + resultados + '</div>';
     } else {
       // Producto seleccionado — botones de tipo de precio
       let tiposBtns = '';
@@ -2877,11 +2987,33 @@ function renderLineasVenta() {
       });
 
       const subtotal = fmt((l.cant||1)*(l.precio||0));
+
+      // 451. Selector de ubicación — solo se muestra si el producto tiene
+      //      reparto entre Jero y Ángel (de lo contrario no aplica/confunde)
+      const sj = prod.stockJero != null ? prod.stockJero : (prod.stock||0);
+      const sa = prod.stockAngel != null ? prod.stockAngel : 0;
+      const tieneReparto = (prod.stockJero != null && prod.stockAngel != null) && (sj > 0 || sa > 0);
+      let ubicacionHtml = '';
+      if(tieneReparto) {
+        if(!l.ubicacion) l.ubicacion = sj > 0 ? 'jero' : 'angel';
+        ubicacionHtml = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">'
+          + '<button type="button" onclick="seleccionarUbicacionLinea(' + i + ',\'jero\')" '
+            + 'style="padding:6px 4px;border-radius:6px;border:2px solid ' + (l.ubicacion==='jero'?'var(--ink)':'var(--border)') + ';'
+            + 'background:' + (l.ubicacion==='jero'?'var(--ink)':'var(--surface)') + ';color:' + (l.ubicacion==='jero'?'#fff':'var(--ink-2)') + ';cursor:pointer;font-size:11px;font-weight:600" '
+            + (sj<=0?'disabled style="opacity:.4;cursor:not-allowed"':'') + '>👤 Jero (' + sj + ')</button>'
+          + '<button type="button" onclick="seleccionarUbicacionLinea(' + i + ',\'angel\')" '
+            + 'style="padding:6px 4px;border-radius:6px;border:2px solid ' + (l.ubicacion==='angel'?'var(--ink)':'var(--border)') + ';'
+            + 'background:' + (l.ubicacion==='angel'?'var(--ink)':'var(--surface)') + ';color:' + (l.ubicacion==='angel'?'#fff':'var(--ink-2)') + ';cursor:pointer;font-size:11px;font-weight:600" '
+            + (sa<=0?'disabled style="opacity:.4;cursor:not-allowed"':'') + '>👤 Ángel (' + sa + ')</button>'
+        + '</div>';
+      }
+
       contenido = '<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--lime-bg);border-radius:8px;margin-bottom:8px">'
         + '<span style="font-size:12px;font-weight:600;color:var(--lime);flex:1">' + prod.nombre + '</span>'
         + '<button type="button" onclick="cambiarProductoLinea(' + i + ')" style="background:none;border:none;color:var(--ink-3);cursor:pointer;font-size:11px;text-decoration:underline">Cambiar</button>'
         + '</div>'
         + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px">' + tiposBtns + '</div>'
+        + ubicacionHtml
         + '<div style="display:grid;grid-template-columns:80px 1fr 1fr;gap:8px;align-items:end">'
           + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Cant.</label>'
             + '<input type="number" class="f-input" value="' + (l.cant||1) + '" min="1" data-idx="' + i + '" data-tipo="cant" oninput="actualizarDatosLinea(this)" style="font-size:13px;text-align:center;padding:7px 6px"></div>'
@@ -2960,6 +3092,12 @@ window.seleccionarTipoPrecioLinea = (i, tipo) => {
   ventaLineas[i].precio = precios[tipo];
   renderLineasVenta();
   calcVentaTotal();
+};
+
+// 452. seleccionarUbicacionLinea — define de cuál ubicación (Jero/Ángel) sale el producto
+window.seleccionarUbicacionLinea = (i, ubicacion) => {
+  ventaLineas[i].ubicacion = ubicacion;
+  renderLineasVenta();
 };
 
 window.actualizarDatosLinea = (el) => {
@@ -3060,7 +3198,13 @@ window.guardarVenta = async () => {
     for(const l of lineasValidas) {
       const prod = DATA.inventario.find(p => p.id === l.prodId);
       if(!prod) { alert('Producto no encontrado: ' + l.nombre); return; }
-      if(prod.stock < l.cant) { alert('Stock insuficiente para ' + prod.nombre + '. Disponible: ' + prod.stock); return; }
+      // 455. Validamos contra el stock de la UBICACIÓN elegida, no solo el total
+      //      (puede haber 10 en total pero solo 2 donde Jero quiere descontar)
+      const ubicacionLinea = l.ubicacion || ((prod.stockJero||0) > 0 ? 'jero' : 'angel');
+      const stockEnUbicacion = ubicacionLinea === 'angel'
+        ? (prod.stockAngel != null ? prod.stockAngel : 0)
+        : (prod.stockJero != null ? prod.stockJero : prod.stock||0);
+      if(stockEnUbicacion < l.cant) { alert('Stock insuficiente para ' + prod.nombre + ' en esa ubicación. Disponible: ' + stockEnUbicacion); return; }
     }
 
     // 288. Si es una sola línea, registramos como venta simple (compatible con historial)
@@ -3068,7 +3212,10 @@ window.guardarVenta = async () => {
     if(lineasValidas.length === 1) {
       const l = lineasValidas[0];
       const prod = DATA.inventario.find(p => p.id === l.prodId);
-      await updateDoc(doc(db,'inventario',l.prodId), { stock: prod.stock - l.cant });
+      // 453. Descontamos del stock de la ubicación elegida (Jero/Ángel) si el
+      //      producto tiene reparto; si no, simplemente descuenta del total.
+      const ubicacionFinal1 = l.ubicacion || ((prod.stockJero||0) > 0 ? 'jero' : 'angel');
+      await updateDoc(doc(db,'inventario',l.prodId), construirUpdateStockUbicacion(prod, l.cant, ubicacionFinal1));
       // 366. Guardamos el costo histórico del producto al momento de la venta
       //      para que el margen no se distorsione si el costo cambia después
       const costoUnit = Number(prod.costo)||0;
@@ -3077,6 +3224,7 @@ window.guardarVenta = async () => {
         cant:l.cant, precio:l.precio, total, cliente, nota, tipoPrecio:l.tipoPrecio,
         metodoPago, pagado, saldo, estadoPago, abonos:[],
         mixtoEfectivo, mixtoTransferencia, costoUnit,
+        ubicacionStock: ubicacionFinal1, // 454. Registramos de dónde salió, para trazabilidad
         distribuidorId: distribuidorId || null, createdAt:serverTimestamp()
       });
     } else {
@@ -3084,11 +3232,13 @@ window.guardarVenta = async () => {
       const productosVenta = [];
       for(const l of lineasValidas) {
         const prod = DATA.inventario.find(p => p.id === l.prodId);
-        await updateDoc(doc(db,'inventario',l.prodId), { stock: prod.stock - l.cant });
+        const ubicacionFinal2 = l.ubicacion || ((prod.stockJero||0) > 0 ? 'jero' : 'angel');
+        await updateDoc(doc(db,'inventario',l.prodId), construirUpdateStockUbicacion(prod, l.cant, ubicacionFinal2));
         // 367. Cada línea de la venta múltiple guarda su propio costo histórico
-        productosVenta.push({ prodId:l.prodId, nombre:prod.nombre, cant:l.cant, precio:l.precio, tipoPrecio:l.tipoPrecio, costoUnit:Number(prod.costo)||0 });
-        if(prod.stock - l.cant <= (prod.stockMinimo||5))
-          await pushNotif('⚠️ Stock bajo', prod.nombre + ' quedó con ' + (prod.stock-l.cant) + ' uds', 'stock', {seccion:'inventario', id:l.prodId});
+        productosVenta.push({ prodId:l.prodId, nombre:prod.nombre, cant:l.cant, precio:l.precio, tipoPrecio:l.tipoPrecio, costoUnit:Number(prod.costo)||0, ubicacionStock:ubicacionFinal2 });
+        const stockRestante = (prod.stockJero||0) + (prod.stockAngel||0) - l.cant;
+        if(stockRestante <= (prod.stockMinimo||5))
+          await pushNotif('⚠️ Stock bajo', prod.nombre + ' quedó con ' + stockRestante + ' uds', 'stock', {seccion:'inventario', id:l.prodId});
       }
       const nombresProductos = productosVenta.map(p => p.nombre.split(' ').slice(0,2).join(' ')).join(' + ');
       await addDoc(collection(db,'ventas'), {
@@ -3886,17 +4036,28 @@ function renderInventario() {
       )
     : inventarioOrdenado;
 
-  const rows = inventarioFiltrado.map(p => {
+  const rows = inventarioFiltrado.map((p, idx) => {
     const margen = p.costo > 0 ? Math.round(((p.pventa-p.costo)/p.costo)*100) : null;
     const sc = p.stock===0 ? 'badge b-danger' : p.stock<=(p.stockMinimo||5) ? 'badge b-warning' : 'badge b-success';
     const sl = p.stock===0 ? 'Agotado' : p.stock<=(p.stockMinimo||5) ? `Bajo (${p.stock})` : `OK (${p.stock})`;
+    // 434. Encabezado de marca — se inserta cada vez que la marca cambia respecto
+    //      a la fila anterior. No afecta el filtro porque solo agrega un <tr> extra.
+    const marcaActual = p.marca || 'Sin marca';
+    const marcaAnterior = idx > 0 ? (inventarioFiltrado[idx-1].marca || 'Sin marca') : null;
+    const encabezadoMarca = marcaActual !== marcaAnterior
+      ? `<tr style="background:var(--surface-2)"><td colspan="7" style="padding:6px 12px;font-size:10px;font-weight:700;color:var(--ink-3);text-transform:uppercase;letter-spacing:.05em">${marcaActual}</td></tr>`
+      : '';
     // 80. Mostramos los 3 precios en columnas separadas con punto de color identificador
     //     Si un precio no está configurado mostramos "—"
     // 351. data-nombre y data-marca permiten filtrar sin re-renderizar
-    return `<tr data-nombre="${(p.nombre||'').toLowerCase()}" data-marca="${(p.marca||'').toLowerCase()}">
+    return `${encabezadoMarca}<tr data-nombre="${(p.nombre||'').toLowerCase()}" data-marca="${(p.marca||'').toLowerCase()}">
       <td style="font-weight:500">${p.nombre}</td>
       <td style="color:var(--ink-3)">${p.marca||''}</td>
-      <td><span class="${sc}">${sl}</span></td>
+      <td>
+        <span class="${sc}">${sl}</span>
+        <!-- 449. Desglose por ubicación — solo si hay reparto entre Jero y Ángel -->
+        ${(p.stockJero != null && p.stockAngel != null) ? `<div style="font-size:10px;color:var(--ink-3);margin-top:3px">J: ${p.stockJero} · Á: ${p.stockAngel}</div>` : ''}
+      </td>
       <td>
         <div style="display:flex;flex-direction:column;gap:3px;font-size:12px">
           <span><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#2563EB;margin-right:4px"></span>${p.pventa>0?fmt(p.pventa):'—'}</span>
@@ -4144,10 +4305,11 @@ window.guardarProducto = async () => {
   if(!nombre||!pventa) { alert('Nombre y precio público son requeridos'); return; }
 
   // 85. Construimos el objeto con todos los datos del formulario
+  const stockTotal = Number(document.getElementById('p-stock').value)||0;
   const datos = {
     nombre,
     marca: document.getElementById('p-marca').value,
-    stock: Number(document.getElementById('p-stock').value)||0,
+    stock: stockTotal,
     costo: Number(document.getElementById('p-costo').value)||0,
     pventa,
     pdist: Number(document.getElementById('p-pdist').value)||0,
@@ -4158,9 +4320,24 @@ window.guardarProducto = async () => {
   // 86. Si hay ID = editar, si no = crear nuevo
   const prodId = document.getElementById('p-id').value;
   if(prodId) {
+    // 447. Si el stock total cambió desde este formulario (ajuste manual rápido,
+    //      no desde "± Stock"), aplicamos la diferencia completa a Jero por
+    //      defecto — el reparto fino entre Jero/Ángel se sigue haciendo con
+    //      el botón "± Stock" de la tabla, que sí pregunta la ubicación.
+    const prodActual = DATA.inventario.find(p => p.id === prodId);
+    const stockAnteriorTotal = prodActual ? Number(prodActual.stock||0) : 0;
+    if(stockTotal !== stockAnteriorTotal && prodActual) {
+      const diff = stockTotal - stockAnteriorTotal;
+      const sjActual = prodActual.stockJero != null ? prodActual.stockJero : stockAnteriorTotal;
+      datos.stockJero = Math.max(0, sjActual + diff);
+      datos.stockAngel = prodActual.stockAngel != null ? prodActual.stockAngel : 0;
+    }
     await updateDoc(doc(db,'inventario',prodId), datos);
     toast('✅ Producto actualizado correctamente');
   } else {
+    // 448. Producto nuevo: todo el stock inicial se asigna a Jero por defecto
+    datos.stockJero = stockTotal;
+    datos.stockAngel = 0;
     datos.createdAt = serverTimestamp();
     await addDoc(collection(db,'inventario'), datos);
     toast('✅ Producto agregado al inventario');
@@ -4212,10 +4389,34 @@ window.editarProducto = (id) => {
   }, 50);
 };
 
+// 443. ubicacionAjusteActual — variable global para el toggle Jero/Ángel del ajuste
+let ubicacionAjusteActual = 'jero';
+
+window.setUbicacionAjuste = (u) => {
+  ubicacionAjusteActual = u;
+  ['jero','angel'].forEach(k => {
+    const btn = document.getElementById('aj-loc-' + k);
+    if(!btn) return;
+    const activo = k === u;
+    btn.style.background = activo ? 'var(--ink)' : 'var(--surface-2)';
+    btn.style.color = activo ? '#fff' : 'var(--ink-2)';
+    btn.style.borderColor = activo ? 'var(--ink)' : 'var(--border)';
+  });
+};
+
 window.abrirAjuste = (id, nombre, stock) => {
   ajusteProductoId = id;
-  document.getElementById('ajuste-title').textContent = `Ajustar stock — ${nombre} (actual: ${stock})`;
+  const prod = DATA.inventario.find(p => p.id === id);
+  // 444. RETROCOMPATIBILIDAD: si el producto no tiene stockJero/stockAngel todavía
+  //      (porque se creó antes de esta mejora), asumimos que todo el stock está
+  //      donde Jero — así no se "pierde" inventario al migrar.
+  const sj = prod?.stockJero != null ? prod.stockJero : (prod?.stock||0);
+  const sa = prod?.stockAngel != null ? prod.stockAngel : 0;
+  document.getElementById('ajuste-title').textContent = `Ajustar stock — ${nombre}`;
+  document.getElementById('ajuste-desglose-actual').innerHTML =
+    'Total actual: <strong>' + (sj+sa) + '</strong> uds. &nbsp;·&nbsp; Jero: <strong>' + sj + '</strong> &nbsp;·&nbsp; Ángel: <strong>' + sa + '</strong>';
   document.getElementById('aj-delta').value = '';
+  setUbicacionAjuste('jero');
   openModal('modal-ajuste');
 };
 
@@ -4224,7 +4425,20 @@ window.aplicarAjuste = async () => {
   if(!delta) { alert('Ingresa un número distinto de 0'); return; }
   const prod = DATA.inventario.find(p=>p.id===ajusteProductoId);
   if(!prod) return;
-  await updateDoc(doc(db,'inventario',ajusteProductoId), { stock:Math.max(0, prod.stock+delta) });
+
+  // 445. Aplicamos el ajuste solo a la ubicación elegida, y recalculamos el total
+  const sjActual = prod.stockJero != null ? prod.stockJero : (prod.stock||0);
+  const saActual = prod.stockAngel != null ? prod.stockAngel : 0;
+
+  let sjNuevo = sjActual, saNuevo = saActual;
+  if(ubicacionAjusteActual === 'jero') sjNuevo = Math.max(0, sjActual + delta);
+  else saNuevo = Math.max(0, saActual + delta);
+
+  await updateDoc(doc(db,'inventario',ajusteProductoId), {
+    stockJero: sjNuevo,
+    stockAngel: saNuevo,
+    stock: sjNuevo + saNuevo // 446. stock sigue siendo el TOTAL — todo lo que ya lo usa sigue funcionando igual
+  });
   closeModal('modal-ajuste');
 };
 
@@ -4865,25 +5079,67 @@ window.editarCombo = (id) => {
 };
 
 function renderLineasCombo() {
-  // 197. Mismo fix: data-index para evitar problemas de closures en onchange
-  const html = comboLineas.map((l,i) => `
-    <div style="display:grid;grid-template-columns:1fr 80px 32px;gap:8px;margin-bottom:8px;align-items:center">
-      <select class="f-input" style="font-size:13px" data-idx="${i}" data-tipo="prod"
-        onchange="actualizarLineaCombo(this)">
-        <option value="">— Producto —</option>
-        ${DATA.inventario.map(p =>
-          `<option value="${p.id}" ${p.id===l.prodId?'selected':''}>${p.nombre}</option>`
-        ).join('')}
-      </select>
-      <input type="number" class="f-input" value="${l.cant}" min="1"
-        style="font-size:13px;text-align:center"
-        data-idx="${i}" data-tipo="cant"
-        oninput="actualizarLineaCombo(this);calcSumaIndividual()">
-      <button type="button" onclick="quitarLineaCombo(${i})"
-        style="width:32px;height:38px;border:1px solid #FECACA;border-radius:8px;background:var(--red-bg);color:var(--red);cursor:pointer;font-size:14px">✕</button>
-    </div>`).join('');
+  // 431. Buscador de producto por línea — mismo patrón usado en Ventas multi-producto.
+  //      Cada línea guarda l.busqueda (texto escrito) y l.prodId (producto elegido).
+  const html = comboLineas.map((l,i) => {
+    const prod = DATA.inventario.find(p => p.id === l.prodId);
+    const busq = (l.busqueda||'').toLowerCase();
+    const candidatos = busq
+      ? DATA.inventario.filter(p => p.nombre.toLowerCase().includes(busq) || (p.marca||'').toLowerCase().includes(busq))
+      : DATA.inventario;
+
+    const buscadorOResultado = !l.prodId
+      ? '<input type="text" class="f-input" placeholder="🔍 Buscar producto..." value="' + (l.busqueda||'').replace(/"/g,'&quot;') + '" '
+          + 'data-idx="' + i + '" oninput="actualizarBusquedaCombo(this)" style="font-size:13px;margin-bottom:6px">'
+        + (busq ? '<div style="max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--surface)">'
+            + agruparProductosPorMarca(candidatos.slice(0,20), function(p) {
+                return '<div onclick="seleccionarProductoCombo(' + i + ',\'' + p.id + '\')" style="padding:7px 10px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px" onmouseover="this.style.background=\'var(--surface-2)\'" onmouseout="this.style.background=\'var(--surface)\'">'
+                  + '<div style="font-weight:500">' + p.nombre + '</div>'
+                  + '<div style="color:var(--ink-3);font-size:11px">Stock: ' + (p.stock||0) + '</div>'
+                + '</div>';
+              })
+          + '</div>' : '')
+      : '<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--lime-bg);border-radius:8px">'
+          + '<span style="font-size:12px;font-weight:600;color:var(--lime);flex:1">' + (prod?.nombre||'') + '</span>'
+          + '<button type="button" onclick="cambiarProductoCombo(' + i + ')" style="background:none;border:none;color:var(--ink-3);cursor:pointer;font-size:11px;text-decoration:underline">Cambiar</button>'
+        + '</div>';
+
+    return '<div style="margin-bottom:10px;padding:8px;background:var(--surface-2);border-radius:10px">'
+      + '<div style="display:grid;grid-template-columns:1fr 70px 32px;gap:8px;align-items:start">'
+        + '<div>' + buscadorOResultado + '</div>'
+        + '<input type="number" class="f-input" value="' + (l.cant||1) + '" min="1" style="font-size:13px;text-align:center" data-idx="' + i + '" data-tipo="cant" oninput="actualizarLineaCombo(this);calcSumaIndividual()">'
+        + '<button type="button" onclick="quitarLineaCombo(' + i + ')" style="width:32px;height:38px;border:1px solid #FECACA;border-radius:8px;background:var(--red-bg);color:var(--red);cursor:pointer;font-size:14px">✕</button>'
+      + '</div>'
+    + '</div>';
+  }).join('');
   document.getElementById('combo-lineas').innerHTML = html;
 }
+
+window.actualizarBusquedaCombo = (el) => {
+  const i = Number(el.dataset.idx);
+  comboLineas[i].busqueda = el.value;
+  comboLineas[i].prodId = '';
+  renderLineasCombo();
+  setTimeout(() => {
+    const inputs = document.getElementById('combo-lineas').querySelectorAll('input[type="text"]');
+    if(inputs[i]) { inputs[i].focus(); inputs[i].setSelectionRange(inputs[i].value.length, inputs[i].value.length); }
+  }, 10);
+};
+
+window.seleccionarProductoCombo = (i, prodId) => {
+  comboLineas[i].prodId = prodId;
+  const prod = DATA.inventario.find(p => p.id === prodId);
+  comboLineas[i].busqueda = prod?.nombre || '';
+  renderLineasCombo();
+  calcSumaIndividual();
+};
+
+window.cambiarProductoCombo = (i) => {
+  comboLineas[i].prodId = '';
+  comboLineas[i].busqueda = '';
+  renderLineasCombo();
+};
+
 
 window.agregarLineaCombo = () => {
   comboLineas.push({ prodId:'', cant:1 });
@@ -4959,6 +5215,11 @@ window.abrirVenderCombo = () => {
   document.getElementById('vc-saldo').value = '';
   document.getElementById('vc-nombre').value = '';
   document.getElementById('prev-vc-precio').textContent = '';
+  // 437. Reset método de pago y desglose mixto
+  document.getElementById('vc-mixto-efectivo').value = '';
+  document.getElementById('vc-mixto-transferencia').value = '';
+  document.getElementById('vc-mixto-grupo').style.display = 'none';
+  setMetodoPagoCombo('efectivo');
   // Cargamos combos fijos en el select
   const sel = document.getElementById('vc-combo-sel');
   sel.innerHTML = '<option value="">— Selecciona un combo —</option>' +
@@ -5123,6 +5384,7 @@ window.guardarVentaCombo = async () => {
   }
 
   // 195. Registramos la venta del combo como una sola entrada
+  // 441. Incluimos método de pago y desglose mixto, igual que las ventas normales
   await addDoc(collection(db,'ventas'), {
     fecha, canal,
     producto: nombreCombo,
@@ -5131,6 +5393,9 @@ window.guardarVentaCombo = async () => {
     cant: 1,
     precio, total: precio,
     cliente, tipoPrecio: 'especial',
+    metodoPago: metodoPagoCombo,
+    mixtoEfectivo: metodoPagoCombo==='mixto' ? (Number(document.getElementById('vc-mixto-efectivo').value)||0) : null,
+    mixtoTransferencia: metodoPagoCombo==='mixto' ? (Number(document.getElementById('vc-mixto-transferencia').value)||0) : null,
     pagado, saldo, estadoPago,
     abonos: [],
     createdAt: serverTimestamp()
