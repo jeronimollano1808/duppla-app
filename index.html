@@ -2015,11 +2015,50 @@ function agruparProductosPorMarca(productos, renderFila) {
 // que ya usa prod.stock como fuente de verdad del total.
 // ============================================================
 function construirUpdateStockUbicacion(prod, cantDescontar, ubicacion) {
-  const sjActual = prod.stockJero != null ? prod.stockJero : (prod.stock||0);
-  const saActual = prod.stockAngel != null ? prod.stockAngel : 0;
+  // 539. FIX DEFINITIVO: descuenta de la ubicación elegida, pero si esa
+  //      ubicación no alcanza (por desincronización entre stockJero/
+  //      stockAngel y el total real 'stock'), toma el resto de la otra
+  //      ubicación SIN inventar negativos ni perder unidades — el total
+  //      final siempre coincide con lo que realmente se vendió.
+  const stockTotalReal = Number(prod.stock||0);
+  let sjActual = prod.stockJero != null ? prod.stockJero : stockTotalReal;
+  let saActual = prod.stockAngel != null ? prod.stockAngel : 0;
+
+  // 540. Si el desglose Jero+Ángel no coincide con el total real (datos
+  //      desincronizados de ediciones viejas), confiamos en el total real
+  //      y ajustamos el desglose proporcionalmente para que sí coincida
+  //      antes de descontar — evita que aparezcan unidades de la nada
+  //      o que se pierdan unidades por la descoordinación.
+  const sumaActual = sjActual + saActual;
+  if(sumaActual !== stockTotalReal) {
+    if(sumaActual === 0) {
+      sjActual = stockTotalReal; saActual = 0;
+    } else {
+      const factor = stockTotalReal / sumaActual;
+      sjActual = Math.round(sjActual * factor);
+      saActual = stockTotalReal - sjActual; // así la suma siempre cuadra exacto
+    }
+  }
+
   let sjNuevo = sjActual, saNuevo = saActual;
-  if(ubicacion === 'angel') saNuevo = Math.max(0, saActual - cantDescontar);
-  else sjNuevo = Math.max(0, sjActual - cantDescontar);
+  if(ubicacion === 'angel') {
+    if(saActual >= cantDescontar) {
+      saNuevo = saActual - cantDescontar;
+    } else {
+      // No alcanza en Ángel — toma el faltante de Jero para no bloquear ni perder unidades
+      const faltante = cantDescontar - saActual;
+      saNuevo = 0;
+      sjNuevo = Math.max(0, sjActual - faltante);
+    }
+  } else {
+    if(sjActual >= cantDescontar) {
+      sjNuevo = sjActual - cantDescontar;
+    } else {
+      const faltante = cantDescontar - sjActual;
+      sjNuevo = 0;
+      saNuevo = Math.max(0, saActual - faltante);
+    }
+  }
   return { stockJero: sjNuevo, stockAngel: saNuevo, stock: sjNuevo + saNuevo };
 }
 
@@ -3515,16 +3554,22 @@ window.guardarVenta = async () => {
     for(const l of lineasValidas) {
       const prod = DATA.inventario.find(p => p.id === l.prodId);
       if(!prod) { alert('Producto no encontrado: ' + l.nombre); return; }
-      // 535. FIX: si el producto NUNCA tuvo stockJero/stockAngel asignados
-      //      (ambos undefined), todo el stock legacy vive en 'jero' por
-      //      convención — antes el fallback caía mal a 'angel' con 0
-      //      disponible, bloqueando ventas de productos con stock real.
+      // 537. FIX DEFINITIVO: 'prod.stock' (el total) es SIEMPRE la fuente de
+      //      verdad para saber si hay suficiente inventario. El desglose
+      //      Jero/Ángel es solo informativo para elegir de dónde descontar,
+      //      pero nunca debe poder BLOQUEAR una venta si el total alcanza —
+      //      antes, si stockJero/stockAngel estaban desincronizados con
+      //      stock (ej: el producto se editó sin tocar el campo Stock y
+      //      nunca se le asignó reparto), la venta se bloqueaba aunque
+      //      hubiera unidades reales disponibles.
+      const stockTotalProd = Number(prod.stock||0);
+      if(stockTotalProd < l.cant) { alert('Stock insuficiente para ' + prod.nombre + '. Disponible: ' + stockTotalProd); return; }
+
+      // 538. Determinamos la ubicación SOLO para saber de dónde descontar
+      //      al guardar — nunca para bloquear. Si el desglose no alcanza
+      //      en la ubicación "ideal", igual se permite (se ajusta al guardar).
       const tieneUbicacionAsignada = prod.stockJero != null || prod.stockAngel != null;
-      const ubicacionLinea = l.ubicacion || (!tieneUbicacionAsignada ? 'jero' : ((prod.stockJero||0) > 0 ? 'jero' : 'angel'));
-      const stockEnUbicacion = ubicacionLinea === 'angel'
-        ? (prod.stockAngel != null ? prod.stockAngel : 0)
-        : (prod.stockJero != null ? prod.stockJero : prod.stock||0);
-      if(stockEnUbicacion < l.cant) { alert('Stock insuficiente para ' + prod.nombre + ' en esa ubicación. Disponible: ' + stockEnUbicacion); return; }
+      const ubicacionLinea = l.ubicacion || (!tieneUbicacionAsignada ? 'jero' : ((prod.stockJero||0) >= l.cant ? 'jero' : ((prod.stockAngel||0) >= l.cant ? 'angel' : 'jero')));
     }
 
     // 288. Si es una sola línea, registramos como venta simple (compatible con historial)
