@@ -6584,10 +6584,40 @@ window.guardarDistribuidor = async () => {
   closeModal('modal-distribuidor');
 };
 
+// ============================================================
+// 516. REGISTRAR DISTRIBUIDOR DESDE HISTORIAL DE VENTAS
+// Crea el distribuidor con el nombre que ya aparece en las ventas, y
+// vincula retroactivamente TODAS las ventas con ese mismo nombre de
+// cliente y canal='distribuidor' que no tenían distribuidorId — así
+// el historial completo aparece de una vez, sin perder nada de lo
+// que ya estaba registrado.
+// ============================================================
+window.registrarDistribuidorDesdeVentas = async (nombre) => {
+  if(!confirm('¿Registrar "' + nombre + '" como distribuidor? Se vincularán automáticamente todas sus ventas existentes.')) return;
+
+  const ref = await addDoc(collection(db,'distribuidores'), {
+    nombre,
+    tipo: 'persona', // 517. Tipo por defecto — el usuario puede editarlo después si es gimnasio/tienda
+    telefono: '', ciudad: '', notas: 'Registrado automáticamente desde historial de ventas',
+    createdAt: serverTimestamp()
+  });
+
+  // 518. Vinculamos cada venta que coincida por nombre exacto de cliente
+  const ventasAVincular = DATA.ventas.filter(v =>
+    v.canal === 'distribuidor' && !v.distribuidorId && (v.cliente||'').trim() === nombre
+  );
+  for(const v of ventasAVincular) {
+    await updateDoc(doc(db,'ventas',v.id), { distribuidorId: ref.id });
+  }
+
+  toast('✅ ' + nombre + ' registrado — ' + ventasAVincular.length + ' venta(s) vinculada(s)');
+};
+
 window.eliminarDistribuidor = async (id) => {
   const d = DATA.distribuidores.find(x => x.id === id);
   if(!confirm('¿Eliminar ' + (d?.nombre||'este distribuidor') + '? Las ventas vinculadas no se borran.')) return;
   await deleteDoc(doc(db,'distribuidores',id));
+
   toast('✅ Distribuidor eliminado');
 };
 
@@ -7223,6 +7253,27 @@ function renderDistribuidores() {
   const totalVinculado = distData.reduce((s,d) => s + d.total, 0);
   const margenTotal    = distData.reduce((s,d) => s + d.margen, 0);
 
+  // 514. DETECCIÓN DE DISTRIBUIDORES SIN REGISTRAR
+  //      Ventas con canal='distribuidor' que tienen nombre de cliente pero
+  //      NO tienen distribuidorId — significa que se vendió como distribuidor
+  //      sin haber creado el registro formal. Los agrupamos por nombre para
+  //      poder "promoverlos" a distribuidor real con un clic.
+  const nombresYaRegistrados = new Set(DATA.distribuidores.map(d => d.nombre.toLowerCase().trim()));
+  const sinRegistrarMap = {};
+  DATA.ventas
+    .filter(v => v.canal === 'distribuidor' && !v.distribuidorId && v.cliente && v.cliente.trim())
+    .forEach(v => {
+      const key = v.cliente.trim();
+      // Si ya existe un distribuidor registrado con ese mismo nombre, no lo
+      // mostramos como "sin registrar" — probablemente ya está vinculado
+      // por nombre aunque no por ID en ventas viejas.
+      if(nombresYaRegistrados.has(key.toLowerCase())) return;
+      if(!sinRegistrarMap[key]) sinRegistrarMap[key] = { nombre: key, ventas: [], total: 0 };
+      sinRegistrarMap[key].ventas.push(v);
+      sinRegistrarMap[key].total += Number(v.total||0);
+    });
+  const sinRegistrar = Object.values(sinRegistrarMap).sort((a,b) => b.total - a.total);
+
   const resumenHtml =
     '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px">'
     + '<div class="metric-card"><div class="metric-label">Total canal dist.</div><div class="metric-value" style="font-size:18px;color:var(--lime)">' + fmt(totalGeneral) + '</div><div class="metric-sub">todas las ventas dist.</div></div>'
@@ -7323,12 +7374,39 @@ function renderDistribuidores() {
     });
   }
 
+  // 515. Sección "Sin registrar" — clientes con ventas tipo distribuidor
+  //      que aún no tienen un registro formal en esta sección.
+  let sinRegistrarHtml = '';
+  if(sinRegistrar.length > 0) {
+    let tarjetasSR = '';
+    sinRegistrar.forEach(sr => {
+      const nombreSeguro = sr.nombre.replace(/'/g, "\\'");
+      tarjetasSR += '<div class="card" style="margin-bottom:10px;border-left:3px solid var(--amber)">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center">'
+          + '<div>'
+            + '<div style="font-size:13px;font-weight:700;color:var(--ink)">' + sr.nombre + '</div>'
+            + '<div style="font-size:11px;color:var(--ink-3)">' + sr.ventas.length + ' venta(s) sin vincular · ' + fmt(sr.total) + ' en total</div>'
+          + '</div>'
+          + '<button class="btn btn-sm btn-lime" onclick="registrarDistribuidorDesdeVentas(\'' + nombreSeguro + '\')">+ Registrar</button>'
+        + '</div>'
+      + '</div>';
+    });
+    sinRegistrarHtml = '<div style="margin-bottom:24px">'
+      + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">'
+        + '<span style="font-size:13px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:.04em">⚠️ Sin registrar</span>'
+        + '<span style="font-size:11px;color:var(--ink-3)">— ya tienen ventas como distribuidor pero no están en tu lista</span>'
+      + '</div>'
+      + tarjetasSR
+    + '</div>';
+  }
+
   document.getElementById('page-distribuidores').innerHTML =
     '<div class="page-header">'
       + '<div><div class="page-title">Distribuidores</div><div class="page-sub">Gimnasios y distribuidores vinculados — rentabilidad real</div></div>'
       + '<button class="btn btn-lime btn-sm" onclick="abrirNuevoDistribuidor()">+ Agregar</button>'
     + '</div>'
     + resumenHtml
+    + sinRegistrarHtml
     + togglesHtml
     + cardsHtml;
 }
