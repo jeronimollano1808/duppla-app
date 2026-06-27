@@ -1810,6 +1810,23 @@ body{
   </div>
 </div>
 
+<!-- 549. MODAL: REVISAR PRECIOS DESACTUALIZADOS EN VENTAS -->
+<div class="modal-bg" id="modal-revisar-precios">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-header">
+      <span class="modal-title">Revisar precios en ventas</span>
+      <button class="modal-close" onclick="closeModal('modal-revisar-precios')">✕</button>
+    </div>
+    <div style="background:var(--surface-2);border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:var(--ink-2)">
+      💡 Estas ventas tienen un precio guardado distinto al precio actual del producto (según el tipo: público/distribuidor/especial). Revisa cada una — puede ser un error real, o un precio histórico válido si el precio del producto cambió después de la venta. Solo corrige las que confirmes que están mal.
+    </div>
+    <div id="revisar-precios-lista" style="max-height:60vh;overflow-y:auto"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-revisar-precios')">Cerrar</button>
+    </div>
+  </div>
+</div>
+
 <!-- ============================================================
      36. JAVASCRIPT — LÓGICA DE LA APP
      Todo el código JS en un módulo ES para usar imports modernos
@@ -3148,6 +3165,7 @@ function renderVentas() {
       </div>
       <div style="display:flex;gap:8px">
         <button class="btn btn-sm" onclick="exportarCSV()">↓ CSV</button>
+        <button class="btn btn-sm" style="color:var(--amber);border-color:#FDE68A" onclick="abrirRevisarPrecios()">⚠️ Revisar precios</button>
         <button class="btn btn-lime btn-sm" onclick="abrirModalVenta()">+ Nueva venta</button>
       </div>
     </div>
@@ -6646,6 +6664,74 @@ window.eliminarConsumo = async (id, prodId, cant) => {
   }
   await deleteDoc(doc(db,'consumos',id));
   toast('✅ Consumo eliminado — stock restaurado');
+};
+
+// ============================================================
+// 550. REVISAR Y CORREGIR PRECIOS DESACTUALIZADOS EN VENTAS
+// Detecta ventas (normales, no manuales/múltiples/combo) donde el precio
+// guardado no coincide con el precio ACTUAL del producto para el mismo
+// tipo de precio (público/distribuidor/especial). No corrige nada solo:
+// muestra la lista para que el usuario confirme cada caso antes de aplicar,
+// porque un precio distinto puede ser legítimo (el producto cambió de
+// precio después de esa venta) y no siempre es un error.
+// ============================================================
+window.abrirRevisarPrecios = () => {
+  const sospechosas = [];
+  DATA.ventas.forEach(v => {
+    if(v.esManual || v.esMultiple || v.esCombo || !v.prodId) return; // 551. Solo ventas simples del catálogo
+    const prod = DATA.inventario.find(p => p.id === v.prodId);
+    if(!prod) return;
+    const tipo = v.tipoPrecio || 'publico';
+    const precioActual = tipo === 'distribuidor' ? Number(prod.pdist||0)
+      : tipo === 'especial' ? Number(prod.pesp||0)
+      : Number(prod.pventa||0);
+    const precioGuardado = Number(v.precio||0);
+    if(precioActual > 0 && precioGuardado !== precioActual) {
+      sospechosas.push({ venta: v, prod, precioActual, precioGuardado });
+    }
+  });
+
+  const lista = document.getElementById('revisar-precios-lista');
+  if(sospechosas.length === 0) {
+    lista.innerHTML = '<div class="empty-state" style="padding:20px"><div class="empty-state-icon">✅</div><div class="empty-state-text">Sin discrepancias encontradas</div></div>';
+  } else {
+    lista.innerHTML = sospechosas.map(s => {
+      const tipoLabel = { publico:'Público', distribuidor:'Distribuidor', especial:'Especial' }[s.venta.tipoPrecio||'publico'];
+      return '<div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px">'
+        + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">'
+          + '<div>'
+            + '<div style="font-size:13px;font-weight:600;color:var(--ink)">' + (s.venta.cliente||'Sin cliente') + ' — ' + s.prod.nombre + '</div>'
+            + '<div style="font-size:11px;color:var(--ink-3)">' + (s.venta.fecha||'') + ' · Tipo: ' + tipoLabel + ' · Cant: ' + (s.venta.cant||1) + '</div>'
+          + '</div>'
+        + '</div>'
+        + '<div style="display:flex;gap:12px;align-items:center;font-size:12px">'
+          + '<span>Guardado: <strong style="color:var(--red)">' + fmt(s.precioGuardado) + '</strong></span>'
+          + '<span>→</span>'
+          + '<span>Actual del producto: <strong style="color:var(--green)">' + fmt(s.precioActual) + '</strong></span>'
+          + '<button class="btn btn-xs btn-lime" style="margin-left:auto" onclick="corregirPrecioVenta(\'' + s.venta.id + '\',' + s.precioActual + ')">Corregir a ' + fmt(s.precioActual) + '</button>'
+        + '</div>'
+      + '</div>';
+    }).join('');
+  }
+  openModal('modal-revisar-precios');
+};
+
+window.corregirPrecioVenta = async (ventaId, precioCorrecto) => {
+  const v = DATA.ventas.find(x => x.id === ventaId);
+  if(!v) return;
+  const nuevoTotal = precioCorrecto * Number(v.cant||1);
+  // 552. Si la venta estaba completamente pagada, el saldo sigue en 0;
+  //      si tenía saldo pendiente, lo recalculamos con el nuevo total
+  //      para no inventar ni perder deuda real.
+  const diferencia = nuevoTotal - Number(v.total||0);
+  const nuevoSaldo = Math.max(0, Number(v.saldo||0) + diferencia);
+  await updateDoc(doc(db,'ventas',ventaId), {
+    precio: precioCorrecto,
+    total: nuevoTotal,
+    saldo: nuevoSaldo,
+  });
+  toast('✅ Precio corregido a ' + fmt(precioCorrecto));
+  abrirRevisarPrecios(); // Refrescamos la lista
 };
 
 // ============================================================
