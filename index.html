@@ -3862,8 +3862,12 @@ window.editarVenta = (id) => {
     } else {
       sel.disabled = false;
       document.getElementById('ev-cant').disabled = false;
+      // 547. FIX: agregamos data-pventa a cada opción — antes faltaba este
+      //      atributo, así que fillEditVentaPrecio() nunca podía leer el
+      //      precio del producto nuevo al cambiarlo, dejando el precio
+      //      viejo guardado aunque el producto seleccionado fuera otro.
       sel.innerHTML = '<option value="">— Selecciona —</option>' +
-        DATA.inventario.map(p => '<option value="' + p.id + '">' + p.nombre + '</option>').join('');
+        DATA.inventario.map(p => '<option value="' + p.id + '" data-pventa="' + (p.pventa||0) + '">' + p.nombre + '</option>').join('');
       sel.value = venta.prodId;
     }
 
@@ -3921,10 +3925,23 @@ window.abrirEditarComboVenta = (id) => {
 
 window.fillEditVentaPrecio = () => {
   // 147. Al cambiar el producto en edición, sugerimos el precio público como base
+  // 548. FIX: ya no dependemos únicamente del atributo data-pventa del <option>
+  //      (que puede faltar, como pasó). Si no está, buscamos el precio
+  //      directo en DATA.inventario por el ID seleccionado — así el precio
+  //      SIEMPRE se actualiza al cambiar de producto, sin importar cómo
+  //      se generó el select.
   const sel = document.getElementById('ev-prod');
   const opt = sel.options[sel.selectedIndex];
-  if(opt?.dataset.pventa) {
-    document.getElementById('ev-precio').value = opt.dataset.pventa;
+  if(!opt?.value) return;
+
+  let nuevoPrecio = opt.dataset.pventa ? Number(opt.dataset.pventa) : null;
+  if(nuevoPrecio == null) {
+    const prod = DATA.inventario.find(p => p.id === opt.value);
+    nuevoPrecio = prod ? Number(prod.pventa||0) : null;
+  }
+
+  if(nuevoPrecio != null) {
+    document.getElementById('ev-precio').value = nuevoPrecio;
     previoCOP('ev-precio','prev-ev-precio');
     calcEditTotal();
   }
