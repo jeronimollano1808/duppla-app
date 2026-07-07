@@ -2597,6 +2597,12 @@ let dashPeriodo = 'mes';
 let dashFechaInicio = '';
 let dashFechaFin = '';
 
+// 568. Ciclo activo en la página Ventas — por defecto el ciclo ACTUAL, para
+// que la "hoja" de ventas arranque en 0 cada vez que empieza un mes nuevo,
+// sin perder el historial (que sigue completo en Firestore y en Clientes/
+// Distribuidores/Deudores/Metas, que no filtran por este ciclo).
+let ventasPeriodo = 'mes'; // 'mes' | 'mes_anterior' | 'todo'
+
 // 528. CICLO DE MES DE DUPPLA — el mes del negocio NO inicia el día 1,
 // sino el día 3. Esta constante centraliza ese valor para que TODA la
 // app (Dashboard, "Este mes", "Mes anterior", reportes, punto de
@@ -2664,6 +2670,29 @@ function getPeriodoFechas() {
   const { inicio, fin } = calcularRangoMeta(mesStr, DUPPLA_DIA_INICIO_MES);
   return { label: mesParaCiclo.toLocaleDateString('es-CO',{month:'long',year:'numeric'}) + ' (cierra el 3)', inicio, fin };
 }
+
+// 569. Rango de fechas del ciclo activo en la página Ventas — mismo ciclo
+// día 3 que usa el Dashboard, pero con su propio estado (ventasPeriodo)
+// para no interferir con el filtro del Dashboard.
+function getVentasRangoInfo() {
+  if(ventasPeriodo === 'todo') return { label: 'Todo el historial', inicio: null, fin: null };
+  const now = new Date();
+  const mesParaCiclo = now.getDate() <= DUPPLA_DIA_INICIO_MES
+    ? new Date(now.getFullYear(), now.getMonth()-1, 1)
+    : now;
+  const mesCiclo = ventasPeriodo === 'mes_anterior'
+    ? new Date(mesParaCiclo.getFullYear(), mesParaCiclo.getMonth()-1, 1)
+    : mesParaCiclo;
+  const mesStr = mesCiclo.toISOString().slice(0,7);
+  const { inicio, fin } = calcularRangoMeta(mesStr, DUPPLA_DIA_INICIO_MES);
+  const labelMes = mesCiclo.toLocaleDateString('es-CO',{month:'long',year:'numeric'});
+  return { label: labelMes + ' (cierra el 3)', inicio, fin };
+}
+
+window.setVentasPeriodo = (p) => {
+  ventasPeriodo = p;
+  renderVentas();
+};
 
 window.setDashPeriodo = (p) => {
   // 232. Cambia el período y redibuja el dashboard
@@ -2997,20 +3026,43 @@ function renderDashboard() {
 // Lista de ventas con filtro de búsqueda y exportación CSV
 // ============================================================
 function renderVentas() {
-  // 114. Cartera pendiente
-  const carteraPendiente = Math.round(DATA.ventas.reduce((s,v) => s + Number(v.saldo||0), 0));
+  // 570. Ciclo activo — por defecto el mes actual, así la "hoja" de ventas
+  //      arranca en 0 cada vez que empieza un ciclo nuevo. El historial
+  //      completo sigue intacto en Firestore y accesible con "Mes anterior"
+  //      o "Todo el historial"; Clientes/Distribuidores/Deudores/Metas no
+  //      se ven afectados porque siguen leyendo DATA.ventas sin filtrar.
+  const { label: labelPeriodo, inicio: rangoInicio, fin: rangoFin } = getVentasRangoInfo();
+  const ventasPeriodoActual = (rangoInicio && rangoFin)
+    ? DATA.ventas.filter(v => v.fecha >= rangoInicio && v.fecha <= rangoFin)
+    : DATA.ventas;
 
-  // 213. Calculamos todas las métricas financieras de ventas
-  const totalIngresos = DATA.ventas.reduce((s,v) => s + ingresoVenta(v), 0);
-  const totalCobrado = DATA.ventas.reduce((s,v) => s + Number(v.pagado||v.total||0), 0);
-  const totalVentas = DATA.ventas.length;
+  const selectorPeriodoHtml = `
+    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+      ${[{id:'mes',label:'Este mes'},{id:'mes_anterior',label:'Mes anterior'},{id:'todo',label:'Todo el historial'}].map(p => `
+        <button onclick="setVentasPeriodo('${p.id}')"
+          style="padding:5px 12px;border-radius:20px;border:1.5px solid ${ventasPeriodo===p.id?'var(--ink)':'var(--border)'};
+          background:${ventasPeriodo===p.id?'var(--ink)':'var(--surface)'};
+          color:${ventasPeriodo===p.id?'#fff':'var(--ink-2)'};
+          font-size:12px;font-weight:${ventasPeriodo===p.id?'600':'400'};cursor:pointer;transition:all .15s">
+          ${p.label}
+        </button>`).join('')}
+      <span style="font-size:12px;color:var(--ink-3);margin-left:4px">${labelPeriodo}</span>
+    </div>`;
+
+  // 114. Cartera pendiente — del ciclo que se está viendo
+  const carteraPendiente = Math.round(ventasPeriodoActual.reduce((s,v) => s + Number(v.saldo||0), 0));
+
+  // 213. Calculamos todas las métricas financieras de ventas del ciclo activo
+  const totalIngresos = ventasPeriodoActual.reduce((s,v) => s + ingresoVenta(v), 0);
+  const totalCobrado = ventasPeriodoActual.reduce((s,v) => s + Number(v.pagado||v.total||0), 0);
+  const totalVentas = ventasPeriodoActual.length;
 
   // 371. Ganancia bruta usando el costo HISTÓRICO guardado en cada venta (costoUnit)
   //      en vez del costo actual del inventario — más preciso si el costo cambió.
   //      Para ventas registradas antes de este cambio (sin costoUnit), usamos el
   //      costo actual del inventario como aproximación de respaldo.
   let costoVendido = 0;
-  DATA.ventas.forEach(v => {
+  ventasPeriodoActual.forEach(v => {
     const margenReal = calcularMargenVenta(v);
     if(margenReal !== null) {
       costoVendido += Number(v.total||0) - margenReal;
@@ -3023,15 +3075,10 @@ function renderVentas() {
   const gananciaBruta = totalIngresos - costoVendido;
   const margenPct = totalIngresos > 0 ? Math.round((gananciaBruta/totalIngresos)*100) : 0;
 
-  // 215. Métricas del mes actual para comparar
-  const mesActual = new Date().toISOString().slice(0,7);
-  const ventasMes = DATA.ventas.filter(v => v.fecha?.slice(0,7) === mesActual);
-  const ingresosMes = ventasMes.reduce((s,v) => s + ingresoVenta(v), 0);
-
   // 216. Ticket promedio = total ingresos / número de ventas
   const ticketProm = totalVentas > 0 ? Math.round(totalIngresos / totalVentas) : 0;
 
-  // 217. HTML del resumen financiero
+  // 217. HTML del resumen financiero — refleja el ciclo seleccionado arriba
   const resumenHtml = `
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:16px">
       <div class="metric-card">
@@ -3047,17 +3094,12 @@ function renderVentas() {
       <div class="metric-card">
         <div class="metric-label">Cartera pendiente</div>
         <div class="metric-value" style="font-size:18px;color:${carteraPendiente>0?'var(--red)':'var(--green)'}">${fmt(carteraPendiente)}</div>
-        <div class="metric-sub">${DATA.ventas.filter(v=>saldoReal(v)>0).length} ventas por cobrar</div>
+        <div class="metric-sub">${ventasPeriodoActual.filter(v=>saldoReal(v)>0).length} ventas por cobrar</div>
       </div>
       <div class="metric-card">
         <div class="metric-label">Ganancia bruta</div>
         <div class="metric-value" style="font-size:18px;color:${gananciaBruta>=0?'var(--blue)':'var(--red)'}">${fmt(gananciaBruta)}</div>
         <div class="metric-sub">Margen: ${margenPct}%</div>
-      </div>
-      <div class="metric-card">
-        <div class="metric-label">Este mes</div>
-        <div class="metric-value" style="font-size:18px;color:var(--amber)">${fmt(ingresosMes)}</div>
-        <div class="metric-sub">${ventasMes.length} ventas</div>
       </div>
       <div class="metric-card">
         <div class="metric-label">Ticket promedio</div>
@@ -3066,8 +3108,8 @@ function renderVentas() {
       </div>
     </div>`;
 
-  // 158. Ordenamos las ventas por fecha descendente
-  const ventasOrdenadas = [...DATA.ventas].sort((a,b) => {
+  // 158. Ordenamos las ventas del ciclo activo por fecha descendente
+  const ventasOrdenadas = [...ventasPeriodoActual].sort((a,b) => {
     if(b.fecha !== a.fecha) return b.fecha > a.fecha ? 1 : -1;
     return (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0);
   });
@@ -3179,7 +3221,7 @@ function renderVentas() {
     <div class="page-header">
       <div>
         <div class="page-title">Ventas</div>
-        <div class="page-sub">${DATA.ventas.length} registros</div>
+        <div class="page-sub">${totalVentas} de ${DATA.ventas.length} registros</div>
       </div>
       <div style="display:flex;gap:8px">
         <button class="btn btn-sm" onclick="exportarCSV()">↓ CSV</button>
@@ -3187,6 +3229,7 @@ function renderVentas() {
         <button class="btn btn-lime btn-sm" onclick="abrirModalVenta()">+ Nueva venta</button>
       </div>
     </div>
+    ${selectorPeriodoHtml}
     ${resumenHtml}
     <!-- 243. Barra de búsqueda de ventas -->
     <div style="position:relative;margin-bottom:14px">
@@ -3200,12 +3243,12 @@ function renderVentas() {
     </div>
     <div id="ventas-search-info" style="font-size:12px;color:var(--ink-3);margin-bottom:10px"></div>
     <div class="card">
-      ${DATA.ventas.length ?
+      ${ventasPeriodoActual.length ?
         `<div class="table-wrap"><table class="tbl">
           <thead><tr><th>Fecha</th><th>Cliente</th><th>Producto</th><th>Canal</th><th>Precio</th><th>Total</th><th>Margen</th><th>Método</th><th>Saldo</th><th>Estado</th><th></th></tr></thead>
           <tbody id="ventas-tabla-body">${rows}</tbody>
         </table></div>`
-        : `<div class="empty-state"><div class="empty-state-icon">🛒</div><div class="empty-state-text">Sin ventas registradas</div></div>`}
+        : `<div class="empty-state"><div class="empty-state-icon">🛒</div><div class="empty-state-text">${DATA.ventas.length ? 'Sin ventas en este período' : 'Sin ventas registradas'}</div></div>`}
     </div>`;
 }
 
