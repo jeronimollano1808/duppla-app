@@ -877,7 +877,8 @@ body{
       <span class="modal-title" id="rc-titulo">Reportar</span>
       <button class="modal-close" onclick="closeModal('modal-reportar-consig')">✕</button>
     </div>
-    <input type="hidden" id="rc-item-id" value="">
+    <input type="hidden" id="rc-tienda-id" value="">
+    <input type="hidden" id="rc-prod-id" value="">
     <div id="rc-info" style="background:var(--surface-2);border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:13px;color:var(--ink-2)"></div>
     <!-- 495. Tipo de reporte: venta (genera ingreso) o devolución (vuelve al stock) -->
     <div class="f-group">
@@ -2152,6 +2153,17 @@ function saldoReal(v) {
   return Math.round(Number(v?.saldo||0));
 }
 
+// 566. ingresoVenta — fuente única de verdad para el ingreso RECONOCIDO de una
+// venta. Si el cliente pagó de más (ej. total $94.992, pagó $95.000), el
+// sobrante cuenta como ingreso real, no se pierde. Se usa en agregaciones de
+// ingreso (dashboard, ventas, metas, canales, clientes, distribuidores,
+// consignación, cierres) y en columnas de "monto" por fila — NUNCA en
+// cálculos de costo/margen por producto (calcularMargenVenta sigue usando
+// v.total: el sobrante aflora como utilidad por el lado del ingreso).
+function ingresoVenta(v) {
+  return Math.max(Number(v?.total||0), Number(v?.pagado||0));
+}
+
 function calcularMargenVenta(v) {
   // Venta múltiple: sumamos el margen de cada línea, con fallback por línea
   if(v.esMultiple && v.productosVenta?.length) {
@@ -2679,11 +2691,11 @@ function renderDashboard() {
   const pv = DATA.ventas.filter(v => v.fecha >= inicio && v.fecha <= fin);
   const pg = DATA.gastos.filter(g => g.fecha >= inicio && g.fecha <= fin);
 
-  const tv = pv.reduce((s,v)=>s+Number(v.total||0),0);
+  const tv = pv.reduce((s,v)=>s+ingresoVenta(v),0);
   const tg = pg.reduce((s,g)=>s+Number(g.valor||0),0);
   const util = tv - tg;
   const hoyV = DATA.ventas.filter(v => v.fecha === today());
-  const totalHoy = hoyV.reduce((s,v)=>s+Number(v.total||0),0);
+  const totalHoy = hoyV.reduce((s,v)=>s+ingresoVenta(v),0);
   const carteraPeriodo = Math.round(pv.reduce((s,v)=>s+Number(v.saldo||0),0));
 
   // 372. Ganancia bruta del período usando costo histórico (costoUnit) por venta
@@ -2745,7 +2757,7 @@ function renderDashboard() {
 
   // Gráfico de barras por canal
   const canales = { web:0, directo:0, distribuidor:0 };
-  pv.forEach(v => { if(canales[v.canal]!==undefined) canales[v.canal]+=Number(v.total||0); });
+  pv.forEach(v => { if(canales[v.canal]!==undefined) canales[v.canal]+=ingresoVenta(v); });
   const maxC = Math.max(...Object.values(canales), 1);
   const cNames = { web:'Web', directo:'Directo', distribuidor:'Dist.' };
   const cColors = { web:'#BFDBFE', directo:'var(--lime-accent)', distribuidor:'#FDE68A' };
@@ -2847,7 +2859,7 @@ function renderDashboard() {
     }
     if(!pm[v.producto]) pm[v.producto]={cant:0,total:0,margen:0,sinCosto:false};
     pm[v.producto].cant+=Number(v.cant||0);
-    pm[v.producto].total+=Number(v.total||0);
+    pm[v.producto].total+=ingresoVenta(v);
     const margenV = calcularMargenVenta(v);
     if(margenV !== null) pm[v.producto].margen += margenV;
     else pm[v.producto].sinCosto = true;
@@ -2869,7 +2881,7 @@ function renderDashboard() {
   let tvMesActual = 0;
   if(metaActual) {
     const rangoMeta = calcularRangoMeta(mesActual, metaActual.diaInicio || DUPPLA_DIA_INICIO_MES);
-    tvMesActual = DATA.ventas.filter(v=>v.fecha >= rangoMeta.inicio && v.fecha <= rangoMeta.fin).reduce((s,v)=>s+Number(v.total||0),0);
+    tvMesActual = DATA.ventas.filter(v=>v.fecha >= rangoMeta.inicio && v.fecha <= rangoMeta.fin).reduce((s,v)=>s+ingresoVenta(v),0);
   }
   const metaHtml = metaActual ? `
     <div class="card" style="margin-bottom:16px">
@@ -2894,7 +2906,7 @@ function renderDashboard() {
             <td style="font-weight:500">${v.cliente||'—'}</td>
             <td>${v.producto||''}</td>
             <td style="font-size:12px">${mpIco[v.metodoPago||'efectivo']||'💵'} ${v.metodoPago||'Efectivo'}</td>
-            <td style="font-weight:600;color:var(--lime)">${fmt(v.total)}</td>
+            <td style="font-weight:600;color:var(--lime)">${fmt(ingresoVenta(v))}</td>
           </tr>`;
         }).join('')}
         </tbody>
@@ -2989,7 +3001,7 @@ function renderVentas() {
   const carteraPendiente = Math.round(DATA.ventas.reduce((s,v) => s + Number(v.saldo||0), 0));
 
   // 213. Calculamos todas las métricas financieras de ventas
-  const totalIngresos = DATA.ventas.reduce((s,v) => s + Number(v.total||0), 0);
+  const totalIngresos = DATA.ventas.reduce((s,v) => s + ingresoVenta(v), 0);
   const totalCobrado = DATA.ventas.reduce((s,v) => s + Number(v.pagado||v.total||0), 0);
   const totalVentas = DATA.ventas.length;
 
@@ -3014,7 +3026,7 @@ function renderVentas() {
   // 215. Métricas del mes actual para comparar
   const mesActual = new Date().toISOString().slice(0,7);
   const ventasMes = DATA.ventas.filter(v => v.fecha?.slice(0,7) === mesActual);
-  const ingresosMes = ventasMes.reduce((s,v) => s + Number(v.total||0), 0);
+  const ingresosMes = ventasMes.reduce((s,v) => s + ingresoVenta(v), 0);
 
   // 216. Ticket promedio = total ingresos / número de ventas
   const ticketProm = totalVentas > 0 ? Math.round(totalIngresos / totalVentas) : 0;
@@ -3147,7 +3159,7 @@ function renderVentas() {
       ${productoCell}
       <td><span class="badge b-${v.canal||'web'}">${v.canal||''}</span></td>
       <td><span class="badge ${tpClass[tp]}">${tpLabel[tp]||tp}</span></td>
-      <td style="font-weight:600;color:var(--lime)">${fmt(v.total)}</td>
+      <td style="font-weight:600;color:var(--lime)">${fmt(ingresoVenta(v))}</td>
       ${margenCell}
       <td>${mpBadge}</td>
       ${saldoCell}
@@ -4090,7 +4102,7 @@ window.exportarReporte = () => {
   const pv = DATA.ventas.filter(v => v.fecha >= inicio && v.fecha <= fin);
   const pg = DATA.gastos.filter(g => g.fecha >= inicio && g.fecha <= fin);
 
-  const tv = pv.reduce((s,v)=>s+Number(v.total||0),0);
+  const tv = pv.reduce((s,v)=>s+ingresoVenta(v),0);
   const tg = pg.reduce((s,g)=>s+Number(g.valor||0),0);
 
   // 252. Armamos el CSV con 3 secciones: resumen, ventas y gastos
@@ -4142,7 +4154,7 @@ window.exportarReportePDF = () => {
   const pv = DATA.ventas.filter(v => v.fecha >= inicio && v.fecha <= fin);
   const pg = DATA.gastos.filter(g => g.fecha >= inicio && g.fecha <= fin);
 
-  const tv = pv.reduce((s,v)=>s+Number(v.total||0),0);
+  const tv = pv.reduce((s,v)=>s+ingresoVenta(v),0);
   const tg = pg.reduce((s,g)=>s+Number(g.valor||0),0);
   const cartera = Math.round(pv.reduce((s,v)=>s+Number(v.saldo||0),0));
 
@@ -4162,7 +4174,7 @@ window.exportarReportePDF = () => {
     } else {
       if(!pm[v.producto]) pm[v.producto] = {cant:0,total:0};
       pm[v.producto].cant += Number(v.cant||0);
-      pm[v.producto].total += Number(v.total||0);
+      pm[v.producto].total += ingresoVenta(v);
     }
   });
   const top5 = Object.entries(pm).sort((a,b)=>b[1].total-a[1].total).slice(0,5);
@@ -5056,7 +5068,7 @@ function renderClientes() {
     if(!v.cliente) return;
     if(!cm[v.cliente]) cm[v.cliente] = { nombre:v.cliente, compras:0, total:0, ultima:'', fav:{} };
     cm[v.cliente].compras++;
-    cm[v.cliente].total += Number(v.total||0);
+    cm[v.cliente].total += ingresoVenta(v);
     if(!cm[v.cliente].ultima || v.fecha > cm[v.cliente].ultima) cm[v.cliente].ultima = v.fecha;
     cm[v.cliente].fav[v.producto] = (cm[v.cliente].fav[v.producto]||0)+1;
   });
@@ -5656,7 +5668,7 @@ function renderMetas() {
     //      la app respete el ciclo de Duppla (ver calcularRangoMeta), incluyendo metas ya creadas.
     const diaInicio = m.diaInicio || DUPPLA_DIA_INICIO_MES;
     const { inicio: rangoInicio, fin: rangoFin } = calcularRangoMeta(m.mes, diaInicio);
-    const tv = DATA.ventas.filter(v=>v.fecha >= rangoInicio && v.fecha <= rangoFin).reduce((s,v)=>s+Number(v.total||0),0);
+    const tv = DATA.ventas.filter(v=>v.fecha >= rangoInicio && v.fecha <= rangoFin).reduce((s,v)=>s+ingresoVenta(v),0);
     const tg = DATA.gastos.filter(g=>g.fecha >= rangoInicio && g.fecha <= rangoFin).reduce((s,g)=>s+Number(g.valor||0),0);
     const pv = m.ventasMeta>0 ? Math.min(100,Math.round((tv/m.ventasMeta)*100)) : 0;
     const pg = m.gastoMax>0 ? Math.min(100,Math.round((tg/m.gastoMax)*100)) : 0;
@@ -5839,7 +5851,7 @@ window.abrirCierreMes = () => {
   const { inicio: rangoInicioCierre, fin: rangoFinCierre } = calcularRangoMeta(mesActual, DUPPLA_DIA_INICIO_MES);
   const ventasMes = DATA.ventas.filter(v => v.fecha >= rangoInicioCierre && v.fecha <= rangoFinCierre);
   const gastosMes = DATA.gastos.filter(g => g.fecha >= rangoInicioCierre && g.fecha <= rangoFinCierre);
-  const ingresos = ventasMes.reduce((s,v)=>s+Number(v.total||0),0);
+  const ingresos = ventasMes.reduce((s,v)=>s+ingresoVenta(v),0);
   const gastosTotal = gastosMes.reduce((s,g)=>s+Number(g.valor||0),0);
   let margenTotal = 0;
   ventasMes.forEach(v => { const m = calcularMargenVenta(v); if(m!==null) margenTotal += m; });
@@ -7194,41 +7206,71 @@ window.setTipoReporteConsig = (tipo) => {
   document.getElementById('rc-venta-campos').style.display = tipo === 'venta' ? 'block' : 'none';
 };
 
-window.abrirReportarConsignacion = (itemId) => {
-  const item = DATA.consignaciones.find(c => c.id === itemId);
-  if(!item) return;
-  document.getElementById('rc-item-id').value = itemId;
-  document.getElementById('rc-titulo').textContent = 'Reportar — ' + item.prodNombre;
+// 557. Devuelve las entregas activas de un producto en una tienda, ordenadas
+//      de la más antigua a la más reciente — ese es el orden de consumo FIFO.
+function entregasActivasConsig(tiendaId, prodId) {
+  return DATA.consignaciones
+    .filter(c => c.tiendaId === tiendaId && c.prodId === prodId && Number(c.cantidadActual||0) > 0)
+    .sort((a,b) => (a.fecha||'').localeCompare(b.fecha||''));
+}
+
+window.abrirReportarConsignacion = (tiendaId, prodId) => {
+  const entregas = entregasActivasConsig(tiendaId, prodId);
+  if(entregas.length === 0) return;
+  const totalDisponible = entregas.reduce((s,c) => s + Number(c.cantidadActual||0), 0);
+  const totalInicial = entregas.reduce((s,c) => s + Number(c.cantidadInicial||0), 0);
+  // 558. El precio de referencia usa la entrega MÁS RECIENTE (puede haber cambiado con el tiempo)
+  const masReciente = entregas[entregas.length-1];
+  document.getElementById('rc-tienda-id').value = tiendaId;
+  document.getElementById('rc-prod-id').value = prodId;
+  document.getElementById('rc-titulo').textContent = 'Reportar — ' + masReciente.prodNombre;
   document.getElementById('rc-info').innerHTML =
-    'En <strong>' + item.tiendaNombre + '</strong> · Disponible: <strong>' + item.cantidadActual + '</strong> de ' + item.cantidadInicial + ' dejadas';
+    'En <strong>' + masReciente.tiendaNombre + '</strong> · Disponible: <strong>' + totalDisponible + '</strong> de ' + totalInicial + ' dejadas'
+    + (entregas.length > 1 ? ' <span style="color:var(--ink-3)">(' + entregas.length + ' entregas)</span>' : '');
   document.getElementById('rc-cantidad').value = '';
-  // 511. Precargamos el precio acordado al dejar el producto — editable si vendió a otro valor
-  const prodItem = DATA.inventario.find(p => p.id === item.prodId);
-  document.getElementById('rc-precio').value = item.precioSugerido || '';
+  const prodItem = DATA.inventario.find(p => p.id === prodId);
+  document.getElementById('rc-precio').value = masReciente.precioSugerido || '';
   previoCOP('rc-precio','prev-rc-precio');
-  // 513. Texto explícito con el precio distribuidor de referencia
   document.getElementById('rc-precio-dist-ref').innerHTML =
     '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#D97706;margin-right:3px"></span>'
-    + 'Se dejó a distribuidor: ' + fmt(item.precioSugerido || prodItem?.pdist || 0);
+    + 'Se dejó a distribuidor: ' + fmt(masReciente.precioSugerido || prodItem?.pdist || 0);
   document.getElementById('rc-fecha').value = today();
   setTipoReporteConsig('venta');
   openModal('modal-reportar-consig');
 };
 
 window.guardarReporteConsignacion = async () => {
-  const itemId = document.getElementById('rc-item-id').value;
-  const item = DATA.consignaciones.find(c => c.id === itemId);
-  if(!item) return;
+  const tiendaId = document.getElementById('rc-tienda-id').value;
+  const prodId = document.getElementById('rc-prod-id').value;
+  const entregas = entregasActivasConsig(tiendaId, prodId);
+  if(entregas.length === 0) return;
 
   const cantidad = Number(document.getElementById('rc-cantidad').value);
   if(!cantidad || cantidad <= 0) { alert('Ingresa una cantidad válida'); return; }
-  if(cantidad > Number(item.cantidadActual||0)) { alert('No puedes reportar más de lo disponible (' + item.cantidadActual + ')'); return; }
+  const totalDisponible = entregas.reduce((s,c) => s + Number(c.cantidadActual||0), 0);
+  if(cantidad > totalDisponible) { alert('No puedes reportar más de lo disponible (' + totalDisponible + ')'); return; }
 
-  const nuevaCantidadActual = Number(item.cantidadActual) - cantidad;
-  const movimiento = { tipo: tipoReporteConsigActual, cantidad, fecha: today() };
+  // 559. Consumo FIFO entre todas las entregas activas del producto en esta tienda:
+  //      se descuenta primero de la más antigua, acumulando el costo real de cada
+  //      tanda consumida para sacar un costo promedio ponderado de la venta.
+  let restante = cantidad;
+  let costoAcumulado = 0;
+  const actualizaciones = [];
+  for(const entrega of entregas) {
+    if(restante <= 0) break;
+    const consumido = Math.min(restante, Number(entrega.cantidadActual||0));
+    if(consumido <= 0) continue;
+    costoAcumulado += consumido * Number(entrega.costoUnit||0);
+    restante -= consumido;
+    const movimiento = { tipo: tipoReporteConsigActual, cantidad: consumido, fecha: today() };
+    actualizaciones.push({ entrega, consumido, movimiento });
+  }
+  const costoPromedioPonderado = costoAcumulado / cantidad;
+  const primeraTienda = entregas[0].tiendaNombre;
+  const primerProd = entregas[0].prodNombre;
 
   if(tipoReporteConsigActual === 'venta') {
-    // 500. Reportar venta: AHORA SÍ se genera el ingreso real para Duppla.
+    // 560. Reportar venta: AHORA SÍ se genera el ingreso real para Duppla.
     //      El producto ya había salido del stock cuando se dejó en consignación,
     //      así que aquí NO se vuelve a descontar — solo se registra el ingreso.
     const precio = Number(document.getElementById('rc-precio').value);
@@ -7239,35 +7281,38 @@ window.guardarReporteConsignacion = async () => {
 
     await addDoc(collection(db,'ventas'), {
       fecha: fechaVenta, canal: 'distribuidor',
-      producto: item.prodNombre, prodId: item.prodId, esManual:false,
+      producto: primerProd, prodId, esManual:false,
       cant: cantidad, precio, total,
-      cliente: item.tiendaNombre,
+      cliente: primeraTienda,
       tipoPrecio: 'distribuidor', metodoPago,
-      pagado: total, saldo: 0, estadoPago: 'pagado', // 501. Asumimos pago inmediato al reportar; se puede editar después si quedó a crédito
+      pagado: total, saldo: 0, estadoPago: 'pagado', // 561. Asumimos pago inmediato al reportar; se puede editar después si quedó a crédito
       abonos: [],
-      costoUnit: item.costoUnit, // 502. Usamos el costo que ya se fijó al dejar el producto en consignación
-      esDeConsignacion: true, consignacionId: itemId,
+      costoUnit: costoPromedioPonderado, // 562. Costo promedio ponderado entre las entregas consumidas (FIFO)
+      esDeConsignacion: true, consignacionIds: actualizaciones.map(a => a.entrega.id),
       createdAt: serverTimestamp()
     });
-    movimiento.precio = precio;
-    movimiento.total = total;
-    await pushNotif('💰 Venta en consignación', item.tiendaNombre + ' vendió ' + cantidad + 'x ' + item.prodNombre, 'venta', {seccion:'consignacion'});
+    // 567. Guardamos precio/total también en cada movimiento del historial (por entrega)
+    actualizaciones.forEach(a => { a.movimiento.precio = precio; a.movimiento.total = precio * a.consumido; });
+    await pushNotif('💰 Venta en consignación', primeraTienda + ' vendió ' + cantidad + 'x ' + primerProd, 'venta', {seccion:'consignacion'});
   } else {
-    // 503. Devolución: el producto vuelve al stock de Duppla — sin afectar ingresos.
-    const prod = DATA.inventario.find(p => p.id === item.prodId);
+    // 563. Devolución: el producto vuelve al stock de Duppla — sin afectar ingresos.
+    const prod = DATA.inventario.find(p => p.id === prodId);
     if(prod) {
       const sjActual = prod.stockJero != null ? prod.stockJero : (prod.stock||0);
       const saActual = prod.stockAngel != null ? prod.stockAngel : 0;
       const sjNuevo = sjActual + cantidad;
-      await updateDoc(doc(db,'inventario',item.prodId), { stockJero: sjNuevo, stockAngel: saActual, stock: sjNuevo + saActual });
+      await updateDoc(doc(db,'inventario',prodId), { stockJero: sjNuevo, stockAngel: saActual, stock: sjNuevo + saActual });
     }
-    await pushNotif('↩️ Devolución de consignación', item.tiendaNombre + ' devolvió ' + cantidad + 'x ' + item.prodNombre, 'consignacion', {seccion:'consignacion'});
+    await pushNotif('↩️ Devolución de consignación', primeraTienda + ' devolvió ' + cantidad + 'x ' + primerProd, 'consignacion', {seccion:'consignacion'});
   }
 
-  await updateDoc(doc(db,'consignaciones',itemId), {
-    cantidadActual: nuevaCantidadActual,
-    historialMovimientos: [...(item.historialMovimientos||[]), movimiento]
-  });
+  // 564. Aplicamos el consumo FIFO a cada entrega tocada
+  for(const { entrega, consumido, movimiento } of actualizaciones) {
+    await updateDoc(doc(db,'consignaciones',entrega.id), {
+      cantidadActual: Number(entrega.cantidadActual) - consumido,
+      historialMovimientos: [...(entrega.historialMovimientos||[]), movimiento]
+    });
+  }
 
   closeModal('modal-reportar-consig');
   toast('✅ Reporte registrado');
@@ -7289,7 +7334,7 @@ function renderConsignacion() {
   // 505. Activos = los que aún tienen cantidadActual > 0 en alguna tienda
   const activosTotal = DATA.consignaciones.filter(c => Number(c.cantidadActual||0) > 0);
   const valorTotalConsignado = activosTotal.reduce((s,c) => s + Number(c.cantidadActual||0)*Number(c.costoUnit||0), 0);
-  const totalVendidoConsignacion = DATA.ventas.filter(v => v.esDeConsignacion).reduce((s,v)=>s+Number(v.total||0),0);
+  const totalVendidoConsignacion = DATA.ventas.filter(v => v.esDeConsignacion).reduce((s,v)=>s+ingresoVenta(v),0);
 
   const resumenHtml = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px">'
     + '<div class="metric-card"><div class="metric-label">Tiendas</div><div class="metric-value" style="font-size:18px">' + DATA.tiendasConsignacion.length + '</div><div class="metric-sub">registradas</div></div>'
@@ -7315,14 +7360,25 @@ function renderConsignacion() {
         if(itemsActivos.length === 0) {
           detalleHtml = '<div style="padding:14px;color:var(--ink-3);font-size:12px;text-align:center">Sin productos activos en esta tienda</div>';
         } else {
-          let filas = '';
+          // 565. Agrupamos las entregas activas por producto — varias entregas
+          //      del mismo producto en la misma tienda se muestran como una sola fila
+          const porProducto = new Map();
           itemsActivos.forEach(item => {
+            if(!porProducto.has(item.prodId)) porProducto.set(item.prodId, []);
+            porProducto.get(item.prodId).push(item);
+          });
+          let filas = '';
+          porProducto.forEach((entregas, prodId) => {
+            const cantidadActualTotal = entregas.reduce((s,c) => s + Number(c.cantidadActual||0), 0);
+            const cantidadInicialTotal = entregas.reduce((s,c) => s + Number(c.cantidadInicial||0), 0);
+            const fechaMasAntigua = entregas.reduce((min,c) => (!min || c.fecha < min) ? c.fecha : min, null);
             filas += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">'
               + '<div>'
-                + '<div style="font-size:13px;font-weight:500;color:var(--ink)">' + item.prodNombre + '</div>'
-                + '<div style="font-size:11px;color:var(--ink-3)">Dejado: ' + item.fecha + ' · ' + item.cantidadActual + ' de ' + item.cantidadInicial + ' disponibles</div>'
+                + '<div style="font-size:13px;font-weight:500;color:var(--ink)">' + entregas[0].prodNombre + '</div>'
+                + '<div style="font-size:11px;color:var(--ink-3)">Dejado: ' + fechaMasAntigua + ' · ' + cantidadActualTotal + ' de ' + cantidadInicialTotal + ' disponibles'
+                  + (entregas.length > 1 ? ' (' + entregas.length + ' entregas)' : '') + '</div>'
               + '</div>'
-              + '<button class="btn btn-xs" style="color:var(--blue);border-color:#BFDBFE" onclick="abrirReportarConsignacion(\'' + item.id + '\')">Reportar</button>'
+              + '<button class="btn btn-xs" style="color:var(--blue);border-color:#BFDBFE" onclick="abrirReportarConsignacion(\'' + t.id + '\',\'' + prodId + '\')">Reportar</button>'
             + '</div>';
           });
           detalleHtml = '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">' + filas + '</div>';
@@ -7521,7 +7577,7 @@ function renderDistribuidores() {
   //      Reutilizamos calcularMargenVenta() — misma fuente de verdad que en Ventas/Dashboard
   const distData = DATA.distribuidores.map(d => {
     const ventas = DATA.ventas.filter(v => v.distribuidorId === d.id);
-    const total  = ventas.reduce((s,v) => s + Number(v.total||0), 0);
+    const total  = ventas.reduce((s,v) => s + ingresoVenta(v), 0);
     // 542. FIX: redondeamos la suma — sin esto, residuos de punto flotante
     //      de ventas individuales (cada una técnicamente "pagada") podían
     //      acumularse en una "deuda fantasma" de centavos al sumarlas.
@@ -7559,7 +7615,7 @@ function renderDistribuidores() {
   const ordenDist = window.distRankingPor || 'total';
   distData.sort((a,b) => ordenDist === 'margen' ? b.margen - a.margen : b.total - a.total);
 
-  const totalGeneral   = DATA.ventas.filter(v => v.canal === 'distribuidor').reduce((s,v) => s+Number(v.total||0), 0);
+  const totalGeneral   = DATA.ventas.filter(v => v.canal === 'distribuidor').reduce((s,v) => s+ingresoVenta(v), 0);
   const totalVinculado = distData.reduce((s,d) => s + d.total, 0);
   const margenTotal    = distData.reduce((s,d) => s + d.margen, 0);
 
@@ -7580,7 +7636,7 @@ function renderDistribuidores() {
       if(nombresYaRegistrados.has(key.toLowerCase())) return;
       if(!sinRegistrarMap[key]) sinRegistrarMap[key] = { nombre: key, ventas: [], total: 0 };
       sinRegistrarMap[key].ventas.push(v);
-      sinRegistrarMap[key].total += Number(v.total||0);
+      sinRegistrarMap[key].total += ingresoVenta(v);
     });
   const sinRegistrar = Object.values(sinRegistrarMap).sort((a,b) => b.total - a.total);
 
@@ -7639,7 +7695,7 @@ function renderDistribuidores() {
               + '<td style="font-weight:500;color:' + ((v.cliente||'').trim().toLowerCase() !== d.nombre.trim().toLowerCase() ? 'var(--red)' : 'var(--ink)') + '">' + (v.cliente||'—') + '</td>'
               + '<td style="font-weight:500">' + (v.producto||'') + '</td>'
               + '<td style="text-align:center">' + (v.cant||1) + '</td>'
-              + '<td style="font-weight:600;color:var(--lime)">' + fmt(v.total) + '</td>'
+              + '<td style="font-weight:600;color:var(--lime)">' + fmt(ingresoVenta(v)) + '</td>'
               + '<td style="color:' + (margenV===null?'var(--ink-3)':margenV>=0?'var(--green)':'var(--red)') + '">' + (margenV===null?'N/D':fmt(margenV)) + '</td>'
               + '<td><span style="padding:2px 8px;border-radius:12px;font-size:10px;font-weight:600;background:'
                 + (pendiente?'var(--amber-bg)':'#F0FDF4') + ';color:' + (pendiente?'var(--amber)':'var(--green)') + '">'
