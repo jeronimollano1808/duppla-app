@@ -896,14 +896,14 @@ body{
     </div>
     <div class="f-group">
       <label class="f-label">Cantidad *</label>
-      <input type="number" id="rc-cantidad" class="f-input" min="1">
+      <input type="number" id="rc-cantidad" class="f-input" min="1" oninput="calcSaldoConsig()">
     </div>
     <!-- 496. Campos solo visibles cuando el reporte es una venta -->
     <div id="rc-venta-campos">
       <div class="f-row">
         <div class="f-group">
           <label class="f-label">Precio de venta unitario ($)</label>
-          <input type="number" id="rc-precio" class="f-input" oninput="previoCOP('rc-precio','prev-rc-precio')">
+          <input type="number" id="rc-precio" class="f-input" oninput="previoCOP('rc-precio','prev-rc-precio');calcSaldoConsig()">
           <div id="prev-rc-precio" style="font-size:11px;margin-top:3px;font-weight:600"></div>
           <!-- 513. Mostramos explícitamente el precio de distribuidor que se dejó acordado -->
           <div id="rc-precio-dist-ref" style="font-size:10px;color:var(--ink-3);margin-top:4px"></div>
@@ -919,6 +919,31 @@ body{
       <div class="f-group">
         <label class="f-label">Fecha de la venta</label>
         <input type="date" id="rc-fecha">
+      </div>
+      <!-- 571. ¿Cómo quedó el pago? — antes se asumía SIEMPRE pagado completo,
+           por eso las ventas de consignación a crédito o abonadas parcialmente
+           nunca aparecían en Deudores ni permitían registrar abonos. -->
+      <div class="f-group">
+        <label class="f-label">¿Cómo quedó el pago?</label>
+        <div style="display:flex;gap:6px">
+          <button type="button" id="rc-pago-completo" onclick="setEstadoPagoConsig('completo')"
+            style="flex:1;padding:8px 4px;border-radius:var(--radius);border:2px solid var(--ink);background:var(--ink);color:#fff;font-size:12px;font-weight:600;cursor:pointer">
+            ✅ Completo
+          </button>
+          <button type="button" id="rc-pago-parcial" onclick="setEstadoPagoConsig('parcial')"
+            style="flex:1;padding:8px 4px;border-radius:var(--radius);border:2px solid var(--border);background:var(--surface-2);color:var(--ink-2);font-size:12px;font-weight:600;cursor:pointer">
+            🟡 Abonó parte
+          </button>
+          <button type="button" id="rc-pago-credito" onclick="setEstadoPagoConsig('credito')"
+            style="flex:1;padding:8px 4px;border-radius:var(--radius);border:2px solid var(--border);background:var(--surface-2);color:var(--ink-2);font-size:12px;font-weight:600;cursor:pointer">
+            🔴 A crédito
+          </button>
+        </div>
+      </div>
+      <div class="f-group" id="rc-abono-grupo" style="display:none">
+        <label class="f-label">¿Cuánto pagó ahora? ($)</label>
+        <input type="number" id="rc-pagado" class="f-input" oninput="calcSaldoConsig()">
+        <div id="rc-saldo-preview" style="font-size:11px;margin-top:3px;font-weight:600"></div>
       </div>
     </div>
     <div class="modal-footer">
@@ -2164,6 +2189,36 @@ function ingresoVenta(v) {
   return Math.max(Number(v?.total||0), Number(v?.pagado||0));
 }
 
+// 575. UMBRAL_MORA_DIAS — antes vivía solo dentro de renderDeudores() y no se
+// podía reutilizar. Ahora también la usan el badge del menú y el aviso
+// automático al abrir la app (ver calcularDeudores más abajo).
+const UMBRAL_MORA_DIAS = 8;
+
+// 576. calcularDeudores — agrupa las ventas con saldo pendiente por cliente y
+// calcula días de mora. Única fuente de verdad para Deudores, el badge del
+// menú lateral y el aviso automático de mora al abrir la app.
+function calcularDeudores() {
+  const hoy = new Date();
+  const deudaMap = {};
+  DATA.ventas.filter(v => saldoReal(v) > 0).forEach(v => {
+    const key = v.cliente || 'Sin nombre';
+    if(!deudaMap[key]) deudaMap[key] = { cliente:key, ventas:[], total:0 };
+    deudaMap[key].ventas.push(v);
+    deudaMap[key].total += Number(v.saldo||0);
+  });
+  Object.values(deudaMap).forEach(d => {
+    let maxDias = 0;
+    d.ventas.forEach(v => {
+      if(!v.fecha) return;
+      const dias = Math.floor((hoy - new Date(v.fecha)) / 86400000);
+      if(dias > maxDias) maxDias = dias;
+    });
+    d.diasMora = maxDias;
+    d.enMora = maxDias >= UMBRAL_MORA_DIAS;
+  });
+  return Object.values(deudaMap).sort((a,b) => b.total - a.total);
+}
+
 function calcularMargenVenta(v) {
   // Venta múltiple: sumamos el margen de cada línea, con fallback por línea
   if(v.esMultiple && v.productosVenta?.length) {
@@ -2326,6 +2381,9 @@ function startListeners() {
       if(currentPage === 'distribuidores' && (col === 'ventas' || col === 'distribuidores')) renderPage('distribuidores');
       if(currentPage === 'consignacion' && (col === 'consignaciones' || col === 'tiendasConsignacion' || col === 'ventas')) renderPage('consignacion');
       if(col === 'inventario') checkStockAlerts();
+      // 579. El badge de deudores en mora del menú depende de ventas — lo
+      //      refrescamos aunque no estés parado en Deudores ni en Dashboard.
+      if(col === 'ventas') { buildNav(); chequearAlertaMoraDiaria(); }
     });
   });
   // Oyente especial para notificaciones (últimas 30)
@@ -2355,6 +2413,9 @@ function startListeners() {
 // ============================================================
 function buildNav() {
   const nav = document.getElementById('nav-menu');
+  // 578. Badge de deudores en mora en el ítem de menú — así se ve de pasada
+  //      sin tener que entrar a Deudores ni depender de la alerta del Dashboard.
+  const enMoraNav = calcularDeudores().filter(d => d.enMora).length;
   let html = '';
   let lastGroup = '';
   MENU.forEach(m => {
@@ -2363,8 +2424,11 @@ function buildNav() {
       html += `<div class="nav-section-title">${m.group}</div>`;
       lastGroup = m.group;
     }
-    html += `<button class="nav-btn${m.id===currentPage?' active':''}" onclick="showPage('${m.id}')">
-      <span class="ico">${m.ico}</span>${m.label}
+    const badge = (m.id === 'deudores' && enMoraNav > 0)
+      ? `<span style="margin-left:auto;background:var(--red);color:#fff;border-radius:20px;padding:1px 8px;font-size:10px;font-weight:700">${enMoraNav}</span>`
+      : '';
+    html += `<button class="nav-btn${m.id===currentPage?' active':''}" onclick="showPage('${m.id}')" style="display:flex;align-items:center">
+      <span class="ico">${m.ico}</span>${m.label}${badge}
     </button>`;
   });
   nav.innerHTML = html;
@@ -2430,6 +2494,22 @@ function showBrowserNotif(title, body) {
   if('Notification' in window && Notification.permission === 'granted') {
     new Notification(title, { body, tag:'duppla', icon:'/favicon.ico' });
   }
+}
+
+// 580. Aviso automático de deudores en mora — máx. una vez al día (dedupe en
+// localStorage), para que la cartera vieja no se pierda de vista aunque
+// Ventas ya no la muestre por defecto (su filtro de ciclo no toca Deudores,
+// pero tampoco te la recuerda proactivamente sin esto).
+function chequearAlertaMoraDiaria() {
+  const hoyStr = today();
+  if(localStorage.getItem('duppla_alerta_mora_fecha') === hoyStr) return;
+  const enMora = calcularDeudores().filter(d => d.enMora);
+  if(enMora.length === 0) return;
+  localStorage.setItem('duppla_alerta_mora_fecha', hoyStr);
+  const totalMora = enMora.reduce((s,d) => s + d.total, 0);
+  const cuerpo = enMora.length + ' cliente' + (enMora.length>1?'s':'') + ' te deben ' + fmt(totalMora) + ' hace más de ' + UMBRAL_MORA_DIAS + ' días';
+  toast('⏰ ' + cuerpo, 'info');
+  showBrowserNotif('⏰ Deudores en mora', cuerpo);
 }
 async function pushNotif(titulo, cuerpo, tipo, destino) {
   // 307. destino es opcional: { seccion, id } para notificaciones navegables
@@ -2757,6 +2837,24 @@ function renderDashboard() {
       </div>
     </div>` : '';
 
+  // 577. Alerta de deudores en mora — mismo patrón visual que STOCK BAJO, para
+  //      que la deuda vieja no se pierda de vista aunque Ventas ya no la
+  //      muestre por defecto (Ventas filtra por ciclo; esto no).
+  const deudoresMoraDash = calcularDeudores().filter(d => d.enMora);
+  const alertDeudoresHtml = deudoresMoraDash.length ? `
+    <div style="background:var(--red-bg);border:1px solid #FECACA;border-radius:var(--radius-lg);padding:12px 16px;margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <span>⏰</span>
+        <span style="font-size:12px;font-weight:700;color:var(--red)">DEUDORES EN MORA — ${deudoresMoraDash.length} cliente${deudoresMoraDash.length>1?'s':''}</span>
+        <button onclick="showPage('deudores')" style="margin-left:auto;font-size:11px;background:none;border:none;color:var(--red);cursor:pointer;font-weight:600;text-decoration:underline">Ver deudores →</button>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        ${deudoresMoraDash.map(d => `<span style="background:#fff;border:1px solid #FECACA;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;color:var(--red)">
+          ⏰ ${d.cliente} (${fmt(d.total)} · ${d.diasMora}d)
+        </span>`).join('')}
+      </div>
+    </div>` : '';
+
   // 235. Botones del selector de período
   const periodos = [
     { id:'hoy', label:'Hoy' },
@@ -2952,6 +3050,7 @@ function renderDashboard() {
       <button class="btn btn-sm" onclick="exportarReportePDF()">↓ PDF</button>
     </div>
     ${alertHtml}
+    ${alertDeudoresHtml}
     ${filtroHtml}
     <div class="metrics-grid">
       <div class="metric-card">
@@ -6617,29 +6716,8 @@ window.guardarConsumo = async () => {
 // ============================================================
 function renderDeudores() {
   // --- SECCIÓN A: Deudores externos ---
-  // 320. Agrupamos ventas con saldo > 0 por cliente
-  // 404. UMBRAL_MORA_DIAS define cuándo una deuda se considera "en mora" para el recordatorio
-  const HOY_MORA = new Date();
-  const UMBRAL_MORA_DIAS = 8;
-  const deudaMap = {};
-  DATA.ventas.filter(function(v){ return saldoReal(v) > 0; }).forEach(function(v) {
-    const key = v.cliente || 'Sin nombre';
-    if(!deudaMap[key]) deudaMap[key] = { cliente:key, ventas:[], total:0 };
-    deudaMap[key].ventas.push(v);
-    deudaMap[key].total += Number(v.saldo||0);
-  });
-  // 405. Para cada deudor calculamos los días de mora de su venta más antigua pendiente
-  Object.values(deudaMap).forEach(function(d) {
-    let maxDias = 0;
-    d.ventas.forEach(function(v) {
-      if(!v.fecha) return;
-      const dias = Math.floor((HOY_MORA - new Date(v.fecha)) / 86400000);
-      if(dias > maxDias) maxDias = dias;
-    });
-    d.diasMora = maxDias;
-    d.enMora = maxDias >= UMBRAL_MORA_DIAS;
-  });
-  const deudores = Object.values(deudaMap).sort(function(a,b){ return b.total-a.total; });
+  // 320. Agrupamos ventas con saldo > 0 por cliente (ver calcularDeudores, 576)
+  const deudores = calcularDeudores();
 
   let htmlDeudores = '';
   if(deudores.length === 0) {
@@ -7235,6 +7313,9 @@ window.guardarDejarConsignacion = async () => {
 
 // --- Reportar venta o devolución ---
 let tipoReporteConsigActual = 'venta';
+// 572. Estado de pago del reporte de venta — antes se asumía SIEMPRE
+//      'completo', por eso nunca aparecía nada pendiente ni admitía abonos.
+let estadoPagoConsigActual = 'completo'; // 'completo' | 'parcial' | 'credito'
 
 window.setTipoReporteConsig = (tipo) => {
   tipoReporteConsigActual = tipo;
@@ -7247,6 +7328,35 @@ window.setTipoReporteConsig = (tipo) => {
     btn.style.borderColor = activo ? 'var(--ink)' : 'var(--border)';
   });
   document.getElementById('rc-venta-campos').style.display = tipo === 'venta' ? 'block' : 'none';
+};
+
+window.setEstadoPagoConsig = (estado) => {
+  estadoPagoConsigActual = estado;
+  ['completo','parcial','credito'].forEach(k => {
+    const btn = document.getElementById('rc-pago-' + k);
+    if(!btn) return;
+    const activo = k === estado;
+    btn.style.background = activo ? 'var(--ink)' : 'var(--surface-2)';
+    btn.style.color = activo ? '#fff' : 'var(--ink-2)';
+    btn.style.borderColor = activo ? 'var(--ink)' : 'var(--border)';
+  });
+  const grupoAbono = document.getElementById('rc-abono-grupo');
+  if(grupoAbono) grupoAbono.style.display = estado === 'parcial' ? 'block' : 'none';
+  calcSaldoConsig();
+};
+
+// 573. Vista previa del saldo que quedaría pendiente — misma lógica que
+//      calcSaldo() de Nueva Venta, para no sorprender con números distintos.
+window.calcSaldoConsig = () => {
+  const preview = document.getElementById('rc-saldo-preview');
+  if(!preview) return;
+  const cantidad = Number(document.getElementById('rc-cantidad')?.value) || 0;
+  const precio = Number(document.getElementById('rc-precio')?.value) || 0;
+  const total = cantidad * precio;
+  const pagado = Number(document.getElementById('rc-pagado')?.value) || 0;
+  const saldo = Math.max(0, total - pagado);
+  preview.textContent = total > 0 ? 'Queda pendiente: ' + fmt(saldo) : '';
+  preview.style.color = saldo > 0 ? 'var(--amber)' : 'var(--green)';
 };
 
 // 557. Devuelve las entregas activas de un producto en una tienda, ordenadas
@@ -7278,7 +7388,9 @@ window.abrirReportarConsignacion = (tiendaId, prodId) => {
     '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#D97706;margin-right:3px"></span>'
     + 'Se dejó a distribuidor: ' + fmt(masReciente.precioSugerido || prodItem?.pdist || 0);
   document.getElementById('rc-fecha').value = today();
+  document.getElementById('rc-pagado').value = '';
   setTipoReporteConsig('venta');
+  setEstadoPagoConsig('completo');
   openModal('modal-reportar-consig');
 };
 
@@ -7322,13 +7434,29 @@ window.guardarReporteConsignacion = async () => {
     const metodoPago = document.getElementById('rc-metodo-pago').value;
     const total = precio * cantidad;
 
+    // 574. Estado de pago real — antes se forzaba SIEMPRE "pagado completo",
+    //      por lo que una venta de consignación a crédito o abonada
+    //      parcialmente jamás aparecía en Deudores ni admitía abonos.
+    let pagado;
+    if(estadoPagoConsigActual === 'credito') {
+      pagado = 0;
+    } else if(estadoPagoConsigActual === 'parcial') {
+      pagado = Number(document.getElementById('rc-pagado').value) || 0;
+      if(pagado <= 0) { alert('Ingresa cuánto pagó, o marca "A crédito" si no pagó nada'); return; }
+      if(pagado >= total) { alert('Si pagó el total, marca "Completo"'); return; }
+    } else {
+      pagado = total;
+    }
+    const saldo = Math.max(0, total - pagado);
+    const estadoPago = saldo === 0 ? 'pagado' : pagado > 0 ? 'parcial' : 'pendiente';
+
     await addDoc(collection(db,'ventas'), {
       fecha: fechaVenta, canal: 'distribuidor',
       producto: primerProd, prodId, esManual:false,
       cant: cantidad, precio, total,
       cliente: primeraTienda,
       tipoPrecio: 'distribuidor', metodoPago,
-      pagado: total, saldo: 0, estadoPago: 'pagado', // 561. Asumimos pago inmediato al reportar; se puede editar después si quedó a crédito
+      pagado, saldo, estadoPago,
       abonos: [],
       costoUnit: costoPromedioPonderado, // 562. Costo promedio ponderado entre las entregas consumidas (FIFO)
       esDeConsignacion: true, consignacionIds: actualizaciones.map(a => a.entrega.id),
@@ -7336,7 +7464,11 @@ window.guardarReporteConsignacion = async () => {
     });
     // 567. Guardamos precio/total también en cada movimiento del historial (por entrega)
     actualizaciones.forEach(a => { a.movimiento.precio = precio; a.movimiento.total = precio * a.consumido; });
-    await pushNotif('💰 Venta en consignación', primeraTienda + ' vendió ' + cantidad + 'x ' + primerProd, 'venta', {seccion:'consignacion'});
+    if(saldo > 0) {
+      await pushNotif('💳 Venta a crédito', primeraTienda + ' debe ' + fmt(saldo) + ' por ' + cantidad + 'x ' + primerProd, 'credito', {seccion:'deudores'});
+    } else {
+      await pushNotif('💰 Venta en consignación', primeraTienda + ' vendió ' + cantidad + 'x ' + primerProd, 'venta', {seccion:'consignacion'});
+    }
   } else {
     // 563. Devolución: el producto vuelve al stock de Duppla — sin afectar ingresos.
     const prod = DATA.inventario.find(p => p.id === prodId);
