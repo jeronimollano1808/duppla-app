@@ -3273,7 +3273,8 @@ function renderVentas() {
     if(v.esMultiple && v.productosVenta?.length) {
       const filasProductos = v.productosVenta.map(p =>
         '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 0">'
-          + '<span style="font-size:12px;color:var(--ink);font-weight:500">' + p.nombre + '</span>'
+          + '<span style="font-size:12px;color:var(--ink);font-weight:500">' + p.nombre
+            + (p.esManual ? ' <span class="badge b-gray" style="font-size:9px;padding:1px 6px">Manual</span>' : '') + '</span>'
           + '<span style="font-size:11px;color:var(--ink-3);white-space:nowrap">×' + p.cant + ' &nbsp;<strong style="color:var(--ink-2)">' + fmt(p.precio*p.cant) + '</strong></span>'
         + '</div>'
       ).join('');
@@ -3504,7 +3505,27 @@ function renderLineasVenta() {
 
     let contenido = '';
 
-    if(!l.prodId) {
+    if(l.esManual) {
+      // 583. Línea manual DENTRO de una venta de inventario — permite mezclar
+      //      productos de catálogo con productos fuera de catálogo en la
+      //      MISMA venta (antes tenías que elegir todo-catálogo o todo-manual).
+      const subtotalManual = fmt((l.cant||1)*(l.precio||0));
+      const nombreVal = (l.nombre||'').replace(/"/g, '&quot;');
+      contenido = '<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--amber-bg);border-radius:8px;margin-bottom:8px">'
+        + '<span style="font-size:12px;font-weight:600;color:#92400E;flex:1">✏️ Producto manual (fuera de catálogo)</span>'
+        + '<button type="button" onclick="desactivarManualLinea(' + i + ')" style="background:none;border:none;color:var(--ink-3);cursor:pointer;font-size:11px;text-decoration:underline">Buscar en catálogo</button>'
+      + '</div>'
+      + '<input type="text" class="f-input" placeholder="Nombre del producto" value="' + nombreVal + '" '
+        + 'data-idx="' + i + '" data-tipo="nombre" oninput="actualizarManualLinea(this)" style="font-size:13px;margin-bottom:8px">'
+      + '<div style="display:grid;grid-template-columns:80px 1fr 1fr;gap:8px;align-items:end">'
+        + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Cant.</label>'
+          + '<input type="number" class="f-input" value="' + (l.cant||1) + '" min="1" data-idx="' + i + '" data-tipo="cant" oninput="actualizarManualLinea(this)" style="font-size:13px;text-align:center;padding:7px 6px"></div>'
+        + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Precio ($)</label>'
+          + '<input type="number" class="f-input" value="' + (l.precio||0) + '" data-idx="' + i + '" data-tipo="precio" oninput="actualizarManualLinea(this)" style="font-size:13px;padding:7px 8px"></div>'
+        + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Subtotal</label>'
+          + '<div style="font-size:13px;font-weight:700;color:var(--lime);padding:7px 0">' + subtotalManual + '</div></div>'
+      + '</div>';
+    } else if(!l.prodId) {
       // 433. Lista de resultados agrupados por marca
       let resultados;
       if(prods.length === 0) {
@@ -3519,7 +3540,8 @@ function renderLineasVenta() {
             + '</div>';
         });
       }
-      contenido = '<div style="max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--surface);margin-bottom:8px">' + resultados + '</div>';
+      contenido = '<div style="max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--surface);margin-bottom:8px">' + resultados + '</div>'
+        + '<button type="button" onclick="activarManualLinea(' + i + ')" style="background:none;border:none;color:var(--blue);cursor:pointer;font-size:11px;text-decoration:underline">📝 No está en el catálogo — agregarlo manual</button>';
     } else {
       // Producto seleccionado — botones de tipo de precio
       let tiposBtns = '';
@@ -3581,13 +3603,17 @@ function renderLineasVenta() {
       : '';
 
     const busqVal = (l.busqueda||'').replace(/"/g, '&quot;');
+    // 584. Ocultamos el buscador de catálogo cuando la línea está en modo manual
+    const buscadorHtml = l.esManual ? '' : (
+      '<input type="text" class="f-input" placeholder="🔍 Buscar producto..." value="' + busqVal + '" '
+        + 'data-idx="' + i + '" oninput="actualizarBusquedaLinea(this)" style="font-size:13px;margin-bottom:8px">'
+    );
     html += '<div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:10px;margin-bottom:8px">'
       + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
         + '<span style="font-size:11px;font-weight:600;color:var(--ink-3);text-transform:uppercase">Producto ' + (i+1) + '</span>'
         + quitarBtn
       + '</div>'
-      + '<input type="text" class="f-input" placeholder="🔍 Buscar producto..." value="' + busqVal + '" '
-        + 'data-idx="' + i + '" oninput="actualizarBusquedaLinea(this)" style="font-size:13px;margin-bottom:8px">'
+      + buscadorHtml
       + contenido
       + '</div>';
   });
@@ -3634,6 +3660,37 @@ window.cambiarProductoLinea = (i) => {
   ventaLineas[i].prodId = '';
   ventaLineas[i].busqueda = '';
   renderLineasVenta();
+};
+
+// 585. Activa/desactiva el modo manual de una línea individual — permite
+// mezclar productos de catálogo con productos fuera de catálogo en la misma
+// venta multi-producto (ver guardarVenta, rama "Modo inventario").
+window.activarManualLinea = (i) => {
+  ventaLineas[i].esManual = true;
+  ventaLineas[i].prodId = '';
+  ventaLineas[i].busqueda = '';
+  if(!ventaLineas[i].nombre) ventaLineas[i].nombre = '';
+  renderLineasVenta();
+  calcVentaTotal();
+};
+
+window.desactivarManualLinea = (i) => {
+  ventaLineas[i].esManual = false;
+  ventaLineas[i].nombre = '';
+  ventaLineas[i].precio = 0;
+  renderLineasVenta();
+  calcVentaTotal();
+};
+
+window.actualizarManualLinea = (el) => {
+  const i = Number(el.dataset.idx);
+  const tipo = el.dataset.tipo;
+  if(tipo === 'nombre') ventaLineas[i].nombre = el.value;
+  if(tipo === 'cant') ventaLineas[i].cant = Number(el.value)||1;
+  if(tipo === 'precio') ventaLineas[i].precio = Number(el.value)||0;
+  // 586. Igual que actualizarDatosLinea (catálogo): no re-renderizamos en
+  // cada tecla para no perder el foco — solo se actualiza el total general.
+  calcVentaTotal();
 };
 
 window.seleccionarTipoPrecioLinea = (i, tipo) => {
@@ -3741,13 +3798,16 @@ window.guardarVenta = async () => {
 
   } else {
     // Modo inventario — una o varias líneas de productos
-    // 287. Validamos que todas las líneas tengan producto seleccionado
-    const lineasValidas = ventaLineas.filter(l => l.prodId);
+    // 287. Validamos que todas las líneas tengan producto seleccionado, o
+    //      sean líneas manuales completas (587: mezcla catálogo + manual)
+    const lineasValidas = ventaLineas.filter(l => l.prodId || (l.esManual && (l.nombre||'').trim() && l.precio > 0));
     if(!fecha || lineasValidas.length === 0) { alert('Selecciona al menos un producto'); return; }
     if(!total) { alert('El total no puede ser cero'); return; }
 
-    // Verificamos stock de todos los productos
+    // Verificamos stock de todos los productos de catálogo (las líneas
+    // manuales no tienen stock que descontar — 587)
     for(const l of lineasValidas) {
+      if(l.esManual) continue;
       const prod = DATA.inventario.find(p => p.id === l.prodId);
       if(!prod) { alert('Producto no encontrado: ' + l.nombre); return; }
       // 537. FIX DEFINITIVO: 'prod.stock' (el total) es SIEMPRE la fuente de
@@ -3770,7 +3830,18 @@ window.guardarVenta = async () => {
 
     // 288. Si es una sola línea, registramos como venta simple (compatible con historial)
     //      Si son múltiples, registramos como venta múltiple con array de productos
-    if(lineasValidas.length === 1) {
+    if(lineasValidas.length === 1 && lineasValidas[0].esManual) {
+      // 588. Única línea y es manual — misma forma que el modo manual clásico,
+      //      para mantener compatibilidad con el badge "Manual" en Ventas.
+      const l = lineasValidas[0];
+      await addDoc(collection(db,'ventas'), {
+        fecha, canal, producto:l.nombre, prodId:null, esManual:true,
+        cant:l.cant||1, precio:l.precio, total, cliente, nota, tipoPrecio:'publico',
+        metodoPago, pagado, saldo, estadoPago, abonos:[],
+        mixtoEfectivo, mixtoTransferencia, costoUnit:null,
+        distribuidorId: distribuidorId || null, createdAt:serverTimestamp()
+      });
+    } else if(lineasValidas.length === 1) {
       const l = lineasValidas[0];
       const prod = DATA.inventario.find(p => p.id === l.prodId);
       // 453. Descontamos del stock de la ubicación elegida (Jero/Ángel) si el
@@ -3806,6 +3877,12 @@ window.guardarVenta = async () => {
       // 289. Venta múltiple — descontamos stock de cada producto y registramos una entrada
       const productosVenta = [];
       for(const l of lineasValidas) {
+        // 589. Línea manual dentro de una venta múltiple — no hay stock ni
+        //      costo que descontar, solo se registra el producto tal cual.
+        if(l.esManual) {
+          productosVenta.push({ prodId:null, nombre:l.nombre, cant:l.cant||1, precio:l.precio, tipoPrecio:'publico', costoUnit:null, ubicacionStock:null, loteConsumo:null, esManual:true });
+          continue;
+        }
         const prod = DATA.inventario.find(p => p.id === l.prodId);
         const tieneUbic2 = prod.stockJero != null || prod.stockAngel != null;
         const ubicacionFinal2 = l.ubicacion || (!tieneUbic2 ? 'jero' : ((prod.stockJero||0) > 0 ? 'jero' : 'angel'));
