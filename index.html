@@ -7528,6 +7528,11 @@ function renderConsignacion() {
       const itemsTienda = DATA.consignaciones.filter(c => c.tiendaId === t.id);
       const itemsActivos = itemsTienda.filter(c => Number(c.cantidadActual||0) > 0);
       const valorTienda = itemsActivos.reduce((s,c) => s + Number(c.cantidadActual||0)*Number(c.costoUnit||0), 0);
+      // 582. Valor de venta potencial — cantidad disponible × precio acordado
+      //      con la tienda (precioSugerido de cada entrega). Antes solo se
+      //      mostraba el valor a costo sin etiqueta, y se confundía con el
+      //      valor de venta (lo que realmente espera facturar Jero).
+      const valorVentaTienda = itemsActivos.reduce((s,c) => s + Number(c.cantidadActual||0)*Number(c.precioSugerido||0), 0);
       // 581. FIX: itemsActivos cuenta ENTREGAS (documentos), no productos —
       //      desde que una tienda puede tener varias entregas activas del
       //      mismo producto (agrupadas en una sola fila al expandir), contar
@@ -7576,8 +7581,9 @@ function renderConsignacion() {
             + '</div>'
           + '</div>'
           + '<div style="text-align:right;flex-shrink:0;margin-left:12px">'
-            + '<div style="font-size:16px;font-weight:800;color:var(--blue)">' + fmt(valorTienda) + '</div>'
-            + '<div style="font-size:11px;color:var(--ink-3)">' + productosDistintosActivos + ' producto(s) activo(s)</div>'
+            + '<div style="font-size:15px;font-weight:800;color:var(--lime)">' + fmt(valorVentaTienda) + ' <span style="font-size:9px;font-weight:600;color:var(--ink-3)">venta</span></div>'
+            + '<div style="font-size:12px;font-weight:600;color:var(--blue)">' + fmt(valorTienda) + ' <span style="font-size:9px;font-weight:600;color:var(--ink-3)">costo</span></div>'
+            + '<div style="font-size:11px;color:var(--ink-3);margin-top:2px">' + productosDistintosActivos + ' producto(s) activo(s)</div>'
           + '</div>'
         + '</div>'
         + '<div style="display:flex;gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">'
