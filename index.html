@@ -7528,6 +7528,12 @@ function renderConsignacion() {
       const itemsTienda = DATA.consignaciones.filter(c => c.tiendaId === t.id);
       const itemsActivos = itemsTienda.filter(c => Number(c.cantidadActual||0) > 0);
       const valorTienda = itemsActivos.reduce((s,c) => s + Number(c.cantidadActual||0)*Number(c.costoUnit||0), 0);
+      // 581. FIX: itemsActivos cuenta ENTREGAS (documentos), no productos —
+      //      desde que una tienda puede tener varias entregas activas del
+      //      mismo producto (agrupadas en una sola fila al expandir), contar
+      //      itemsActivos.length como "productos activos" inflaba el número
+      //      frente a las filas que realmente se ven al expandir.
+      const productosDistintosActivos = new Set(itemsActivos.map(c => c.prodId)).size;
       const isOpen = consigTiendaAbiertaId === t.id;
 
       let detalleHtml = '';
@@ -7571,11 +7577,11 @@ function renderConsignacion() {
           + '</div>'
           + '<div style="text-align:right;flex-shrink:0;margin-left:12px">'
             + '<div style="font-size:16px;font-weight:800;color:var(--blue)">' + fmt(valorTienda) + '</div>'
-            + '<div style="font-size:11px;color:var(--ink-3)">' + itemsActivos.length + ' producto(s) activo(s)</div>'
+            + '<div style="font-size:11px;color:var(--ink-3)">' + productosDistintosActivos + ' producto(s) activo(s)</div>'
           + '</div>'
         + '</div>'
         + '<div style="display:flex;gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">'
-          + '<button class="btn btn-sm" onclick="toggleTiendaConsig(\'' + t.id + '\')" style="flex:1">' + (isOpen?'▲ Ocultar':'▼ Ver productos ('+itemsActivos.length+')') + '</button>'
+          + '<button class="btn btn-sm" onclick="toggleTiendaConsig(\'' + t.id + '\')" style="flex:1">' + (isOpen?'▲ Ocultar':'▼ Ver productos ('+productosDistintosActivos+')') + '</button>'
           + '<button class="btn btn-sm btn-lime" onclick="abrirDejarConsignacion(\'' + t.id + '\')">+ Dejar producto</button>'
           + '<button class="btn btn-sm" onclick="editarTiendaConsig(\'' + t.id + '\')">✏️</button>'
           + '<button class="btn btn-sm btn-danger" onclick="eliminarTiendaConsig(\'' + t.id + '\')">✕</button>'
