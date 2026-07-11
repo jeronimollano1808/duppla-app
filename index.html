@@ -1448,6 +1448,39 @@ body{
   </div>
 </div>
 
+<!-- 599. MODAL: GASTO RECURRENTE — plantilla de gasto fijo mensual (arriendo,
+     nómina, suscripciones) que se genera solo una vez por ciclo. -->
+<div class="modal-bg" id="modal-gasto-recurrente">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="modal-gasto-rec-title">Nuevo gasto recurrente</span>
+      <button class="modal-close" onclick="closeModal('modal-gasto-recurrente')">✕</button>
+    </div>
+    <input type="hidden" id="gr-id" value="">
+    <div class="f-group"><label class="f-label">Descripción *</label><input type="text" id="gr-desc" class="f-input" placeholder="Ej: Arriendo bodega"></div>
+    <div class="f-row">
+      <div class="f-group"><label class="f-label">Categoría</label>
+        <select id="gr-cat" class="f-input">
+          <option value="importacion">Importación / Proveedor</option>
+          <option value="marketing">Marketing y publicidad</option>
+          <option value="logistica">Logística y envíos</option>
+          <option value="plataformas">Plataformas (web, apps)</option>
+          <option value="operativo">Gastos operativos</option>
+          <option value="otro">Otro</option>
+        </select>
+      </div>
+      <div class="f-group"><label class="f-label">Valor mensual ($) *</label><input type="number" id="gr-valor" class="f-input"></div>
+    </div>
+    <div style="font-size:12px;color:var(--ink-3);margin-bottom:10px">
+      💡 Se genera solo una vez por ciclo (día 4) como un gasto normal — puedes editarlo o borrarlo ese mes sin afectar la plantilla.
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-gasto-recurrente')">Cancelar</button>
+      <button class="btn btn-lime" onclick="guardarGastoRecurrente()">Guardar</button>
+    </div>
+  </div>
+</div>
+
 <!-- Modal: Nuevo proveedor -->
 <div class="modal-bg" id="modal-proveedor">
   <div class="modal">
@@ -1908,7 +1941,8 @@ let DATA = {
   consumos:[],
   distribuidores:[],  // 326. distribuidores: gimnasios y distribuidores vinculados
   cierres:[],  // 415. cierres: snapshots mensuales inmutables (corte contable)
-  tiendasConsignacion:[], consignaciones:[]  // 488. consignación física en tiendas
+  tiendasConsignacion:[], consignaciones:[],  // 488. consignación física en tiendas
+  gastosRecurrentes:[]  // 597. plantillas de gastos fijos mensuales (arriendo, nómina, etc.)
 };
 let currentPage = 'dashboard';  // Página activa
 let ajusteProductoId = null;    // ID del producto que se está ajustando
@@ -2369,7 +2403,7 @@ document.getElementById('li-pass')?.addEventListener('keydown', e => {
 // Cada cambio en Firebase actualiza DATA y redibuja la página
 // ============================================================
 function startListeners() {
-  const cols = ['ventas','inventario','gastos','proveedores','pedidos','metas','combos','consumos','distribuidores','cierres','tiendasConsignacion','consignaciones'];
+  const cols = ['ventas','inventario','gastos','proveedores','pedidos','metas','combos','consumos','distribuidores','cierres','tiendasConsignacion','consignaciones','gastosRecurrentes'];
   cols.forEach(col => {
     const q = query(collection(db, col), orderBy('createdAt','desc'));
     onSnapshot(q, snap => {
@@ -2380,10 +2414,15 @@ function startListeners() {
       if(currentPage === 'deudores' && (col === 'ventas' || col === 'consumos')) renderPage('deudores');
       if(currentPage === 'distribuidores' && (col === 'ventas' || col === 'distribuidores')) renderPage('distribuidores');
       if(currentPage === 'consignacion' && (col === 'consignaciones' || col === 'tiendasConsignacion' || col === 'ventas')) renderPage('consignacion');
+      if(currentPage === 'gastos' && col === 'gastosRecurrentes') renderPage('gastos');
       if(col === 'inventario') checkStockAlerts();
       // 579. El badge de deudores en mora del menú depende de ventas — lo
       //      refrescamos aunque no estés parado en Deudores ni en Dashboard.
       if(col === 'ventas') { buildNav(); chequearAlertaMoraDiaria(); }
+      // 598. Generamos los gastos recurrentes del ciclo actual apenas
+      //      cargamos/actualizamos las plantillas — idempotente por
+      //      ultimoMesGenerado, así que no duplica aunque se dispare varias veces.
+      if(col === 'gastosRecurrentes') generarGastosRecurrentesDelCiclo();
     });
   });
   // Oyente especial para notificaciones (últimas 30)
@@ -5377,11 +5416,36 @@ function renderGastos() {
       </td>
     </tr>`).join('');
 
+  // 601. Sección de gastos recurrentes (arriendo, nómina, suscripciones) —
+  //      plantillas que se generan solas cada ciclo (ver generarGastosRecurrentesDelCiclo)
+  const recurrentesHtml = `
+    <div class="card" style="margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${DATA.gastosRecurrentes.length?'10px':'0'}">
+        <div class="card-title" style="margin:0">🔁 Gastos recurrentes (mensuales)</div>
+        <button class="btn btn-sm" onclick="abrirNuevoGastoRecurrente()">+ Agregar</button>
+      </div>
+      ${DATA.gastosRecurrentes.length === 0
+        ? '<div style="font-size:12px;color:var(--ink-3)">Sin gastos recurrentes configurados (arriendo, nómina, suscripciones...)</div>'
+        : DATA.gastosRecurrentes.map(r => `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
+            <div>
+              <div style="font-size:13px;font-weight:600;color:var(--ink);${r.activo===false?'text-decoration:line-through;opacity:.5':''}">${r.desc}</div>
+              <div style="font-size:11px;color:var(--ink-3)">${CATS[r.cat]||r.cat} · ${fmt(r.valor)}/mes${r.activo===false?' · Pausado':''}</div>
+            </div>
+            <div style="display:flex;gap:5px">
+              <button class="btn btn-xs" onclick="toggleActivoGastoRecurrente('${r.id}')">${r.activo===false?'▶️ Reanudar':'⏸️ Pausar'}</button>
+              <button class="btn btn-xs" onclick="editarGastoRecurrente('${r.id}')">✏️</button>
+              <button class="btn btn-xs btn-danger" onclick="eliminarDoc('gastosRecurrentes','${r.id}')">✕</button>
+            </div>
+          </div>`).join('')}
+    </div>`;
+
   document.getElementById('page-gastos').innerHTML = `
     <div class="page-header">
       <div><div class="page-title">Gastos</div><div class="page-sub">${DATA.gastos.length} registros</div></div>
       <button class="btn btn-lime btn-sm" onclick="abrirModalGasto()">+ Registrar gasto</button>
     </div>
+    ${recurrentesHtml}
     <div class="metrics-grid" style="margin-bottom:16px">${catHtml}</div>
     <div class="card">
       ${DATA.gastos.length ?
@@ -5399,6 +5463,10 @@ window.abrirModalGasto = () => {
   document.getElementById('g-fecha').value = today();
   document.getElementById('g-desc').value = '';
   document.getElementById('g-valor').value = '';
+  // 600. FIX: la categoría se quedaba con el valor del último gasto editado
+  // (guardarGasto no la reseteaba), así que "+ Registrar gasto" podía abrir
+  // con una categoría equivocada preseleccionada por error.
+  document.getElementById('g-cat').selectedIndex = 0;
   document.getElementById('modal-gasto-title').textContent = 'Registrar gasto';
   openModal('modal-gasto');
 };
@@ -5438,6 +5506,94 @@ window.editarGasto = (id) => {
   document.getElementById('modal-gasto-title').textContent = 'Editar gasto';
   openModal('modal-gasto');
 };
+
+// ============================================================
+// 602. GASTOS RECURRENTES — plantillas de gasto fijo mensual (arriendo,
+// nómina, suscripciones) que se generan automáticamente una vez por ciclo.
+// ============================================================
+window.abrirNuevoGastoRecurrente = () => {
+  document.getElementById('gr-id').value = '';
+  document.getElementById('gr-desc').value = '';
+  document.getElementById('gr-valor').value = '';
+  document.getElementById('gr-cat').selectedIndex = 0;
+  document.getElementById('modal-gasto-rec-title').textContent = 'Nuevo gasto recurrente';
+  openModal('modal-gasto-recurrente');
+};
+
+window.editarGastoRecurrente = (id) => {
+  const r = DATA.gastosRecurrentes.find(x => x.id === id);
+  if(!r) return;
+  document.getElementById('gr-id').value = id;
+  document.getElementById('gr-desc').value = r.desc || '';
+  document.getElementById('gr-valor').value = r.valor || '';
+  document.getElementById('gr-cat').value = r.cat || 'otro';
+  document.getElementById('modal-gasto-rec-title').textContent = 'Editar gasto recurrente';
+  openModal('modal-gasto-recurrente');
+};
+
+window.guardarGastoRecurrente = async () => {
+  const desc = document.getElementById('gr-desc').value.trim();
+  const valor = Number(document.getElementById('gr-valor').value);
+  const cat = document.getElementById('gr-cat').value;
+  if(!desc || !valor) { alert('Completa la descripción y el valor'); return; }
+
+  const id = document.getElementById('gr-id').value;
+  if(id) {
+    await updateDoc(doc(db,'gastosRecurrentes',id), { desc, valor, cat });
+  } else {
+    // 603. Al crear una plantilla nueva, generamos de una vez el gasto de
+    // este ciclo — si no, tendría que esperar hasta el próximo mes para
+    // ver su primer gasto, cuando lo lógico es que aplique desde ya.
+    await addDoc(collection(db,'gastosRecurrentes'), {
+      desc, valor, cat, activo:true, ultimoMesGenerado:null, createdAt:serverTimestamp()
+    });
+  }
+  closeModal('modal-gasto-recurrente');
+};
+
+window.toggleActivoGastoRecurrente = async (id) => {
+  const r = DATA.gastosRecurrentes.find(x => x.id === id);
+  if(!r) return;
+  await updateDoc(doc(db,'gastosRecurrentes',id), { activo: r.activo === false ? true : false });
+};
+
+// 604. Mes del ciclo actual — mismo cálculo (día 3) usado en Dashboard/Metas/Cierre
+function mesCicloActualParaRecurrentes() {
+  const now = new Date();
+  const mesParaCiclo = now.getDate() <= DUPPLA_DIA_INICIO_MES
+    ? new Date(now.getFullYear(), now.getMonth()-1, 1)
+    : now;
+  return mesParaCiclo.toISOString().slice(0,7);
+}
+
+// 605. Revisa las plantillas activas y crea el gasto del ciclo actual para
+// las que aún no lo tengan — idempotente vía "ultimoMesGenerado". Además del
+// guard por fecha, usamos "generandoRecurrentes" para evitar una condición de
+// carrera: cada addDoc/updateDoc dispara un nuevo onSnapshot que podría volver
+// a llamar esta función ANTES de que termine el loop actual, procesando la
+// misma plantilla pendiente dos veces (duplicando el gasto). Con el guard,
+// la llamada re-entrante simplemente no hace nada — la que ya está corriendo
+// termina de procesar todo lo pendiente sola.
+let generandoRecurrentes = false;
+async function generarGastosRecurrentesDelCiclo() {
+  if(generandoRecurrentes) return;
+  generandoRecurrentes = true;
+  try {
+    const mesActual = mesCicloActualParaRecurrentes();
+    for(const r of DATA.gastosRecurrentes) {
+      if(r.activo === false) continue;
+      if(r.ultimoMesGenerado === mesActual) continue;
+      await addDoc(collection(db,'gastos'), {
+        fecha: today(), cat: r.cat, desc: r.desc, valor: r.valor,
+        gastoRecurrenteId: r.id, createdAt: serverTimestamp()
+      });
+      await updateDoc(doc(db,'gastosRecurrentes',r.id), { ultimoMesGenerado: mesActual });
+      await pushNotif('🔁 Gasto recurrente', r.desc + ' · ' + fmt(r.valor), 'gasto', {seccion:'gastos'});
+    }
+  } finally {
+    generandoRecurrentes = false;
+  }
+}
 
 // ============================================================
 // 59. PÁGINA: PROVEEDORES
