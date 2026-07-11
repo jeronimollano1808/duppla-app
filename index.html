@@ -715,6 +715,8 @@ body{
         <div class="sidebar-avatar" id="user-avatar">J</div>
         <div class="sidebar-email" id="user-email-display"></div>
       </div>
+      <!-- 626. Backup completo — descarga TODOS los datos, no solo ventas -->
+      <button class="btn btn-sm" style="width:100%;margin-bottom:6px" onclick="exportarBackupCompleto()">⬇️ Backup completo</button>
       <button class="btn-logout" onclick="doLogout()">Cerrar sesión</button>
     </div>
   </div>
@@ -4447,6 +4449,29 @@ window.exportarCSV = () => {
   a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));
   a.download = `DUPPLA_Ventas_${today()}.csv`;
   a.click();
+};
+
+// ============================================================
+// 627. BACKUP COMPLETO — descarga un JSON con TODAS las colecciones (no
+// solo Ventas, que es lo único que tenía exportación hasta ahora). Sirve
+// como respaldo ante un borrado accidental fuera de la Papelera (ej. los
+// 7 días ya vencieron) o cualquier problema con Firestore.
+// ============================================================
+window.exportarBackupCompleto = () => {
+  const backup = {
+    generadoEl: new Date().toISOString(),
+    ventas: DATA.ventas, inventario: DATA.inventario, gastos: DATA.gastos,
+    proveedores: DATA.proveedores, pedidos: DATA.pedidos, metas: DATA.metas,
+    combos: DATA.combos, consumos: DATA.consumos, distribuidores: DATA.distribuidores,
+    cierres: DATA.cierres, tiendasConsignacion: DATA.tiendasConsignacion,
+    consignaciones: DATA.consignaciones, gastosRecurrentes: DATA.gastosRecurrentes
+  };
+  const json = JSON.stringify(backup, null, 2);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([json], {type:'application/json;charset=utf-8;'}));
+  a.download = `DUPPLA_Backup_${today()}.json`;
+  a.click();
+  toast('✅ Backup descargado');
 };
 
 // ============================================================
