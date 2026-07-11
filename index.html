@@ -3063,15 +3063,15 @@ function renderDashboard() {
         <div class="metric-value" style="color:var(--red)">${fmt(tg)}</div>
         <div class="metric-sub">${pg.length} registros</div>
       </div>
-      <div class="metric-card">
-        <div class="metric-label">Utilidad neta</div>
+      <div class="metric-card" title="Ingresos menos TODOS los gastos del período, incluyendo pedidos a proveedor completos apenas se hacen (no cuando se venden). Un mes de compras grandes puede verse negativo aquí aunque el negocio esté sano.">
+        <div class="metric-label">Utilidad neta <span style="font-size:9px;color:var(--ink-3);cursor:help">ⓘ</span></div>
         <div class="metric-value" style="color:${util>=0?'var(--green)':'var(--red)'}">${fmt(util)}</div>
         <div class="metric-sub">${util>=0?'Positivo ✅':'Negativo ⚠️'}</div>
       </div>
-      <div class="metric-card">
-        <div class="metric-label">Ganancia bruta</div>
+      <div class="metric-card" title="Ingresos menos el costo SOLO de lo que ya se vendió (FIFO). No incluye gastos operativos ni pedidos aún sin vender — es el margen real por producto, no la caja del negocio.">
+        <div class="metric-label">Ganancia bruta <span style="font-size:9px;color:var(--ink-3);cursor:help">ⓘ</span></div>
         <div class="metric-value" style="color:var(--blue)">${fmt(gananciaBruta)}</div>
-        <div class="metric-sub">Sin contar gastos</div>
+        <div class="metric-sub">Margen real de lo vendido</div>
       </div>
       <div class="metric-card">
         <div class="metric-label">Ventas</div>
@@ -3195,8 +3195,8 @@ function renderVentas() {
         <div class="metric-value" style="font-size:18px;color:${carteraPendiente>0?'var(--red)':'var(--green)'}">${fmt(carteraPendiente)}</div>
         <div class="metric-sub">${ventasPeriodoActual.filter(v=>saldoReal(v)>0).length} ventas por cobrar</div>
       </div>
-      <div class="metric-card">
-        <div class="metric-label">Ganancia bruta</div>
+      <div class="metric-card" title="Ingresos menos el costo SOLO de lo que ya se vendió (FIFO) — no incluye gastos operativos ni pedidos a proveedor sin vender. Para la utilidad real de caja ve al Dashboard.">
+        <div class="metric-label">Ganancia bruta <span style="font-size:9px;color:var(--ink-3);cursor:help">ⓘ</span></div>
         <div class="metric-value" style="font-size:18px;color:${gananciaBruta>=0?'var(--blue)':'var(--red)'}">${fmt(gananciaBruta)}</div>
         <div class="metric-sub">Margen: ${margenPct}%</div>
       </div>
