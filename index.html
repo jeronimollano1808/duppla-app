@@ -5059,8 +5059,20 @@ window.guardarProducto = async () => {
     if(stockTotal !== stockAnteriorTotal && prodActual) {
       const diff = stockTotal - stockAnteriorTotal;
       const sjActual = prodActual.stockJero != null ? prodActual.stockJero : stockAnteriorTotal;
-      datos.stockJero = Math.max(0, sjActual + diff);
-      datos.stockAngel = prodActual.stockAngel != null ? prodActual.stockAngel : 0;
+      const saActual = prodActual.stockAngel != null ? prodActual.stockAngel : 0;
+      let sjNuevo = sjActual + diff;
+      let saNuevo = saActual;
+      // 614. FIX: si la reducción deja a Jero en negativo, el faltante se
+      // descuenta de Ángel — antes se truncaba Jero a 0 sin tocar Ángel,
+      // dejando stockJero+stockAngel desincronizado del stock total
+      // (ej: Jero=3, Ángel=2, editas total de 5 a 1 → antes quedaba
+      // Jero=0 + Ángel=2 = 2, no 1).
+      if(sjNuevo < 0) {
+        saNuevo = Math.max(0, saActual + sjNuevo);
+        sjNuevo = 0;
+      }
+      datos.stockJero = sjNuevo;
+      datos.stockAngel = saNuevo;
     }
     await updateDoc(doc(db,'inventario',prodId), datos);
     toast('✅ Producto actualizado correctamente');
