@@ -6523,6 +6523,24 @@ window.confirmarCierreMes = async () => {
 // ============================================================
 
 function renderCombos() {
+  // 618. Ranking de combos por rentabilidad — mismo componente que usa el
+  // Top 5 de Ventas/Dashboard (generarTopProductosHtml), agrupando por
+  // nombre del combo tal como quedó guardado en cada venta esCombo.
+  const pmCombos = {};
+  DATA.ventas.filter(v => v.esCombo).forEach(v => {
+    if(!pmCombos[v.producto]) pmCombos[v.producto] = { cant:0, total:0, margen:0, sinCosto:false };
+    pmCombos[v.producto].cant += Number(v.cant||1);
+    pmCombos[v.producto].total += ingresoVenta(v);
+    const m = calcularMargenVenta(v);
+    if(m !== null) pmCombos[v.producto].margen += m;
+    else pmCombos[v.producto].sinCosto = true;
+  });
+  const rankingHtml = Object.keys(pmCombos).length ? `
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-title">🏆 Combos más rentables</div>
+      ${generarTopProductosHtml(pmCombos, 'total')}
+    </div>` : '';
+
   const cards = DATA.combos.map(c => {
     const prods = (c.productos||[]).map(p => {
       const prod = DATA.inventario.find(x => x.id === p.prodId);
@@ -6570,6 +6588,7 @@ function renderCombos() {
         <button class="btn btn-lime btn-sm" onclick="abrirNuevoCombo()">+ Nuevo combo</button>
       </div>
     </div>
+    ${rankingHtml}
     ${DATA.combos.length ?
       `<div class="list-cards">${cards}</div>`
       : `<div class="card"><div class="empty-state"><div class="empty-state-icon">🎁</div>
