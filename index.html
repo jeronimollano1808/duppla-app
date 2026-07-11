@@ -6945,27 +6945,91 @@ window.guardarVentaCombo = async () => {
   toast('✅ Combo registrado correctamente');
 };
 
+// 594. Restaura el stock de una venta eliminada — cubre los 3 tipos de venta
+//      (antes solo se restauraba en ventas simples de catálogo; las ventas
+//      múltiples y los combos quedaban con el stock descontado para siempre).
+async function restaurarStockVenta(venta) {
+  if(!venta) return;
+  if(venta.esMultiple && venta.productosVenta?.length) {
+    for(const item of venta.productosVenta) {
+      if(!item.prodId) continue; // línea manual — no tiene stock que restaurar
+      const prod = DATA.inventario.find(p => p.id === item.prodId);
+      if(prod) await updateDoc(doc(db,'inventario',item.prodId), { stock: prod.stock + Number(item.cant||0) });
+    }
+  } else if(venta.esCombo && venta.productosCombo?.length) {
+    for(const item of venta.productosCombo) {
+      const prod = DATA.inventario.find(p => p.id === item.prodId);
+      if(prod) await updateDoc(doc(db,'inventario',item.prodId), { stock: prod.stock + Number(item.cant||0) });
+    }
+  } else if(venta.prodId && venta.cant) {
+    const prod = DATA.inventario.find(p => p.id === venta.prodId);
+    if(prod) await updateDoc(doc(db,'inventario',venta.prodId), { stock: prod.stock + Number(venta.cant) });
+  }
+}
+
+// 595. PAPELERA SIMPLE — al eliminar, el borrado real se retrasa unos
+// segundos y se puede deshacer desde un banner. Si eliminas otra cosa
+// mientras hay una eliminación pendiente, la anterior se confirma de una
+// vez (para no acumular varias "en el aire" a la vez).
+let pendienteEliminar = null; // { col, id, snapshot, timeoutId }
+
 window.eliminarDoc = async (col, id) => {
-  if(!confirm('¿Eliminar este registro? Esta acción no se puede deshacer.')) return;
+  if(!confirm('¿Eliminar este registro? Tendrás unos segundos para deshacerlo.')) return;
+  if(pendienteEliminar) await confirmarEliminacionPendiente();
+
+  const snapshot = DATA[col]?.find(x => x.id === id) || null;
+  pendienteEliminar = { col, id, snapshot, timeoutId: null };
+  mostrarBannerDeshacer('🗑️ Registro eliminado');
+  pendienteEliminar.timeoutId = setTimeout(confirmarEliminacionPendiente, 6000);
+};
+
+async function confirmarEliminacionPendiente() {
+  if(!pendienteEliminar) return;
+  const { col, id, snapshot, timeoutId } = pendienteEliminar;
+  clearTimeout(timeoutId);
+  pendienteEliminar = null;
+  ocultarBannerDeshacer();
 
   // 157. Si es una venta, devolvemos el stock al inventario antes de eliminar
   //      Esto corrige el problema donde eliminar una venta no restauraba el stock
-  if(col === 'ventas') {
-    const venta = DATA.ventas.find(v => v.id === id);
-    if(venta?.prodId && venta?.cant) {
-      const prod = DATA.inventario.find(p => p.id === venta.prodId);
-      if(prod) {
-        // Devolvemos las unidades vendidas al stock del producto
-        await updateDoc(doc(db,'inventario',venta.prodId), {
-          stock: prod.stock + Number(venta.cant)
-        });
-      }
-    }
-  }
+  if(col === 'ventas') await restaurarStockVenta(snapshot);
 
   await deleteDoc(doc(db, col, id));
   toast('Registro eliminado');
+}
+
+window.deshacerEliminacion = () => {
+  if(!pendienteEliminar) return;
+  clearTimeout(pendienteEliminar.timeoutId);
+  pendienteEliminar = null;
+  ocultarBannerDeshacer();
+  toast('↩️ Eliminación deshecha');
 };
+
+function mostrarBannerDeshacer(mensaje) {
+  let el = document.getElementById('undo-banner');
+  if(!el) {
+    el = document.createElement('div');
+    el.id = 'undo-banner';
+    el.style.cssText = 'position:fixed;bottom:20px;right:20px;background:var(--ink);color:#fff;padding:10px 14px;border-radius:10px;font-size:13px;font-weight:500;z-index:10000;display:flex;align-items:center;gap:12px;box-shadow:0 4px 12px rgba(0,0,0,.25)';
+    document.body.appendChild(el);
+  }
+  el.innerHTML = mensaje + ' <button onclick="deshacerEliminacion()" style="background:var(--lime-accent);color:var(--ink);border:none;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer">Deshacer</button>';
+  el.style.display = 'flex';
+}
+
+function ocultarBannerDeshacer() {
+  const el = document.getElementById('undo-banner');
+  if(el) el.style.display = 'none';
+}
+
+// 596. Si cierras/recargas la pestaña con una eliminación pendiente, la
+// confirmamos de una vez — evita que "no dio tiempo a que se borrara" se
+// confunda con un registro que sigue existiendo cuando en realidad ya no
+// se puede deshacer (el timeout no sobrevive a un reload).
+window.addEventListener('beforeunload', () => {
+  if(pendienteEliminar) confirmarEliminacionPendiente();
+});
 
 
 // ============================================================
