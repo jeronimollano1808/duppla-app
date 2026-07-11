@@ -5646,15 +5646,74 @@ async function generarGastosRecurrentesDelCiclo() {
 // 59. PÁGINA: PROVEEDORES
 // Fichas de proveedores con datos de contacto
 // ============================================================
+// 615. distDetalleId ya existía para Distribuidores — reutilizamos el mismo
+// patrón (toggle de historial expandible) para Proveedores.
+let provDetalleId = null;
+window.toggleDetalleProveedor = (id) => {
+  provDetalleId = provDetalleId === id ? null : id;
+  renderProveedores();
+};
+
 function renderProveedores() {
-  const cards = DATA.proveedores.map(p => `
-    <div class="list-card">
+  // 616. Para cada proveedor calculamos su historial real de pedidos —
+  // mismo tratamiento que ya tiene Distribuidores con Ventas.
+  const provData = DATA.proveedores.map(p => {
+    const pedidos = DATA.pedidos.filter(ped => ped.proveedorId === p.id);
+    const totalComprado = pedidos.reduce((s,ped) => s + Number(ped.total||0), 0);
+    const saldoPendiente = Math.round(pedidos.reduce((s,ped) => s + Number(ped.saldo||0), 0));
+    const sorted = [...pedidos].sort((a,b) => (b.fecha||'') > (a.fecha||'') ? 1 : -1);
+    const ultimo = sorted.length ? sorted[0] : null;
+    const diasDesdeUltimo = ultimo?.fecha ? Math.floor((new Date() - new Date(ultimo.fecha)) / 86400000) : null;
+    return { ...p, pedidos, totalComprado, saldoPendiente, diasDesdeUltimo };
+  });
+
+  const totalCompradoGeneral = provData.reduce((s,p) => s + p.totalComprado, 0);
+  const totalPorPagarGeneral = provData.reduce((s,p) => s + p.saldoPendiente, 0);
+
+  const resumenHtml = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px">
+      <div class="metric-card"><div class="metric-label">Proveedores</div><div class="metric-value" style="font-size:18px">${DATA.proveedores.length}</div><div class="metric-sub">registrados</div></div>
+      <div class="metric-card"><div class="metric-label">Total comprado</div><div class="metric-value" style="font-size:18px;color:var(--blue)">${fmt(totalCompradoGeneral)}</div><div class="metric-sub">histórico</div></div>
+      <div class="metric-card"><div class="metric-label">Por pagar</div><div class="metric-value" style="font-size:18px;color:${totalPorPagarGeneral>0?'var(--red)':'var(--green)'}">${fmt(totalPorPagarGeneral)}</div><div class="metric-sub">cuentas por pagar</div></div>
+    </div>`;
+
+  const cards = provData.map(p => {
+    const isOpen = provDetalleId === p.id;
+    let historialHtml = '';
+    if(isOpen) {
+      const ordenados = [...p.pedidos].sort((a,b) => (b.fecha||'') > (a.fecha||'') ? 1 : -1);
+      if(!ordenados.length) {
+        historialHtml = '<div style="padding:12px;color:var(--ink-3);font-size:12px;text-align:center">Sin pedidos registrados aún</div>';
+      } else {
+        const filas = ordenados.map(ped => {
+          const est = EST[ped.estado]||EST.pendiente;
+          const saldoPed = Number(ped.saldo||0);
+          return '<tr>'
+            + '<td style="color:var(--ink-3)">' + (ped.fecha||'') + '</td>'
+            + '<td><span class="status-chip ' + est.cls + '">' + est.l + '</span></td>'
+            + '<td style="font-weight:600;color:var(--lime)">' + fmt(ped.total) + '</td>'
+            + '<td>' + (saldoPed>0 ? '<span style="color:var(--red);font-weight:600">'+fmt(saldoPed)+'</span>' : '<span style="color:var(--green)">Pagado</span>') + '</td>'
+            + '<td>' + (saldoPed>0 ? '<button class="btn btn-xs" style="color:var(--amber);border-color:#FDE68A" onclick="abrirAbonoPedido(\''+ped.id+'\')">💰 Abonar</button>' : '') + '</td>'
+          + '</tr>';
+        }).join('');
+        historialHtml = '<div class="table-wrap" style="margin-top:12px"><table class="tbl">'
+          + '<thead><tr><th>Fecha</th><th>Estado</th><th>Total</th><th>Saldo</th><th></th></tr></thead>'
+          + '<tbody>' + filas + '</tbody></table></div>';
+      }
+    }
+
+    return `<div class="list-card">
       <div class="list-card-header">
         <div>
           <div class="list-card-title">${p.nombre}</div>
           <div class="list-card-sub">${p.pais||''}</div>
+          <div style="font-size:10px;color:var(--ink-3);margin-top:3px">${p.diasDesdeUltimo!=null ? 'Último pedido: hace '+p.diasDesdeUltimo+' día'+(p.diasDesdeUltimo!==1?'s':'') : 'Sin pedidos aún'}</div>
         </div>
-        <button class="btn btn-sm btn-danger" onclick="eliminarDoc('proveedores','${p.id}')">Eliminar</button>
+        <div style="text-align:right">
+          <div style="font-size:16px;font-weight:800;color:var(--blue)">${fmt(p.totalComprado)}</div>
+          <div style="font-size:11px;color:var(--ink-3)">${p.pedidos.length} pedido(s)</div>
+          ${p.saldoPendiente>0 ? `<div style="font-size:11px;color:var(--red);font-weight:600">Debes: ${fmt(p.saldoPendiente)}</div>` : ''}
+        </div>
       </div>
       ${(p.contacto||p.email||p.wa) ? `
         <div class="list-card-body">
@@ -5663,17 +5722,45 @@ function renderProveedores() {
           ${p.wa?`<div class="info-row">📱 ${p.wa}</div>`:''}
           ${p.notas?`<div class="info-row" style="color:var(--ink-3)">📝 ${p.notas}</div>`:''}
         </div>` : ''}
-    </div>`).join('');
+      <div class="list-card-actions">
+        <button class="btn btn-sm" onclick="toggleDetalleProveedor('${p.id}')">${isOpen?'▲ Ocultar':'▼ Ver pedidos ('+p.pedidos.length+')'}</button>
+        ${p.saldoPendiente>0 ? `<button class="btn btn-sm" style="color:#16A34A;border-color:#BBF7D0" onclick="abrirRecordatorioPagoProveedor('${p.id}')">💬 Recordatorio</button>` : ''}
+        <button class="btn btn-sm btn-danger" onclick="eliminarDoc('proveedores','${p.id}')">Eliminar</button>
+      </div>
+      ${historialHtml}
+    </div>`;
+  }).join('');
 
   document.getElementById('page-proveedores').innerHTML = `
     <div class="page-header">
       <div><div class="page-title">Proveedores</div><div class="page-sub">${DATA.proveedores.length} proveedores</div></div>
       <button class="btn btn-lime btn-sm" onclick="openModal('modal-proveedor')">+ Agregar proveedor</button>
     </div>
+    ${resumenHtml}
     ${DATA.proveedores.length ?
       `<div class="list-cards">${cards}</div>`
       : `<div class="card"><div class="empty-state"><div class="empty-state-icon">🚚</div><div class="empty-state-text">Sin proveedores</div></div></div>`}`;
 }
+
+// 617. Recordatorio de pago a un proveedor — simétrico al de Deudores, pero
+// al revés (nosotros le debemos a él). Reutiliza el mismo modal/WhatsApp.
+window.abrirRecordatorioPagoProveedor = (proveedorId) => {
+  const prov = DATA.proveedores.find(x => x.id === proveedorId);
+  if(!prov) return;
+  const pedidosDeuda = DATA.pedidos.filter(p => p.proveedorId === proveedorId && Number(p.saldo||0) > 0);
+  const totalDeuda = Math.round(pedidosDeuda.reduce((s,p) => s + Number(p.saldo||0), 0));
+  if(totalDeuda <= 0) { alert('No tienes saldo pendiente con ' + prov.nombre); return; }
+
+  const detalle = pedidosDeuda.map(p => '- Pedido ' + (p.fecha||'') + ': ' + fmt(p.saldo)).join('\n');
+  const mensaje = 'Hola ' + prov.nombre.split(' ')[0] + ', te escribo de DUPPLA. Tenemos pendiente contigo el pago de '
+    + fmt(totalDeuda) + ':\n\n' + detalle + '\n\n'
+    + 'Te confirmamos apenas quede listo, ¡gracias!';
+
+  document.getElementById('rec-cliente').value = prov.nombre;
+  document.getElementById('rec-telefono').value = prov.wa || '';
+  document.getElementById('rec-mensaje').value = mensaje;
+  openModal('modal-recordatorio');
+};
 
 window.guardarProveedor = async () => {
   const nombre = document.getElementById('pr-nombre').value.trim();
