@@ -1509,8 +1509,12 @@ body{
 <div class="modal-bg" id="modal-pedido">
   <div class="modal">
     <div class="modal-header">
-      <span class="modal-title">Nuevo pedido</span>
+      <span class="modal-title" id="modal-pedido-title">Nuevo pedido</span>
       <button class="modal-close" onclick="closeModal('modal-pedido')">✕</button>
+    </div>
+    <input type="hidden" id="pe-id" value="">
+    <div id="pe-edit-warning" style="display:none;background:var(--amber-bg);border:1px solid #FDE68A;border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:12px;color:#92400E">
+      ⚠️ Este pedido ya fue recibido — editar aquí corrige el registro, pero NO actualiza los lotes/stock que ya ingresaron al inventario.
     </div>
     <div class="f-row">
       <!-- 267. Proveedor: select si hay proveedores, campo de texto si no hay ninguno -->
@@ -1542,10 +1546,53 @@ body{
       </div>
       <div class="f-group"><label class="f-label">Costo de flete ($)</label><input type="number" id="pe-flete" class="f-input" value="0" oninput="recalcularTotalPedido()"></div>
     </div>
+    <!-- 606. ¿Cuánto pagaste al proveedor? — antes se asumía SIEMPRE pago
+         completo, así que no había forma de dejar un pedido a crédito o
+         con abono parcial (cuentas por pagar). -->
+    <div class="f-group">
+      <label class="f-label">¿Cuánto le pagaste al proveedor?</label>
+      <div style="display:flex;gap:6px">
+        <button type="button" id="pe-pago-completo" onclick="setEstadoPagoPedido('completo')"
+          style="flex:1;padding:8px 4px;border-radius:var(--radius);border:2px solid var(--ink);background:var(--ink);color:#fff;font-size:12px;font-weight:600;cursor:pointer">
+          ✅ Completo
+        </button>
+        <button type="button" id="pe-pago-parcial" onclick="setEstadoPagoPedido('parcial')"
+          style="flex:1;padding:8px 4px;border-radius:var(--radius);border:2px solid var(--border);background:var(--surface-2);color:var(--ink-2);font-size:12px;font-weight:600;cursor:pointer">
+          🟡 Aboné parte
+        </button>
+        <button type="button" id="pe-pago-credito" onclick="setEstadoPagoPedido('credito')"
+          style="flex:1;padding:8px 4px;border-radius:var(--radius);border:2px solid var(--border);background:var(--surface-2);color:var(--ink-2);font-size:12px;font-weight:600;cursor:pointer">
+          🔴 Nada (crédito)
+        </button>
+      </div>
+    </div>
+    <div class="f-group" id="pe-abono-grupo" style="display:none">
+      <label class="f-label">¿Cuánto pagaste ahora? ($)</label>
+      <input type="number" id="pe-pagado" class="f-input" oninput="calcSaldoPedido()">
+      <div id="pe-saldo-preview" style="font-size:11px;margin-top:3px;font-weight:600"></div>
+    </div>
     <div class="f-group"><label class="f-label">Notas</label><input type="text" id="pe-notas" class="f-input" placeholder="Observaciones, fechas estimadas..."></div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('modal-pedido')">Cancelar</button>
-      <button class="btn btn-lime" onclick="guardarPedido()">Crear pedido</button>
+      <button class="btn btn-lime" id="btn-guardar-pedido" onclick="guardarPedido()">Crear pedido</button>
+    </div>
+  </div>
+</div>
+
+<!-- 607. MODAL: ABONAR SALDO PENDIENTE A UN PROVEEDOR -->
+<div class="modal-bg" id="modal-abono-pedido">
+  <div class="modal" style="max-width:380px">
+    <div class="modal-header">
+      <span class="modal-title" id="ap-titulo">Abonar a proveedor</span>
+      <button class="modal-close" onclick="closeModal('modal-abono-pedido')">✕</button>
+    </div>
+    <input type="hidden" id="ap-pedido-id" value="">
+    <div id="ap-info" style="background:var(--surface-2);border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:13px;color:var(--ink-2)"></div>
+    <div class="f-group"><label class="f-label">¿Cuánto vas a abonar? ($)</label><input type="number" id="ap-valor" class="f-input"></div>
+    <div class="f-group"><label class="f-label">Fecha</label><input type="date" id="ap-fecha" class="f-input"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-abono-pedido')">Cancelar</button>
+      <button class="btn btn-lime" onclick="guardarAbonoPedido()">Registrar abono</button>
     </div>
   </div>
 </div>
@@ -5655,12 +5702,23 @@ const EST = {
 };
 
 function renderPedidos() {
+  // 613. Cuentas por pagar — simétrico a Deudores, pero con proveedores.
+  const porPagar = DATA.pedidos.filter(p => Number(p.saldo||0) > 0);
+  const totalPorPagar = porPagar.reduce((s,p) => s + Number(p.saldo||0), 0);
+  const resumenPorPagarHtml = totalPorPagar > 0 ? `
+    <div class="metric-card" style="margin-bottom:16px;max-width:260px">
+      <div class="metric-label">Por pagar a proveedores</div>
+      <div class="metric-value" style="font-size:18px;color:var(--red)">${fmt(totalPorPagar)}</div>
+      <div class="metric-sub">${porPagar.length} pedido(s) con saldo</div>
+    </div>` : '';
+
   const cards = DATA.pedidos.map(p => {
     const est = EST[p.estado]||EST.pendiente;
     const otrosEst = Object.entries(EST)
       .filter(([k])=>k!==p.estado)
       .map(([k,v])=>`<button class="btn btn-sm" onclick="cambiarEstadoPedido('${p.id}','${k}')">→ ${v.l}</button>`)
       .join('');
+    const saldo = Number(p.saldo||0);
     return `<div class="list-card">
       <div class="list-card-header">
         <div>
@@ -5670,6 +5728,7 @@ function renderPedidos() {
         </div>
         <div style="text-align:right">
           <div style="font-size:20px;font-weight:700;color:var(--lime)">${fmt(p.total)}</div>
+          ${saldo > 0 ? `<div style="font-size:11px;color:var(--red);font-weight:600">Debes: ${fmt(saldo)}</div>` : ''}
         </div>
       </div>
       ${p.prods||p.notas ? `
@@ -5679,6 +5738,8 @@ function renderPedidos() {
         </div>` : ''}
       <div class="list-card-actions">
         ${otrosEst}
+        <button class="btn btn-sm" onclick="editarPedido('${p.id}')">✏️ Editar</button>
+        ${saldo > 0 ? `<button class="btn btn-sm" style="color:var(--amber);border-color:#FDE68A" onclick="abrirAbonoPedido('${p.id}')">💰 Abonar</button>` : ''}
         <button class="btn btn-sm btn-danger" onclick="eliminarDoc('pedidos','${p.id}')">Eliminar</button>
       </div>
     </div>`;
@@ -5689,6 +5750,7 @@ function renderPedidos() {
       <div><div class="page-title">Pedidos a proveedores</div><div class="page-sub">${DATA.pedidos.length} pedidos</div></div>
       <button class="btn btn-lime btn-sm" onclick="abrirModalPedido()">+ Nuevo pedido</button>
     </div>
+    ${resumenPorPagarHtml}
     ${DATA.pedidos.length ?
       `<div class="list-cards">${cards}</div>`
       : `<div class="card"><div class="empty-state"><div class="empty-state-icon">📋</div><div class="empty-state-text">Sin pedidos registrados</div></div></div>`}`;
@@ -5697,30 +5759,103 @@ function renderPedidos() {
 // 475. peLineas — estado de las líneas de productos del pedido en curso
 let peLineas = [];
 
-window.abrirModalPedido = () => {
-  document.getElementById('pe-fecha').value = today();
-  document.getElementById('pe-prods').value = '';
-  document.getElementById('pe-total').value = '';
-  document.getElementById('pe-flete').value = '0';
-  document.getElementById('pe-notas').value = '';
-  document.getElementById('prev-pe-total').textContent = '';
-  peLineas = [{ prodId:'', cant:1, costo:0, busqueda:'' }];
-  renderLineasPedido();
-
+// 591. Llena el selector/campo de proveedor — reutilizado por crear y editar
+function llenarProveedorPedido(proveedorIdSeleccionado, proveedorNombreManual) {
   const sel = document.getElementById('pe-prov');
-
-  // 268. Si hay proveedores mostramos el select, si no mostramos campo de texto libre
   if(DATA.proveedores.length > 0) {
     document.getElementById('pe-prov-grupo').style.display = 'block';
     document.getElementById('pe-prov-manual-grupo').style.display = 'none';
     sel.innerHTML = '<option value="">— Selecciona —</option>' +
       DATA.proveedores.map(p=>`<option value="${p.id}" data-nombre="${p.nombre}">${p.nombre}</option>`).join('');
+    if(proveedorIdSeleccionado) sel.value = proveedorIdSeleccionado;
   } else {
     // 269. Sin proveedores: campo de texto para escribir el nombre directamente
     document.getElementById('pe-prov-grupo').style.display = 'none';
     document.getElementById('pe-prov-manual-grupo').style.display = 'block';
-    document.getElementById('pe-prov-manual').value = '';
+    document.getElementById('pe-prov-manual').value = proveedorNombreManual || '';
   }
+}
+
+// 608. Estado de pago del pedido — antes se asumía SIEMPRE pago completo al
+// proveedor, por lo que no había forma de dejar un pedido a crédito o con
+// abono parcial (cuentas por pagar).
+let estadoPagoPedidoActual = 'completo'; // 'completo' | 'parcial' | 'credito'
+
+window.setEstadoPagoPedido = (estado) => {
+  estadoPagoPedidoActual = estado;
+  ['completo','parcial','credito'].forEach(k => {
+    const btn = document.getElementById('pe-pago-' + k);
+    if(!btn) return;
+    const activo = k === estado;
+    btn.style.background = activo ? 'var(--ink)' : 'var(--surface-2)';
+    btn.style.color = activo ? '#fff' : 'var(--ink-2)';
+    btn.style.borderColor = activo ? 'var(--ink)' : 'var(--border)';
+  });
+  const grupo = document.getElementById('pe-abono-grupo');
+  if(grupo) grupo.style.display = estado === 'parcial' ? 'block' : 'none';
+  calcSaldoPedido();
+};
+
+window.calcSaldoPedido = () => {
+  const preview = document.getElementById('pe-saldo-preview');
+  if(!preview) return;
+  const total = Number(document.getElementById('pe-total').value) || 0;
+  const pagado = Number(document.getElementById('pe-pagado').value) || 0;
+  const saldo = Math.max(0, total - pagado);
+  preview.textContent = total > 0 ? 'Le quedas debiendo: ' + fmt(saldo) : '';
+  preview.style.color = saldo > 0 ? 'var(--amber)' : 'var(--green)';
+};
+
+window.abrirModalPedido = () => {
+  document.getElementById('pe-id').value = '';
+  document.getElementById('modal-pedido-title').textContent = 'Nuevo pedido';
+  document.getElementById('btn-guardar-pedido').textContent = 'Crear pedido';
+  document.getElementById('pe-edit-warning').style.display = 'none';
+  document.getElementById('pe-fecha').value = today();
+  document.getElementById('pe-prods').value = '';
+  document.getElementById('pe-total').value = '';
+  document.getElementById('pe-flete').value = '0';
+  document.getElementById('pe-notas').value = '';
+  document.getElementById('pe-pagado').value = '';
+  document.getElementById('prev-pe-total').textContent = '';
+  peLineas = [{ prodId:'', cant:1, costo:0, busqueda:'' }];
+  renderLineasPedido();
+  llenarProveedorPedido(null, null);
+  setEstadoPagoPedido('completo');
+  openModal('modal-pedido');
+};
+
+// 592. Editar pedido existente — reutiliza el mismo modal de crear. Si el
+// pedido ya está "recibido", mostramos una advertencia: los cambios NO
+// tocan los lotes/stock que ya se procesaron (ver procesarRecepcionPedido).
+window.editarPedido = (id) => {
+  const p = DATA.pedidos.find(x => x.id === id);
+  if(!p) return;
+
+  document.getElementById('pe-id').value = id;
+  document.getElementById('modal-pedido-title').textContent = 'Editar pedido';
+  document.getElementById('btn-guardar-pedido').textContent = 'Guardar cambios';
+  document.getElementById('pe-edit-warning').style.display = p.estado === 'recibido' ? 'block' : 'none';
+  document.getElementById('pe-fecha').value = p.fecha || today();
+  document.getElementById('pe-prods').value = p.prods || '';
+  document.getElementById('pe-flete').value = p.flete || 0;
+  document.getElementById('pe-notas').value = p.notas || '';
+
+  peLineas = (p.productosPedido && p.productosPedido.length)
+    ? p.productosPedido.map(item => ({ prodId:item.prodId, cant:item.cant, costo:item.costo, busqueda: item.nombre || '' }))
+    : [{ prodId:'', cant:1, costo:0, busqueda:'' }];
+  renderLineasPedido();
+  recalcularTotalPedido();
+
+  // 609. Reconstruimos el estado de pago desde pagado/saldo guardados —
+  // pedidos viejos sin estos campos se tratan como pagados completos (el
+  // comportamiento que ya asumía la app antes de esta función).
+  const saldoExistente = Number(p.saldo||0);
+  const pagadoExistente = p.pagado != null ? Number(p.pagado) : Number(p.total||0);
+  document.getElementById('pe-pagado').value = saldoExistente > 0 ? pagadoExistente : '';
+  setEstadoPagoPedido(saldoExistente <= 0 ? 'completo' : (pagadoExistente > 0 ? 'parcial' : 'credito'));
+
+  llenarProveedorPedido(p.proveedorId, p.proveedorNombre);
   openModal('modal-pedido');
 };
 
@@ -5920,25 +6055,71 @@ window.guardarPedido = async () => {
 
   const total = Number(document.getElementById('pe-total').value)||0;
   const fecha = document.getElementById('pe-fecha').value;
-  const pedidoRef = await addDoc(collection(db,'pedidos'), {
+
+  // 610. Cuánto se le pagó realmente al proveedor — antes se asumía SIEMPRE
+  // el total. El gasto de Importación refleja "pagado" (la plata que de
+  // verdad salió), no el total del pedido; el saldo queda como cuenta por pagar.
+  let pagado;
+  if(estadoPagoPedidoActual === 'credito') {
+    pagado = 0;
+  } else if(estadoPagoPedidoActual === 'parcial') {
+    pagado = Number(document.getElementById('pe-pagado').value) || 0;
+    if(pagado <= 0) { alert('Ingresa cuánto pagaste, o marca "Nada" si no pagaste nada'); return; }
+    if(pagado >= total) { alert('Si pagaste todo, marca "Completo"'); return; }
+  } else {
+    pagado = total;
+  }
+  const saldo = Math.max(0, total - pagado);
+
+  const datosPedido = {
     proveedorId, proveedorNombre,
     fecha,
     productosPedido, // 483. Líneas estructuradas — usadas al marcar "Entregado"
     prods: document.getElementById('pe-prods').value, // Notas adicionales en texto libre
     total, flete: Number(document.getElementById('pe-flete').value)||0,
     notas: document.getElementById('pe-notas').value,
-    estado: 'pendiente', createdAt: serverTimestamp()
-  });
+    pagado, saldo
+  };
 
-  // 590. Los pedidos a proveedor se pagan por anticipado — se registran
-  // como gasto (categoría Importación) al crear el pedido, no al recibirlo.
-  // "total" ya incluye el flete (ver recalcularTotalPedido), así que no se suma dos veces.
-  await addDoc(collection(db,'gastos'), {
-    fecha, cat:'importacion', desc:'Pedido a ' + proveedorNombre,
-    valor: total, pedidoId: pedidoRef.id, createdAt: serverTimestamp()
-  });
+  const pedidoId = document.getElementById('pe-id').value;
 
-  await pushNotif('📋 Nuevo pedido', `${proveedorNombre} · ${fmt(total)}`, 'pedido', {seccion:'pedidos'});
+  if(pedidoId) {
+    // 593. Editar pedido existente — NO tocamos "estado" (lo maneja
+    // cambiarEstadoPedido) ni reprocesamos lotes ya recibidos.
+    await updateDoc(doc(db,'pedidos',pedidoId), datosPedido);
+    // Si este pedido ya había generado su gasto de Importación (el original,
+    // no los abonos posteriores — ver guardarAbonoPedido), lo sincronizamos
+    // para que el valor no quede desfasado del pedido corregido. Si nunca
+    // se creó (nació 100% a crédito) y ahora sí quedó algo pagado, lo creamos.
+    const gastoVinculado = DATA.gastos.find(g => g.pedidoId === pedidoId && !g.esAbonoPedido);
+    if(gastoVinculado) {
+      await updateDoc(doc(db,'gastos',gastoVinculado.id), {
+        fecha, desc:'Pedido a ' + proveedorNombre, valor: pagado
+      });
+    } else if(pagado > 0) {
+      await addDoc(collection(db,'gastos'), {
+        fecha, cat:'importacion', desc:'Pedido a ' + proveedorNombre,
+        valor: pagado, pedidoId, createdAt: serverTimestamp()
+      });
+    }
+    await pushNotif('📋 Pedido editado', `${proveedorNombre} · ${fmt(total)}`, 'pedido', {seccion:'pedidos'});
+  } else {
+    const pedidoRef = await addDoc(collection(db,'pedidos'), { ...datosPedido, estado:'pendiente', createdAt: serverTimestamp() });
+
+    // 590. Los pedidos a proveedor se pagan por anticipado — se registran
+    // como gasto (categoría Importación) al crear el pedido, no al recibirlo.
+    // 610. El gasto es por lo PAGADO, no por el total — si quedó 100% a
+    // crédito (pagado=0) no creamos un gasto de $0; el gasto real nace
+    // cuando se registre el primer abono (guardarAbonoPedido).
+    if(pagado > 0) {
+      await addDoc(collection(db,'gastos'), {
+        fecha, cat:'importacion', desc:'Pedido a ' + proveedorNombre,
+        valor: pagado, pedidoId: pedidoRef.id, createdAt: serverTimestamp()
+      });
+    }
+
+    await pushNotif('📋 Nuevo pedido', `${proveedorNombre} · ${fmt(total)}`, 'pedido', {seccion:'pedidos'});
+  }
   closeModal('modal-pedido');
 };
 
@@ -5998,6 +6179,50 @@ window.cambiarEstadoPedido = async (id, estado) => {
     await pushNotif('📋 Pedido actualizado', `${p.proveedorNombre} → ${EST[estado]?.l||estado}`, 'pedido', {seccion:'pedidos', id});
     if(estado === 'recibido' && !yaEstabaRecibido) await procesarRecepcionPedido(p);
   }
+};
+
+// ============================================================
+// 611. CUENTAS POR PAGAR A PROVEEDORES — abonar el saldo pendiente de un
+// pedido que quedó a crédito o con pago parcial (ver guardarPedido, 610).
+// ============================================================
+window.abrirAbonoPedido = (id) => {
+  const p = DATA.pedidos.find(x => x.id === id);
+  if(!p) return;
+  const saldo = Number(p.saldo||0);
+  document.getElementById('ap-pedido-id').value = id;
+  document.getElementById('ap-titulo').textContent = 'Abonar — ' + p.proveedorNombre;
+  document.getElementById('ap-info').innerHTML =
+    'Saldo pendiente: <strong>' + fmt(saldo) + '</strong> de ' + fmt(p.total||0);
+  document.getElementById('ap-valor').value = '';
+  document.getElementById('ap-fecha').value = today();
+  openModal('modal-abono-pedido');
+};
+
+window.guardarAbonoPedido = async () => {
+  const id = document.getElementById('ap-pedido-id').value;
+  const p = DATA.pedidos.find(x => x.id === id);
+  if(!p) return;
+
+  const valor = Number(document.getElementById('ap-valor').value);
+  const saldoActual = Number(p.saldo||0);
+  if(!valor || valor <= 0) { alert('Ingresa un valor válido'); return; }
+  if(valor > saldoActual) { alert('No puedes abonar más de lo que debes (' + fmt(saldoActual) + ')'); return; }
+
+  const fecha = document.getElementById('ap-fecha').value || today();
+  const nuevoPagado = Number(p.pagado||0) + valor;
+  const nuevoSaldo = Math.max(0, saldoActual - valor);
+  await updateDoc(doc(db,'pedidos',id), { pagado: nuevoPagado, saldo: nuevoSaldo });
+
+  // 612. Marcado con esAbonoPedido para no confundirlo con el gasto
+  // "original" del pedido cuando este se edita (ver guardarPedido).
+  await addDoc(collection(db,'gastos'), {
+    fecha, cat:'importacion', desc:'Abono pedido a ' + p.proveedorNombre,
+    valor, pedidoId:id, esAbonoPedido:true, createdAt: serverTimestamp()
+  });
+
+  await pushNotif('💸 Abono a proveedor', p.proveedorNombre + ' · ' + fmt(valor), 'pedido', {seccion:'pedidos'});
+  closeModal('modal-abono-pedido');
+  toast('✅ Abono registrado');
 };
 
 // ============================================================
