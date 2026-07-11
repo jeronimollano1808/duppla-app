@@ -768,6 +768,8 @@ body{
     <div class="page" id="page-consignacion"></div>
     <!-- 328. Página de distribuidores -->
     <div class="page" id="page-distribuidores"></div>
+    <!-- 622. Página de papelera -->
+    <div class="page" id="page-papelera"></div>
 
 <!-- 329. MODAL: NUEVO / EDITAR DISTRIBUIDOR -->
 <div class="modal-bg" id="modal-distribuidor">
@@ -1949,7 +1951,7 @@ body{
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getFirestore, collection, addDoc, deleteDoc,
-  doc, updateDoc, onSnapshot, query, orderBy,
+  doc, updateDoc, setDoc, onSnapshot, query, orderBy,
   serverTimestamp, limit
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
@@ -1991,7 +1993,8 @@ let DATA = {
   distribuidores:[],  // 326. distribuidores: gimnasios y distribuidores vinculados
   cierres:[],  // 415. cierres: snapshots mensuales inmutables (corte contable)
   tiendasConsignacion:[], consignaciones:[],  // 488. consignación física en tiendas
-  gastosRecurrentes:[]  // 597. plantillas de gastos fijos mensuales (arriendo, nómina, etc.)
+  gastosRecurrentes:[],  // 597. plantillas de gastos fijos mensuales (arriendo, nómina, etc.)
+  papelera:[]  // 619. registros eliminados, recuperables por 7 días
 };
 let currentPage = 'dashboard';  // Página activa
 let ajusteProductoId = null;    // ID del producto que se está ajustando
@@ -2390,6 +2393,8 @@ const MENU = [
   { id:'deudores', label:'Deudores', ico:'💳', group:'Negocio' },
   // 489. Consignación — tiendas físicas que tienen productos sin haberlos comprado aún
   { id:'consignacion', label:'Consignación', ico:'🏪', group:'Negocio' },
+  // 622. Papelera — registros eliminados recuperables por 7 días
+  { id:'papelera', label:'Papelera', ico:'🗑️', group:'Operaciones' },
 ];
 
 // ============================================================
@@ -2452,7 +2457,7 @@ document.getElementById('li-pass')?.addEventListener('keydown', e => {
 // Cada cambio en Firebase actualiza DATA y redibuja la página
 // ============================================================
 function startListeners() {
-  const cols = ['ventas','inventario','gastos','proveedores','pedidos','metas','combos','consumos','distribuidores','cierres','tiendasConsignacion','consignaciones','gastosRecurrentes'];
+  const cols = ['ventas','inventario','gastos','proveedores','pedidos','metas','combos','consumos','distribuidores','cierres','tiendasConsignacion','consignaciones','gastosRecurrentes','papelera'];
   cols.forEach(col => {
     const q = query(collection(db, col), orderBy('createdAt','desc'));
     onSnapshot(q, snap => {
@@ -2472,6 +2477,9 @@ function startListeners() {
       //      cargamos/actualizamos las plantillas — idempotente por
       //      ultimoMesGenerado, así que no duplica aunque se dispare varias veces.
       if(col === 'gastosRecurrentes') generarGastosRecurrentesDelCiclo();
+      // 620. Purga automática de la papelera — registros de más de 7 días
+      //      se borran definitivamente (ya cumplieron su plazo de recuperación).
+      if(col === 'papelera') limpiarPapeleraVieja();
     });
   });
   // Oyente especial para notificaciones (últimas 30)
@@ -2540,7 +2548,8 @@ function renderPage(id) {
     pedidos:renderPedidos, metas:renderMetas, combos:renderCombos,
     deudores:renderDeudores,
     distribuidores:renderDistribuidores,
-    consignacion:renderConsignacion
+    consignacion:renderConsignacion,
+    papelera:renderPapelera
   };
   if(renders[id]) renders[id]();
 }
@@ -7123,10 +7132,21 @@ async function confirmarEliminacionPendiente() {
 
   // 157. Si es una venta, devolvemos el stock al inventario antes de eliminar
   //      Esto corrige el problema donde eliminar una venta no restauraba el stock
+  //      621. OJO: esto pasa AHORA, no al vencer los 7 días de la papelera — si
+  //      restauras el registro desde la papelera después, el stock/gasto que ya
+  //      se revirtió no se vuelve a descontar solo (hay que ajustarlo a mano).
   if(col === 'ventas') await restaurarStockVenta(snapshot);
 
+  // 619. En vez de borrar para siempre, guardamos una copia en 'papelera'
+  // por 7 días (ver limpiarPapeleraVieja) para poder restaurarla.
+  if(snapshot) {
+    await addDoc(collection(db,'papelera'), {
+      coleccion: col, datos: snapshot, createdAt: serverTimestamp()
+    });
+  }
+
   await deleteDoc(doc(db, col, id));
-  toast('Registro eliminado');
+  toast('Registro eliminado — disponible en Papelera por 7 días');
 }
 
 window.deshacerEliminacion = () => {
@@ -7161,6 +7181,102 @@ function ocultarBannerDeshacer() {
 window.addEventListener('beforeunload', () => {
   if(pendienteEliminar) confirmarEliminacionPendiente();
 });
+
+// ============================================================
+// 622. PÁGINA: PAPELERA — registros eliminados en los últimos 7 días,
+// recuperables con un clic. Pasado ese plazo se purgan automáticamente.
+// ============================================================
+const PAPELERA_DIAS_RETENCION = 7;
+const PAPELERA_LABELS = {
+  ventas:'Venta', inventario:'Producto', gastos:'Gasto', proveedores:'Proveedor',
+  pedidos:'Pedido', metas:'Meta', combos:'Combo', consumos:'Consumo',
+  distribuidores:'Distribuidor', tiendasConsignacion:'Tienda consignación',
+  consignaciones:'Consignación', gastosRecurrentes:'Gasto recurrente'
+};
+
+// 623. Descripción legible del registro borrado — cada colección tiene
+// campos distintos, así que armamos algo reconocible caso por caso.
+function describirRegistroPapelera(coleccion, datos) {
+  if(!datos) return 'Sin datos';
+  if(coleccion === 'ventas') return (datos.producto||'Venta') + (datos.cliente?' — '+datos.cliente:'') + ' · ' + fmt(datos.total||0);
+  if(coleccion === 'inventario') return datos.nombre || 'Producto';
+  if(coleccion === 'gastos') return (datos.desc||'Gasto') + ' · ' + fmt(datos.valor||0);
+  if(coleccion === 'pedidos') return (datos.proveedorNombre||'Pedido') + ' · ' + fmt(datos.total||0);
+  if(coleccion === 'proveedores' || coleccion === 'distribuidores' || coleccion === 'tiendasConsignacion') return datos.nombre || 'Registro';
+  if(coleccion === 'combos') return '🎁 ' + (datos.nombre||'Combo');
+  if(coleccion === 'metas') return 'Meta ' + (datos.mes||'');
+  if(coleccion === 'gastosRecurrentes') return (datos.desc||'Gasto recurrente') + ' · ' + fmt(datos.valor||0) + '/mes';
+  return datos.nombre || datos.desc || datos.producto || 'Registro';
+}
+
+// 624. Purga silenciosa de la papelera vencida — mismo guard anti
+// re-entrancia que generarGastosRecurrentesDelCiclo, por la misma razón
+// (cada deleteDoc dispara un nuevo onSnapshot que podría re-llamar esto).
+let limpiandoPapelera = false;
+async function limpiarPapeleraVieja() {
+  if(limpiandoPapelera) return;
+  limpiandoPapelera = true;
+  try {
+    const ahora = Date.now();
+    for(const item of DATA.papelera) {
+      const creadoMs = (item.createdAt?.seconds||0) * 1000;
+      if(creadoMs === 0) continue; // aún no confirma el servidor, esperamos al próximo snapshot
+      const dias = (ahora - creadoMs) / 86400000;
+      if(dias > PAPELERA_DIAS_RETENCION) await deleteDoc(doc(db,'papelera',item.id));
+    }
+  } finally {
+    limpiandoPapelera = false;
+  }
+}
+
+function renderPapelera() {
+  const items = [...DATA.papelera].sort((a,b) => (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0));
+  const rows = items.map(item => {
+    const creadoMs = (item.createdAt?.seconds||0) * 1000;
+    const diasTranscurridos = creadoMs ? Math.floor((Date.now() - creadoMs) / 86400000) : 0;
+    const diasRestantes = Math.max(0, PAPELERA_DIAS_RETENCION - diasTranscurridos);
+    return `<div class="list-card">
+      <div class="list-card-header">
+        <div>
+          <div class="list-card-title">${PAPELERA_LABELS[item.coleccion]||item.coleccion}</div>
+          <div class="list-card-sub">${describirRegistroPapelera(item.coleccion, item.datos)}</div>
+          <div style="font-size:10px;color:var(--ink-3);margin-top:3px">Se borra definitivo en ${diasRestantes} día${diasRestantes!==1?'s':''}</div>
+        </div>
+      </div>
+      <div class="list-card-actions">
+        <button class="btn btn-sm btn-lime" onclick="restaurarDePapelera('${item.id}')">↩️ Restaurar</button>
+        <button class="btn btn-sm btn-danger" onclick="purgarDePapelera('${item.id}')">Eliminar definitivo</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('page-papelera').innerHTML = `
+    <div class="page-header">
+      <div><div class="page-title">Papelera</div><div class="page-sub">${items.length} registro(s) — se guardan ${PAPELERA_DIAS_RETENCION} días</div></div>
+    </div>
+    ${items.length ?
+      `<div class="list-cards">${rows}</div>`
+      : `<div class="card"><div class="empty-state"><div class="empty-state-icon">🗑️</div><div class="empty-state-text">La papelera está vacía</div></div></div>`}`;
+}
+
+window.restaurarDePapelera = async (papeleraId) => {
+  const item = DATA.papelera.find(x => x.id === papeleraId);
+  if(!item) return;
+  // 625. Restauramos con el MISMO id original (setDoc, no addDoc) para que
+  // cualquier otra colección que lo referenciaba por id (ej. pedidoId en
+  // gastos, prodId en ventas) lo siga encontrando igual que antes de borrarlo.
+  const { id: idOriginal, ...datosSinId } = item.datos || {};
+  if(!idOriginal) { alert('Este registro no tiene ID original — no se puede restaurar automáticamente'); return; }
+  await setDoc(doc(db, item.coleccion, idOriginal), datosSinId);
+  await deleteDoc(doc(db,'papelera',papeleraId));
+  toast('✅ Registro restaurado');
+};
+
+window.purgarDePapelera = async (papeleraId) => {
+  if(!confirm('¿Eliminar definitivamente? Ya no se podrá recuperar.')) return;
+  await deleteDoc(doc(db,'papelera',papeleraId));
+  toast('Eliminado definitivamente');
+};
 
 
 // ============================================================
