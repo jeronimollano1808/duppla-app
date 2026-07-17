@@ -1047,9 +1047,10 @@ body{
 <div class="modal-bg" id="modal-venta">
   <div class="modal">
     <div class="modal-header">
-      <span class="modal-title">Registrar venta</span>
+      <span class="modal-title" id="modal-venta-title">Registrar venta</span>
       <button class="modal-close" onclick="closeModal('modal-venta')">✕</button>
     </div>
+    <input type="hidden" id="v-edit-id" value="">
     <div class="f-row">
       <div class="f-group"><label class="f-label">Fecha *</label><input type="date" id="v-fecha" class="f-input"></div>
       <div class="f-group"><label class="f-label">Canal</label>
@@ -1061,8 +1062,10 @@ body{
       </div>
     </div>
 
-    <!-- 271. Toggle: inventario / manual / combo -->
-    <div style="display:flex;gap:8px;margin-bottom:12px">
+    <!-- 271. Toggle: inventario / manual / combo — 629. oculto al editar una
+         venta múltiple existente (el modo se fuerza a "inventario" para no
+         perder las líneas ya cargadas) -->
+    <div style="display:flex;gap:8px;margin-bottom:12px" id="v-modo-toggle">
       <button type="button" id="btn-tipo-inv" onclick="setTipoProducto('inventario')"
         style="flex:1;padding:8px;border-radius:var(--radius);border:2px solid var(--ink);background:var(--ink);color:#fff;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">
         📦 Inventario
@@ -1168,7 +1171,7 @@ body{
     <div class="f-group"><label class="f-label">Nota (opcional)</label><input type="text" id="v-nota" class="f-input" placeholder="Referencia adicional"></div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('modal-venta')">Cancelar</button>
-      <button class="btn btn-lime" onclick="guardarVenta()">Registrar venta</button>
+      <button class="btn btn-lime" id="btn-guardar-venta" onclick="guardarVenta()">Registrar venta</button>
     </div>
   </div>
 </div>
@@ -3459,6 +3462,12 @@ window.abrirModalVenta = () => {
   openModal('modal-venta');
 
   setTimeout(() => {
+    // 630. Reset de modo creación — por si el modal quedó en modo edición
+    // de una venta múltiple (ver editarVentaMultiple)
+    document.getElementById('v-edit-id').value = '';
+    document.getElementById('modal-venta-title').textContent = 'Registrar venta';
+    document.getElementById('btn-guardar-venta').textContent = 'Registrar venta';
+    document.getElementById('v-modo-toggle').style.display = 'flex';
     document.getElementById('v-fecha').value = today();
     document.getElementById('v-pagado').value = '';
     document.getElementById('v-saldo').value = '';
@@ -3860,6 +3869,12 @@ window.calcSaldo = () => {
 };
 
 window.guardarVenta = async () => {
+  // 634. Modo edición (ver editarVentaMultiple) — mismo modal de "Nueva
+  // venta", pero actualiza la venta existente en vez de crear una nueva.
+  const editId = document.getElementById('v-edit-id')?.value || '';
+  const ventaOriginal = editId ? DATA.ventas.find(v => v.id === editId) : null;
+  if(editId && !ventaOriginal) { alert('La venta que estás editando ya no existe (puede que se haya eliminado)'); return; }
+
   const fecha = document.getElementById('v-fecha').value;
   const canal = document.getElementById('v-canal').value;
   const total = Number(document.getElementById('v-total').value);
@@ -3879,6 +3894,10 @@ window.guardarVenta = async () => {
   const esManual = document.getElementById('seccion-manual').style.display !== 'none';
 
   if(esManual) {
+    // 635. El modo manual no es alcanzable mientras se edita una venta
+    // múltiple (el toggle queda oculto) — si de alguna forma llega aquí,
+    // evitamos crear una venta duplicada en vez de actualizar la original.
+    if(editId) { alert('No se puede cambiar a modo manual mientras editas esta venta'); return; }
     // Modo manual — un solo producto libre
     const nombreManual = document.getElementById('v-prod-manual').value.trim();
     const cant = Number(document.getElementById('v-cant')?.value)||1;
@@ -3894,6 +3913,16 @@ window.guardarVenta = async () => {
     await pushNotif('💰 Nueva venta', nombreManual + (cliente?' — '+cliente:'') + ' · ' + fmt(total), 'venta', {seccion:'ventas'});
 
   } else {
+    // 636. Si estamos editando, devolvemos primero el stock de la venta
+    // original — así las validaciones de abajo ven el stock real
+    // disponible, sin importar si el producto/cantidad cambiaron o no.
+    // restaurarStockVenta también actualiza DATA.inventario en memoria,
+    // así que esto no depende de que onSnapshot ya haya vuelto del servidor.
+    // OJO: no reconstruye los lotes FIFO exactos que se habían consumido
+    // (mismo nivel de precisión que la Papelera) — el stock TOTAL sí queda
+    // siempre correcto, que es la fuente de verdad para vender.
+    if(ventaOriginal) await restaurarStockVenta(ventaOriginal);
+
     // Modo inventario — una o varias líneas de productos
     // 287. Validamos que todas las líneas tengan producto seleccionado, o
     //      sean líneas manuales completas (587: mezcla catálogo + manual)
@@ -3931,13 +3960,16 @@ window.guardarVenta = async () => {
       // 588. Única línea y es manual — misma forma que el modo manual clásico,
       //      para mantener compatibilidad con el badge "Manual" en Ventas.
       const l = lineasValidas[0];
-      await addDoc(collection(db,'ventas'), {
-        fecha, canal, producto:l.nombre, prodId:null, esManual:true,
+      const datosVenta = {
+        fecha, canal, producto:l.nombre, prodId:null, esManual:true, esMultiple:false, productosVenta:null,
         cant:l.cant||1, precio:l.precio, total, cliente, nota, tipoPrecio:'publico',
-        metodoPago, pagado, saldo, estadoPago, abonos:[],
+        metodoPago, pagado, saldo, estadoPago,
         mixtoEfectivo, mixtoTransferencia, costoUnit:null,
-        distribuidorId: distribuidorId || null, createdAt:serverTimestamp()
-      });
+        ubicacionStock:null, loteConsumo:null,
+        distribuidorId: distribuidorId || null
+      };
+      if(editId) await updateDoc(doc(db,'ventas',editId), datosVenta);
+      else await addDoc(collection(db,'ventas'), { ...datosVenta, abonos:[], createdAt:serverTimestamp() });
     } else if(lineasValidas.length === 1) {
       const l = lineasValidas[0];
       const prod = DATA.inventario.find(p => p.id === l.prodId);
@@ -3961,15 +3993,17 @@ window.guardarVenta = async () => {
       }
       await updateDoc(doc(db,'inventario',l.prodId), updateStock1);
 
-      await addDoc(collection(db,'ventas'), {
-        fecha, canal, producto:prod.nombre, prodId:l.prodId, esManual:false,
+      const datosVenta = {
+        fecha, canal, producto:prod.nombre, prodId:l.prodId, esManual:false, esMultiple:false, productosVenta:null,
         cant:l.cant, precio:l.precio, total, cliente, nota, tipoPrecio:l.tipoPrecio,
-        metodoPago, pagado, saldo, estadoPago, abonos:[],
+        metodoPago, pagado, saldo, estadoPago,
         mixtoEfectivo, mixtoTransferencia, costoUnit,
         loteConsumo: fifo1 ? fifo1.consumo : null, // 471. Trazabilidad: de qué lote(s) salió exactamente
         ubicacionStock: ubicacionFinal1, // 454. Registramos de dónde salió, para trazabilidad
-        distribuidorId: distribuidorId || null, createdAt:serverTimestamp()
-      });
+        distribuidorId: distribuidorId || null
+      };
+      if(editId) await updateDoc(doc(db,'ventas',editId), datosVenta);
+      else await addDoc(collection(db,'ventas'), { ...datosVenta, abonos:[], createdAt:serverTimestamp() });
     } else {
       // 289. Venta múltiple — descontamos stock de cada producto y registramos una entrada
       const productosVenta = [];
@@ -4004,17 +4038,23 @@ window.guardarVenta = async () => {
           await pushNotif('⚠️ Stock bajo', prod.nombre + ' quedó con ' + stockRestante + ' uds', 'stock', {seccion:'inventario', id:l.prodId});
       }
       const nombresProductos = productosVenta.map(p => p.nombre.split(' ').slice(0,2).join(' ')).join(' + ');
-      await addDoc(collection(db,'ventas'), {
+      const datosVenta = {
         fecha, canal, producto:nombresProductos, esMultiple:true, productosVenta,
+        prodId:null, esManual:false,
         cant:productosVenta.reduce((s,p)=>s+p.cant,0), precio:0, total, cliente, nota,
-        tipoPrecio:'varios', metodoPago, pagado, saldo, estadoPago, abonos:[],
+        tipoPrecio:'varios', metodoPago, pagado, saldo, estadoPago,
         mixtoEfectivo, mixtoTransferencia,
-        distribuidorId: distribuidorId || null, createdAt:serverTimestamp()
-      });
+        costoUnit:null, ubicacionStock:null, loteConsumo:null,
+        distribuidorId: distribuidorId || null
+      };
+      if(editId) await updateDoc(doc(db,'ventas',editId), datosVenta);
+      else await addDoc(collection(db,'ventas'), { ...datosVenta, abonos:[], createdAt:serverTimestamp() });
     }
 
     // Notificación
-    if(saldo > 0)
+    if(editId)
+      await pushNotif('✏️ Venta editada', (cliente?cliente+' — ':'') + fmt(total), 'venta', {seccion:'ventas'});
+    else if(saldo > 0)
       await pushNotif('💳 Venta a crédito', (cliente||'Cliente') + ' debe ' + fmt(saldo), 'credito', {seccion:'deudores'});
     else
       await pushNotif('💰 Nueva venta', (cliente?cliente+' — ':'') + fmt(total), 'venta', {seccion:'ventas'});
@@ -4191,6 +4231,11 @@ window.editarVenta = (id) => {
   // 200. Si es combo, abrimos modal especial
   if(venta.esCombo) { abrirEditarComboVenta(id); return; }
 
+  // 631. Venta múltiple — antes quedaba bloqueada (producto/precio no
+  // editables); ahora reutiliza el modal de "Nueva venta" con sus líneas
+  // precargadas, para poder cambiar producto, cantidad o precio de verdad.
+  if(venta.esMultiple) { editarVentaMultiple(id); return; }
+
   // 291. Abrimos el modal primero para que el DOM exista
   openModal('modal-editar-venta');
 
@@ -4201,13 +4246,8 @@ window.editarVenta = (id) => {
 
     const sel = document.getElementById('ev-prod');
 
-    // 292. Venta múltiple — mostramos los productos como referencia fija
-    if(venta.esMultiple) {
-      sel.innerHTML = '<option value="__multiple__" selected>📦 ' + venta.producto + ' (múltiple)</option>';
-      sel.disabled = true;
-      document.getElementById('ev-cant').disabled = true;
-    // 211. Venta manual — sin prodId
-    } else if(venta.esManual || !venta.prodId) {
+    // 211. Venta manual — sin prodId (esMultiple ya no llega aquí, ver 631)
+    if(venta.esManual || !venta.prodId) {
       sel.innerHTML = '<option value="__manual__" selected>✏️ ' + venta.producto + ' (manual)</option>';
       sel.disabled = true;
     // Venta normal del inventario
@@ -4242,6 +4282,56 @@ window.editarVenta = (id) => {
     const prevTotal = document.getElementById('prev-ev-total');
     if(prevTotal && venta.total > 0) prevTotal.textContent = '→ ' + fmt(venta.total) + ' COP';
   }, 50);
+};
+
+// 632. Editar venta múltiple — reutiliza el modal de "Nueva venta" (mismo
+// sistema de líneas: catálogo + manual mezclados) precargado con los
+// productos ya guardados. Antes esto quedaba completamente bloqueado.
+window.editarVentaMultiple = (id) => {
+  const venta = DATA.ventas.find(v => v.id === id);
+  if(!venta) return;
+
+  ventaLineas = (venta.productosVenta && venta.productosVenta.length)
+    ? venta.productosVenta.map(p => ({
+        prodId: p.prodId || '', nombre: p.nombre || '', cant: p.cant || 1,
+        precio: p.precio || 0, tipoPrecio: p.tipoPrecio || 'publico',
+        ubicacion: p.ubicacionStock || null, esManual: !p.prodId, busqueda: p.nombre || ''
+      }))
+    : [{ prodId:'', nombre:'', cant:1, precio:0, tipoPrecio:'publico', busqueda:'' }];
+  metodoPagoVenta = venta.metodoPago || 'efectivo';
+
+  openModal('modal-venta');
+
+  setTimeout(() => {
+    document.getElementById('v-edit-id').value = id;
+    document.getElementById('modal-venta-title').textContent = 'Editar venta';
+    document.getElementById('btn-guardar-venta').textContent = 'Guardar cambios';
+    // 629. Forzamos modo inventario y ocultamos el toggle — cambiar de modo
+    // mientras editas perdería las líneas ya cargadas.
+    document.getElementById('v-modo-toggle').style.display = 'none';
+    setTipoProducto('inventario');
+    renderLineasVenta();
+
+    document.getElementById('v-fecha').value = venta.fecha || today();
+    document.getElementById('v-canal').value = venta.canal || 'directo';
+    document.getElementById('v-cliente').value = venta.cliente || '';
+    document.getElementById('v-nota').value = venta.nota || '';
+    toggleDistribuidorField(venta.canal);
+    if(venta.canal === 'distribuidor' && venta.distribuidorId) {
+      const sel = document.getElementById('v-dist-id');
+      if(sel) sel.value = venta.distribuidorId;
+    }
+
+    setMetodoPago(venta.metodoPago || 'efectivo');
+    const mixtoGrupo = document.getElementById('v-mixto-grupo');
+    if(mixtoGrupo) mixtoGrupo.style.display = venta.metodoPago === 'mixto' ? 'flex' : 'none';
+    document.getElementById('v-mixto-efectivo').value = venta.mixtoEfectivo || '';
+    document.getElementById('v-mixto-transferencia').value = venta.mixtoTransferencia || '';
+    document.getElementById('v-pagado').value = venta.pagado || '';
+
+    calcVentaTotal();
+    calcSaldo();
+  }, 30);
 };
 
 window.abrirEditarComboVenta = (id) => {
@@ -7090,20 +7180,36 @@ window.guardarVentaCombo = async () => {
 //      múltiples y los combos quedaban con el stock descontado para siempre).
 async function restaurarStockVenta(venta) {
   if(!venta) return;
+  // 633. Actualizamos también DATA.inventario en memoria (mismo patrón que
+  // procesarRecepcionPedido) — si esto se llama desde editarVenta antes de
+  // validar/descontar el stock nuevo, esa validación necesita ver el stock
+  // YA restaurado sin esperar a que onSnapshot vuelva del servidor.
   if(venta.esMultiple && venta.productosVenta?.length) {
     for(const item of venta.productosVenta) {
       if(!item.prodId) continue; // línea manual — no tiene stock que restaurar
       const prod = DATA.inventario.find(p => p.id === item.prodId);
-      if(prod) await updateDoc(doc(db,'inventario',item.prodId), { stock: prod.stock + Number(item.cant||0) });
+      if(prod) {
+        const nuevoStock = prod.stock + Number(item.cant||0);
+        await updateDoc(doc(db,'inventario',item.prodId), { stock: nuevoStock });
+        prod.stock = nuevoStock;
+      }
     }
   } else if(venta.esCombo && venta.productosCombo?.length) {
     for(const item of venta.productosCombo) {
       const prod = DATA.inventario.find(p => p.id === item.prodId);
-      if(prod) await updateDoc(doc(db,'inventario',item.prodId), { stock: prod.stock + Number(item.cant||0) });
+      if(prod) {
+        const nuevoStock = prod.stock + Number(item.cant||0);
+        await updateDoc(doc(db,'inventario',item.prodId), { stock: nuevoStock });
+        prod.stock = nuevoStock;
+      }
     }
   } else if(venta.prodId && venta.cant) {
     const prod = DATA.inventario.find(p => p.id === venta.prodId);
-    if(prod) await updateDoc(doc(db,'inventario',venta.prodId), { stock: prod.stock + Number(venta.cant) });
+    if(prod) {
+      const nuevoStock = prod.stock + Number(venta.cant);
+      await updateDoc(doc(db,'inventario',venta.prodId), { stock: nuevoStock });
+      prod.stock = nuevoStock;
+    }
   }
 }
 
