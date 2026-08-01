@@ -2354,7 +2354,7 @@ function calcularRecompras() {
     const fechaAgotamiento = new Date(r.fecha + 'T00:00:00');
     fechaAgotamiento.setDate(fechaAgotamiento.getDate() + diasTotales);
     const diasRestantes = Math.floor((fechaAgotamiento - hoy) / 86400000);
-    return { ...r, fechaAgotamiento: fechaAgotamiento.toISOString().slice(0,10), diasRestantes };
+    return { ...r, fechaAgotamiento: fechaLocal(fechaAgotamiento), diasRestantes };
   })
   // 640. Mostramos desde "ya se le debió acabar" (tope de 60 días para no
   // acumular compras viejas para siempre) hasta el umbral de anticipación.
@@ -2426,7 +2426,18 @@ window.previoCOP = (inputId, previewId) => {
     el.style.color = val >= 1000 ? 'var(--green)' : 'var(--amber)';
   }
 };
-const today = () => new Date().toISOString().slice(0,10);
+// 646. FIX CRÍTICO: fechaLocal() reemplaza los usos de `.toISOString()` para
+// sacar la fecha de HOY. toISOString() convierte a UTC — en Colombia
+// (UTC-5), de noche (desde ~7pm) esto hace que la fecha calculada salte al
+// día siguiente, y si además es fin de mes, salta al MES siguiente. Eso
+// causaba que "Este mes" en Ventas (y otros cálculos de ciclo) mostraran
+// vacío de noche, porque el rango calculado terminaba siendo el del mes
+// que aún no empieza. fechaLocal() usa los getters LOCALES (getFullYear/
+// getMonth/getDate), sin pasar por UTC — así el día no se corre nunca.
+function fechaLocal(d) {
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+const today = () => fechaLocal(new Date());
 
 // ============================================================
 // 42. MENÚ DE NAVEGACIÓN
@@ -2868,8 +2879,8 @@ function getPeriodoFechas() {
     mon.setDate(now.getDate() - (day===0?6:day-1));
     mon.setHours(0,0,0,0);
     const sun = new Date(mon); sun.setDate(mon.getDate()+6);
-    const i = mon.toISOString().slice(0,10);
-    const f = sun.toISOString().slice(0,10);
+    const i = fechaLocal(mon);
+    const f = fechaLocal(sun);
     return { label: `${mon.toLocaleDateString('es-CO',{day:'numeric',month:'short'})} – ${sun.toLocaleDateString('es-CO',{day:'numeric',month:'short'})}`, inicio:i, fin:f };
   }
   if(dashPeriodo === 'mes') {
@@ -2878,7 +2889,7 @@ function getPeriodoFechas() {
     const mesParaCiclo = now.getDate() <= DUPPLA_DIA_INICIO_MES
       ? new Date(now.getFullYear(), now.getMonth()-1, 1)
       : now;
-    const mesStr = mesParaCiclo.toISOString().slice(0,7);
+    const mesStr = fechaLocal(mesParaCiclo).slice(0,7);
     const { inicio, fin } = calcularRangoMeta(mesStr, DUPPLA_DIA_INICIO_MES);
     const labelMes = mesParaCiclo.toLocaleDateString('es-CO',{month:'long',year:'numeric'});
     return { label: labelMes + ' (cierra el 3)', inicio, fin };
@@ -2889,7 +2900,7 @@ function getPeriodoFechas() {
       ? new Date(now.getFullYear(), now.getMonth()-1, 1)
       : now;
     const mesAnteriorCiclo = new Date(mesActualCiclo.getFullYear(), mesActualCiclo.getMonth()-1, 1);
-    const mesStr = mesAnteriorCiclo.toISOString().slice(0,7);
+    const mesStr = fechaLocal(mesAnteriorCiclo).slice(0,7);
     const { inicio, fin } = calcularRangoMeta(mesStr, DUPPLA_DIA_INICIO_MES);
     const labelMes = mesAnteriorCiclo.toLocaleDateString('es-CO',{month:'long',year:'numeric'});
     return { label: labelMes + ' (cierra el 3)', inicio, fin };
@@ -2906,7 +2917,7 @@ function getPeriodoFechas() {
   const mesParaCiclo = now.getDate() <= DUPPLA_DIA_INICIO_MES
     ? new Date(now.getFullYear(), now.getMonth()-1, 1)
     : now;
-  const mesStr = mesParaCiclo.toISOString().slice(0,7);
+  const mesStr = fechaLocal(mesParaCiclo).slice(0,7);
   const { inicio, fin } = calcularRangoMeta(mesStr, DUPPLA_DIA_INICIO_MES);
   return { label: mesParaCiclo.toLocaleDateString('es-CO',{month:'long',year:'numeric'}) + ' (cierra el 3)', inicio, fin };
 }
@@ -2923,7 +2934,7 @@ function getVentasRangoInfo() {
   const mesCiclo = ventasPeriodo === 'mes_anterior'
     ? new Date(mesParaCiclo.getFullYear(), mesParaCiclo.getMonth()-1, 1)
     : mesParaCiclo;
-  const mesStr = mesCiclo.toISOString().slice(0,7);
+  const mesStr = fechaLocal(mesCiclo).slice(0,7);
   const { inicio, fin } = calcularRangoMeta(mesStr, DUPPLA_DIA_INICIO_MES);
   const labelMes = mesCiclo.toLocaleDateString('es-CO',{month:'long',year:'numeric'});
   return { label: labelMes + ' (cierra el 3)', inicio, fin };
@@ -3180,7 +3191,7 @@ function renderDashboard() {
   const mesParaCicloMeta = hoyParaMeta.getDate() <= DUPPLA_DIA_INICIO_MES
     ? new Date(hoyParaMeta.getFullYear(), hoyParaMeta.getMonth()-1, 1)
     : hoyParaMeta;
-  const mesActual = mesParaCicloMeta.toISOString().slice(0,7);
+  const mesActual = fechaLocal(mesParaCicloMeta).slice(0,7);
   const metaActual = DATA.metas.find(m => m.mes === mesActual);
   let tvMesActual = 0;
   if(metaActual) {
@@ -4929,7 +4940,7 @@ function renderInventario() {
   //      Días para agotarse = stock actual / ritmo diario
   //      Solo tiene sentido para productos que SÍ se están vendiendo (ritmo > 0)
   const VENTANA_DIAS_RITMO = 30; // analizamos las ventas del último mes para el ritmo
-  const fechaCorteRitmo = new Date(HOY_ROT.getTime() - VENTANA_DIAS_RITMO*86400000).toISOString().slice(0,10);
+  const fechaCorteRitmo = fechaLocal(new Date(HOY_ROT.getTime() - VENTANA_DIAS_RITMO*86400000));
 
   // 421. FIX RENDIMIENTO: igual que arriba, un solo recorrido de ventas precalcula
   //      las unidades vendidas por producto en la ventana, en vez de recorrer
@@ -5837,7 +5848,7 @@ function mesCicloActualParaRecurrentes() {
   const mesParaCiclo = now.getDate() <= DUPPLA_DIA_INICIO_MES
     ? new Date(now.getFullYear(), now.getMonth()-1, 1)
     : now;
-  return mesParaCiclo.toISOString().slice(0,7);
+  return fechaLocal(mesParaCiclo).slice(0,7);
 }
 
 // 605. Revisa las plantillas activas y crea el gasto del ciclo actual para
@@ -6563,7 +6574,7 @@ function calcularRangoMeta(mesStr, diaInicio) {
   //      que cierra, y el ciclo siguiente arranca al día siguiente.
   diaInicio = Number(diaInicio) || 1;
   const [anio, mes] = mesStr.split('-').map(Number);
-  const fmtFecha = (d) => d.toISOString().slice(0,10);
+  const fmtFecha = fechaLocal;
   let inicio, fin;
   if (mesStr === DUPPLA_MES_TRANSICION) {
     inicio = new Date(anio, mes-1, diaInicio);       // día 3 del mes (incluido)
@@ -6585,7 +6596,7 @@ function renderMetas() {
   //      Fórmula: Punto de equilibrio ($) = Gastos fijos / % margen promedio
   //      El % margen promedio se calcula con las ventas de los últimos 90 días
   //      que sí tienen costo histórico conocido (calcularMargenVenta != null)
-  const fechaCorte90 = new Date(hoy.getTime() - 90*86400000).toISOString().slice(0,10);
+  const fechaCorte90 = fechaLocal(new Date(hoy.getTime() - 90*86400000));
   let ingresosConCosto = 0, margenConCosto = 0;
   DATA.ventas.forEach(v => {
     if(!v.fecha || v.fecha < fechaCorte90) return;
@@ -6635,7 +6646,7 @@ function renderMetas() {
     // 354. Si es el mes actual, calculamos días restantes y ritmo diario necesario
     //      524. esMesActual ahora se basa en si HOY cae dentro del rango real
     //      del ciclo (no en si el string de mes coincide con el mes calendario)
-    const hoyStr = hoy.toISOString().slice(0,10);
+    const hoyStr = fechaLocal(hoy);
     const esMesActual = hoyStr >= rangoInicio && hoyStr <= rangoFin;
     let faltanteHtml = '';
     if(Number(m.ventasMeta||0) > 0) {
@@ -8759,7 +8770,7 @@ window.confirmarGenerarCuentaCobro = () => {
   const notaLines = doc.splitTextToSize(notaLegal, pageW - margin*2);
   doc.text(notaLines, margin, y);
 
-  const nombreArchivo = 'CuentaCobro_' + nombreNegocio.replace(/[^a-zA-Z0-9]/g,'_') + '_' + fechaHoy.toISOString().slice(0,10) + '.pdf';
+  const nombreArchivo = 'CuentaCobro_' + nombreNegocio.replace(/[^a-zA-Z0-9]/g,'_') + '_' + fechaLocal(fechaHoy) + '.pdf';
   doc.save(nombreArchivo);
 
   closeModal('modal-cuenta-cobro');
