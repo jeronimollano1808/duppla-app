@@ -8388,17 +8388,49 @@ window.guardarDejarConsignacion = async () => {
     }
     await updateDoc(doc(db,'inventario',l.prodId), updateInv);
 
-    await addDoc(collection(db,'consignaciones'), {
-      tiendaId, tiendaNombre: t?.nombre || '',
-      prodId: l.prodId, prodNombre: prod.nombre,
-      cantidadInicial: l.cant,
-      cantidadActual: l.cant, // 499. Se va reduciendo con ventas/devoluciones reportadas
-      costoUnit,
-      precioSugerido: l.precioVenta, // 510. Precio acordado para esta entrega — precarga al reportar venta
-      fecha,
-      historialMovimientos: [],
-      createdAt: serverTimestamp()
-    });
+    // 654. Si ya hay una entrega ACTIVA de este producto en esta tienda con
+    // el MISMO precio acordado, sumamos la reposición ahí en vez de crear
+    // una fila nueva — antes cada "Dejar producto" creaba un documento
+    // separado sin importar nada, y con reposiciones frecuentes al mismo
+    // precio la lista de entregas se llenaba de filas redundantes. El costo
+    // queda como promedio ponderado entre lo que ya había disponible y lo
+    // nuevo (sigue siendo preciso, solo deja de separarse por tanda cuando
+    // el precio es igual).
+    const entregaExistente = DATA.consignaciones.find(c =>
+      c.tiendaId === tiendaId && c.prodId === l.prodId &&
+      Number(c.cantidadActual||0) > 0 && Number(c.precioSugerido||0) === Number(l.precioVenta)
+    );
+
+    if(entregaExistente) {
+      const cantidadActualPrevia = Number(entregaExistente.cantidadActual||0);
+      const costoPromedio = (cantidadActualPrevia*Number(entregaExistente.costoUnit||0) + l.cant*costoUnit) / (cantidadActualPrevia + l.cant);
+      const nuevoMovimiento = { tipo:'reposicion', cantidad:l.cant, fecha };
+      await updateDoc(doc(db,'consignaciones',entregaExistente.id), {
+        cantidadInicial: Number(entregaExistente.cantidadInicial||0) + l.cant,
+        cantidadActual: cantidadActualPrevia + l.cant,
+        costoUnit: costoPromedio,
+        fecha, // reflejamos la fecha de la reposición más reciente
+        historialMovimientos: [...(entregaExistente.historialMovimientos||[]), nuevoMovimiento]
+      });
+      // Reflejamos el cambio en memoria por si hay más líneas de este mismo
+      // producto en este mismo guardado (poco común, pero por si acaso).
+      entregaExistente.cantidadInicial = Number(entregaExistente.cantidadInicial||0) + l.cant;
+      entregaExistente.cantidadActual = cantidadActualPrevia + l.cant;
+      entregaExistente.costoUnit = costoPromedio;
+      entregaExistente.fecha = fecha;
+    } else {
+      await addDoc(collection(db,'consignaciones'), {
+        tiendaId, tiendaNombre: t?.nombre || '',
+        prodId: l.prodId, prodNombre: prod.nombre,
+        cantidadInicial: l.cant,
+        cantidadActual: l.cant, // 499. Se va reduciendo con ventas/devoluciones reportadas
+        costoUnit,
+        precioSugerido: l.precioVenta, // 510. Precio acordado para esta entrega — precarga al reportar venta
+        fecha,
+        historialMovimientos: [],
+        createdAt: serverTimestamp()
+      });
+    }
   }
 
   const resumenProductos = lineasValidas.map(l => l.cant + 'x ' + (DATA.inventario.find(p=>p.id===l.prodId)?.nombre||'')).join(', ');
