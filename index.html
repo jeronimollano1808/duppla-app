@@ -981,8 +981,18 @@ body{
     </div>
     <div id="ec-ajuste-preview" style="font-size:11px;margin-bottom:10px;font-weight:600"></div>
     <div class="f-row">
-      <div class="f-group"><label class="f-label">Costo unitario ($)</label><input type="number" id="ec-costo" class="f-input"></div>
-      <div class="f-group"><label class="f-label">Precio acordado ($)</label><input type="number" id="ec-precio" class="f-input"></div>
+      <div class="f-group">
+        <label class="f-label" style="display:flex;align-items:center;gap:4px">Costo unitario ($)
+          <button type="button" id="ec-usar-costo-actual" onclick="usarCostoActualConsig()" style="font-size:9px;color:var(--blue);background:none;border:none;cursor:pointer;text-decoration:underline;padding:0;display:none">usar actual</button>
+        </label>
+        <input type="number" id="ec-costo" class="f-input" oninput="toggleUsarActualConsig()">
+      </div>
+      <div class="f-group">
+        <label class="f-label" style="display:flex;align-items:center;gap:4px">Precio acordado ($)
+          <button type="button" id="ec-usar-precio-actual" onclick="usarPrecioActualConsig()" style="font-size:9px;color:var(--blue);background:none;border:none;cursor:pointer;text-decoration:underline;padding:0;display:none">usar dist.</button>
+        </label>
+        <input type="number" id="ec-precio" class="f-input" oninput="toggleUsarActualConsig()">
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('modal-editar-consignacion')">Cancelar</button>
@@ -8598,7 +8608,43 @@ window.abrirEditarConsignacion = (entregaId) => {
   document.getElementById('ec-costo').value = item.costoUnit || 0;
   document.getElementById('ec-precio').value = item.precioSugerido || 0;
   document.getElementById('ec-ajuste-preview').textContent = '';
+  toggleUsarActualConsig();
   openModal('modal-editar-consignacion');
+};
+
+// 653. "Usar actual" — atajo para traer el costo/precio distribuidor VIGENTE
+// del producto, igual que el "usar dist." que ya existe al Dejar producto.
+// Los botones solo se muestran cuando el valor en el campo ya no coincide
+// con el actual del producto (o sea, cuando de verdad sirve de algo).
+window.toggleUsarActualConsig = () => {
+  const id = document.getElementById('ec-id').value;
+  const item = DATA.consignaciones.find(c => c.id === id);
+  const prod = item && DATA.inventario.find(p => p.id === item.prodId);
+  if(!prod) return;
+  const costoActual = Number(prod.costo)||0;
+  const precioActual = Number(prod.pdist)||0;
+  const costoInput = Number(document.getElementById('ec-costo').value)||0;
+  const precioInput = Number(document.getElementById('ec-precio').value)||0;
+  document.getElementById('ec-usar-costo-actual').style.display = costoInput !== costoActual ? 'inline' : 'none';
+  document.getElementById('ec-usar-precio-actual').style.display = precioInput !== precioActual ? 'inline' : 'none';
+};
+
+window.usarCostoActualConsig = () => {
+  const id = document.getElementById('ec-id').value;
+  const item = DATA.consignaciones.find(c => c.id === id);
+  const prod = item && DATA.inventario.find(p => p.id === item.prodId);
+  if(!prod) return;
+  document.getElementById('ec-costo').value = Number(prod.costo)||0;
+  toggleUsarActualConsig();
+};
+
+window.usarPrecioActualConsig = () => {
+  const id = document.getElementById('ec-id').value;
+  const item = DATA.consignaciones.find(c => c.id === id);
+  const prod = item && DATA.inventario.find(p => p.id === item.prodId);
+  if(!prod) return;
+  document.getElementById('ec-precio').value = Number(prod.pdist)||0;
+  toggleUsarActualConsig();
 };
 
 // 649. Vista previa de cuánto stock se le devuelve/descuenta a Duppla al
