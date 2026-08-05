@@ -7361,6 +7361,24 @@ async function restaurarStockVenta(venta) {
   }
 }
 
+// 652. Restaura a Duppla las unidades AÚN NO VENDIDAS de una entrega de
+// consignación que se elimina — cantidadInicial-cantidadActual ya se vendió
+// de verdad (esas ventas quedan intactas), así que solo se devuelve
+// cantidadActual (lo que seguía físicamente en la tienda sin reportar).
+async function restaurarStockConsignacion(item) {
+  if(!item || !item.prodId) return;
+  const cantidad = Number(item.cantidadActual||0);
+  if(cantidad <= 0) return;
+  const prod = DATA.inventario.find(p => p.id === item.prodId);
+  if(!prod) return;
+  const sjActual = prod.stockJero != null ? prod.stockJero : (prod.stock||0);
+  const saActual = prod.stockAngel != null ? prod.stockAngel : 0;
+  const sjNuevo = sjActual + cantidad;
+  await updateDoc(doc(db,'inventario',item.prodId), { stockJero: sjNuevo, stockAngel: saActual, stock: sjNuevo + saActual });
+  prod.stockJero = sjNuevo;
+  prod.stock = sjNuevo + saActual;
+}
+
 // 595. PAPELERA SIMPLE — al eliminar, el borrado real se retrasa unos
 // segundos y se puede deshacer desde un banner. Si eliminas otra cosa
 // mientras hay una eliminación pendiente, la anterior se confirma de una
@@ -7390,6 +7408,9 @@ async function confirmarEliminacionPendiente() {
   //      restauras el registro desde la papelera después, el stock/gasto que ya
   //      se revirtió no se vuelve a descontar solo (hay que ajustarlo a mano).
   if(col === 'ventas') await restaurarStockVenta(snapshot);
+  // 652. Igual que con ventas — si se elimina una entrega de consignación,
+  // devolvemos a Duppla lo que seguía disponible sin vender en la tienda.
+  if(col === 'consignaciones') await restaurarStockConsignacion(snapshot);
 
   // 619. En vez de borrar para siempre, guardamos una copia en 'papelera'
   // por 7 días (ver limpiarPapeleraVieja) para poder restaurarla.
@@ -8706,7 +8727,10 @@ function renderConsignacion() {
             const filasEntregas = entregasOrdenadas.map(item =>
               '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0 4px 12px;font-size:11px;color:var(--ink-3);border-left:2px solid var(--border);margin-top:4px">'
                 + '<span>' + (item.fecha||'') + ' · ' + item.cantidadActual + ' de ' + item.cantidadInicial + ' · costo ' + fmt(item.costoUnit||0) + '</span>'
-                + '<button class="btn btn-xs" onclick="abrirEditarConsignacion(\'' + item.id + '\')">✏️ Editar</button>'
+                + '<span style="display:flex;gap:4px">'
+                  + '<button class="btn btn-xs" onclick="abrirEditarConsignacion(\'' + item.id + '\')">✏️ Editar</button>'
+                  + '<button class="btn btn-xs btn-danger" onclick="eliminarDoc(\'consignaciones\',\'' + item.id + '\')">🗑️</button>'
+                + '</span>'
               + '</div>'
             ).join('');
             filas += '<div style="padding:8px 0;border-bottom:1px solid var(--border)">'
