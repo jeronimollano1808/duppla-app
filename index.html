@@ -957,6 +957,40 @@ body{
   </div>
 </div>
 
+<!-- 647. MODAL: EDITAR ENTREGA DE CONSIGNACIÓN — corregir cantidad, costo,
+     precio o fecha de una entrega ya registrada (ej: se digitó más
+     cantidad de la que realmente se dejó). -->
+<div class="modal-bg" id="modal-editar-consignacion">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <span class="modal-title">Editar entrega</span>
+      <button class="modal-close" onclick="closeModal('modal-editar-consignacion')">✕</button>
+    </div>
+    <input type="hidden" id="ec-id" value="">
+    <div id="ec-info" style="background:var(--surface-2);border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:13px;color:var(--ink-2)"></div>
+    <div class="f-group"><label class="f-label">Fecha</label><input type="date" id="ec-fecha" class="f-input"></div>
+    <div class="f-row">
+      <div class="f-group">
+        <label class="f-label">Cantidad dejada (inicial)</label>
+        <input type="number" id="ec-cantidad-inicial" class="f-input" min="0" oninput="previewAjusteStockConsig()">
+      </div>
+      <div class="f-group">
+        <label class="f-label">Cantidad actual disponible</label>
+        <input type="number" id="ec-cantidad-actual" class="f-input" min="0">
+      </div>
+    </div>
+    <div id="ec-ajuste-preview" style="font-size:11px;margin-bottom:10px;font-weight:600"></div>
+    <div class="f-row">
+      <div class="f-group"><label class="f-label">Costo unitario ($)</label><input type="number" id="ec-costo" class="f-input"></div>
+      <div class="f-group"><label class="f-label">Precio acordado ($)</label><input type="number" id="ec-precio" class="f-input"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-editar-consignacion')">Cancelar</button>
+      <button class="btn btn-lime" onclick="guardarEditarConsignacion()">Guardar cambios</button>
+    </div>
+  </div>
+</div>
+
 <!-- 394. MODAL: GENERAR CUENTA DE COBRO PDF -->
 <div class="modal-bg" id="modal-cuenta-cobro">
   <div class="modal" style="max-width:440px">
@@ -8525,6 +8559,82 @@ window.guardarReporteConsignacion = async () => {
 };
 
 // ============================================================
+// 648. EDITAR ENTREGA DE CONSIGNACIÓN — corrige cantidad/costo/precio/fecha
+// de una entrega ya registrada. Si la cantidad inicial cambia, ajustamos el
+// stock de Duppla por la diferencia: si "dejaste" menos de lo que habías
+// digitado, esas unidades nunca salieron de verdad y vuelven al inventario;
+// si dejaste más, se descuentan de más.
+// ============================================================
+window.abrirEditarConsignacion = (entregaId) => {
+  const item = DATA.consignaciones.find(c => c.id === entregaId);
+  if(!item) return;
+  document.getElementById('ec-id').value = entregaId;
+  document.getElementById('ec-info').innerHTML =
+    '<strong>' + item.prodNombre + '</strong> — ' + item.tiendaNombre;
+  document.getElementById('ec-fecha').value = item.fecha || today();
+  document.getElementById('ec-cantidad-inicial').value = item.cantidadInicial || 0;
+  document.getElementById('ec-cantidad-actual').value = item.cantidadActual || 0;
+  document.getElementById('ec-costo').value = item.costoUnit || 0;
+  document.getElementById('ec-precio').value = item.precioSugerido || 0;
+  document.getElementById('ec-ajuste-preview').textContent = '';
+  openModal('modal-editar-consignacion');
+};
+
+// 649. Vista previa de cuánto stock se le devuelve/descuenta a Duppla al
+// corregir la cantidad inicial — para que no sea sorpresa al guardar.
+window.previewAjusteStockConsig = () => {
+  const id = document.getElementById('ec-id').value;
+  const item = DATA.consignaciones.find(c => c.id === id);
+  const prev = document.getElementById('ec-ajuste-preview');
+  if(!item || !prev) return;
+  const nuevaInicial = Number(document.getElementById('ec-cantidad-inicial').value) || 0;
+  const diff = nuevaInicial - Number(item.cantidadInicial||0);
+  if(diff === 0) { prev.textContent = ''; return; }
+  prev.textContent = diff < 0
+    ? '↩️ Se devuelven ' + (-diff) + ' unidad(es) al inventario de Duppla'
+    : '📤 Se descuentan ' + diff + ' unidad(es) más del inventario de Duppla';
+  prev.style.color = diff < 0 ? 'var(--green)' : 'var(--amber)';
+};
+
+window.guardarEditarConsignacion = async () => {
+  const id = document.getElementById('ec-id').value;
+  const item = DATA.consignaciones.find(c => c.id === id);
+  if(!item) return;
+
+  const fecha = document.getElementById('ec-fecha').value || item.fecha;
+  const nuevaInicial = Number(document.getElementById('ec-cantidad-inicial').value);
+  const nuevaActual = Number(document.getElementById('ec-cantidad-actual').value);
+  const costoUnit = Number(document.getElementById('ec-costo').value) || 0;
+  const precioSugerido = Number(document.getElementById('ec-precio').value) || 0;
+
+  if(nuevaInicial < 0 || nuevaActual < 0) { alert('Las cantidades no pueden ser negativas'); return; }
+  if(nuevaActual > nuevaInicial) { alert('La cantidad actual no puede ser mayor que la inicial'); return; }
+
+  // 650. Ajustamos el stock de Duppla por la DIFERENCIA en cantidad inicial —
+  // no tocamos nada si no cambió, para no interferir con ventas/devoluciones
+  // que ya se hayan reportado sobre esta entrega mientras tanto.
+  const diff = nuevaInicial - Number(item.cantidadInicial||0);
+  if(diff !== 0) {
+    const prod = DATA.inventario.find(p => p.id === item.prodId);
+    if(prod) {
+      // diff > 0 (dejaste más de lo digitado antes) => se descuenta más stock.
+      // diff < 0 (dejaste menos) => ese stock nunca salió, se devuelve.
+      const sjActual = prod.stockJero != null ? prod.stockJero : (prod.stock||0);
+      const saActual = prod.stockAngel != null ? prod.stockAngel : 0;
+      const sjNuevo = Math.max(0, sjActual - diff);
+      await updateDoc(doc(db,'inventario',item.prodId), { stockJero: sjNuevo, stockAngel: saActual, stock: sjNuevo + saActual });
+    }
+  }
+
+  await updateDoc(doc(db,'consignaciones',id), {
+    fecha, cantidadInicial: nuevaInicial, cantidadActual: nuevaActual, costoUnit, precioSugerido
+  });
+
+  closeModal('modal-editar-consignacion');
+  toast('✅ Entrega corregida');
+};
+
+// ============================================================
 // 504. PÁGINA: CONSIGNACIÓN
 // Agrupa por tienda, muestra qué productos tiene cada una activos,
 // valor total en consignación, y permite reportar ventas/devoluciones.
@@ -8589,13 +8699,26 @@ function renderConsignacion() {
             const cantidadActualTotal = entregas.reduce((s,c) => s + Number(c.cantidadActual||0), 0);
             const cantidadInicialTotal = entregas.reduce((s,c) => s + Number(c.cantidadInicial||0), 0);
             const fechaMasAntigua = entregas.reduce((min,c) => (!min || c.fecha < min) ? c.fecha : min, null);
-            filas += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">'
-              + '<div>'
-                + '<div style="font-size:13px;font-weight:500;color:var(--ink)">' + entregas[0].prodNombre + '</div>'
-                + '<div style="font-size:11px;color:var(--ink-3)">Dejado: ' + fechaMasAntigua + ' · ' + cantidadActualTotal + ' de ' + cantidadInicialTotal + ' disponibles'
-                  + (entregas.length > 1 ? ' (' + entregas.length + ' entregas)' : '') + '</div>'
+            // 651. Listamos cada entrega individual con su propio botón de
+            //      editar — antes solo se veía el agregado y no había forma
+            //      de corregir una cantidad mal digitada.
+            const entregasOrdenadas = [...entregas].sort((a,b) => (a.fecha||'').localeCompare(b.fecha||''));
+            const filasEntregas = entregasOrdenadas.map(item =>
+              '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0 4px 12px;font-size:11px;color:var(--ink-3);border-left:2px solid var(--border);margin-top:4px">'
+                + '<span>' + (item.fecha||'') + ' · ' + item.cantidadActual + ' de ' + item.cantidadInicial + ' · costo ' + fmt(item.costoUnit||0) + '</span>'
+                + '<button class="btn btn-xs" onclick="abrirEditarConsignacion(\'' + item.id + '\')">✏️ Editar</button>'
               + '</div>'
-              + '<button class="btn btn-xs" style="color:var(--blue);border-color:#BFDBFE" onclick="abrirReportarConsignacion(\'' + t.id + '\',\'' + prodId + '\')">Reportar</button>'
+            ).join('');
+            filas += '<div style="padding:8px 0;border-bottom:1px solid var(--border)">'
+              + '<div style="display:flex;justify-content:space-between;align-items:center">'
+                + '<div>'
+                  + '<div style="font-size:13px;font-weight:500;color:var(--ink)">' + entregas[0].prodNombre + '</div>'
+                  + '<div style="font-size:11px;color:var(--ink-3)">Dejado: ' + fechaMasAntigua + ' · ' + cantidadActualTotal + ' de ' + cantidadInicialTotal + ' disponibles'
+                    + (entregas.length > 1 ? ' (' + entregas.length + ' entregas)' : '') + '</div>'
+                + '</div>'
+                + '<button class="btn btn-xs" style="color:var(--blue);border-color:#BFDBFE" onclick="abrirReportarConsignacion(\'' + t.id + '\',\'' + prodId + '\')">Reportar</button>'
+              + '</div>'
+              + filasEntregas
             + '</div>';
           });
           detalleHtml = '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">' + filas + '</div>';
