@@ -1043,6 +1043,23 @@ body{
 </div>
 
 <!-- 411. MODAL: RECORDATORIO DE COBRO POR WHATSAPP -->
+<!-- 690. MODAL: DETALLE DE UN NÚMERO DE INICIO (ver comentario 688) -->
+<div class="modal-bg" id="modal-detalle">
+  <div class="modal" style="max-width:820px">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="det-title">Detalle</div>
+        <div id="det-sub" style="font-size:12px;color:var(--ink-3);margin-top:2px"></div>
+      </div>
+      <button class="modal-close" onclick="closeModal('modal-detalle')">✕</button>
+    </div>
+    <div id="det-contenido" style="max-height:65vh;overflow:auto"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-detalle')">Cerrar</button>
+    </div>
+  </div>
+</div>
+
 <!-- 685. MODAL: LIMPIAR VÍNCULOS MAL PUESTOS (ver comentario 683) -->
 <div class="modal-bg" id="modal-limpiar-vinculos">
   <div class="modal" style="max-width:900px">
@@ -1512,6 +1529,7 @@ body{
           <option value="marketing">Marketing y publicidad</option>
           <option value="logistica">Logística y envíos</option>
           <option value="plataformas">Plataformas (web, apps)</option>
+          <option value="finanzas">Finanzas (intereses, comisiones)</option>
           <option value="operativo">Gastos operativos</option>
           <option value="otro">Otro</option>
         </select>
@@ -1555,6 +1573,7 @@ body{
           <option value="marketing">Marketing y publicidad</option>
           <option value="logistica">Logística y envíos</option>
           <option value="plataformas">Plataformas (web, apps)</option>
+          <option value="finanzas">Finanzas (intereses, comisiones)</option>
           <option value="operativo">Gastos operativos</option>
           <option value="otro">Otro</option>
         </select>
@@ -5786,7 +5805,10 @@ function renderClientes() {
 const CATS = {
   importacion:'Importación', marketing:'Marketing',
   logistica:'Logística', plataformas:'Plataformas',
-  operativo:'Operativo', otro:'Otro'
+  // 687. Finanzas — intereses de préstamos, comisiones bancarias, 4x1000.
+  //      Antes estos gastos caían en "Otro" y se perdían de vista, aunque
+  //      los intereses son uno de los gastos fijos más grandes de Duppla.
+  finanzas:'Finanzas', operativo:'Operativo', otro:'Otro'
 };
 
 function renderGastos() {
@@ -6964,11 +6986,16 @@ function renderInicio() {
     </div>`;
 
   // ---- Tarjeta de número ----
-  const stat = (k, v, d, dColor) => `
-    <div class="card" style="padding:13px 15px;display:flex;flex-direction:column;gap:3px">
+  // 689. Cada tarjeta abre el detalle de dónde salió ese número (ver 688).
+  const stat = (k, v, d, dColor, tipo) => `
+    <div class="card" onclick="abrirDetalleInicio('${tipo}')" role="button" tabindex="0"
+      onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();abrirDetalleInicio('${tipo}')}"
+      style="padding:13px 15px;display:flex;flex-direction:column;gap:3px;cursor:pointer;position:relative"
+      onmouseover="this.style.borderColor='var(--border-2)'" onmouseout="this.style.borderColor=''">
       <span style="font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3)">${k}</span>
       <span style="font-size:20px;font-weight:800;color:var(--ink);letter-spacing:-.02em;font-variant-numeric:tabular-nums">${v}</span>
       <span style="font-size:11px;font-weight:600;color:${dColor||'var(--ink-3)'}">${d}</span>
+      <span style="position:absolute;top:12px;right:13px;color:var(--ink-3);font-size:13px" aria-hidden="true">›</span>
     </div>`;
 
   document.getElementById('page-inicio').innerHTML = `
@@ -6994,10 +7021,10 @@ function renderInicio() {
     </div>
 
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:9px;margin-bottom:16px">
-      ${stat('Vendido', fmt(vendido), varTxt, varColor)}
-      ${stat('Margen bruto', fmt(margenCiclo), margenPctCiclo + '% del vendido', 'var(--ink-3)')}
-      ${stat('Salió del banco', fmt(gastado), compras > 0 ? fmt(compras) + ' fue mercancía' : 'sin compras de mercancía', 'var(--ink-3)')}
-      ${stat('Por cobrar', fmt(porCobrar), mora.length ? mora.length + ' en mora' : 'nada en mora', mora.length ? 'var(--red)' : 'var(--green)')}
+      ${stat('Vendido', fmt(vendido), varTxt, varColor, 'vendido')}
+      ${stat('Margen bruto', fmt(margenCiclo), margenPctCiclo + '% del vendido', 'var(--ink-3)', 'margen')}
+      ${stat('Salió del banco', fmt(gastado), compras > 0 ? fmt(compras) + ' fue mercancía' : 'sin compras de mercancía', 'var(--ink-3)', 'gastos')}
+      ${stat('Por cobrar', fmt(porCobrar), mora.length ? mora.length + ' en mora' : 'nada en mora', mora.length ? 'var(--red)' : 'var(--green)', 'cobrar')}
     </div>
 
     <div style="display:flex;flex-direction:column;gap:12px">
@@ -7005,6 +7032,139 @@ function renderInicio() {
       ${resultadoHtml}
     </div>`;
 }
+
+// ============================================================
+// 688. DETALLE DE CADA NÚMERO DE INICIO
+// Un número solo sirve si puedes preguntarle de dónde salió. Cada
+// tarjeta de Inicio abre la lista que la compone, con subtotales.
+// No recalcula nada aparte: usa las mismas fuentes de verdad
+// (ingresoVenta, calcularMargenVenta, calcularDeudores, esCompraMercancia).
+// ============================================================
+function tablaDetalle(cabeceras, filas) {
+  if(!filas.length) return '<div class="empty-state" style="padding:24px"><div class="empty-state-text">Sin registros en este ciclo</div></div>';
+  return '<div class="table-wrap"><table class="tbl"><thead><tr>'
+    + cabeceras.map(h => '<th' + (h.der ? ' style="text-align:right"' : '') + '>' + h.txt + '</th>').join('')
+    + '</tr></thead><tbody>' + filas.join('') + '</tbody></table></div>';
+}
+
+function bloqueGrupo(titulo, total, sub) {
+  return '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;'
+    + 'margin:18px 0 8px;padding-bottom:6px;border-bottom:2px solid var(--border)">'
+    + '<span style="font-size:13px;font-weight:700;color:var(--ink)">' + titulo + '</span>'
+    + '<span style="font-size:13px;font-weight:700;color:var(--ink-2);white-space:nowrap">' + total
+    + (sub ? ' <span style="font-weight:400;color:var(--ink-3);font-size:11px">' + sub + '</span>' : '') + '</span>'
+  + '</div>';
+}
+
+const fCorta = f => { const [a,m,d] = String(f||'').split('-'); return d ? Number(d) + ' ' + ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][Number(m)-1] : ''; };
+
+window.abrirDetalleInicio = (tipo) => {
+  const ciclo = getCicloActual(0);
+  const ventasCiclo = DATA.ventas.filter(v => v.fecha >= ciclo.inicio && v.fecha <= ciclo.fin);
+  const gastosCiclo = DATA.gastos.filter(g => g.fecha >= ciclo.inicio && g.fecha <= ciclo.fin);
+  let titulo = '', html = '';
+
+  if(tipo === 'vendido') {
+    titulo = 'Vendido en el ciclo';
+    const nombresCanal = { directo:'🛍️ Venta directa', web:'🌐 Página web', distribuidor:'🏋️ Distribuidores' };
+    ['directo','web','distribuidor'].forEach(canal => {
+      const vs = ventasCiclo.filter(v => v.canal === canal).sort((a,b) => b.fecha > a.fecha ? 1 : -1);
+      if(!vs.length) return;
+      const sub = vs.reduce((s,v) => s + ingresoVenta(v), 0);
+      html += bloqueGrupo(nombresCanal[canal] || canal, fmt(sub), vs.length + ' venta' + (vs.length>1?'s':''));
+      html += tablaDetalle(
+        [{txt:'Fecha'},{txt:'Cliente'},{txt:'Producto'},{txt:'Total',der:true},{txt:'Saldo',der:true}],
+        vs.map(v => '<tr>'
+          + '<td style="color:var(--ink-3);white-space:nowrap">' + fCorta(v.fecha) + '</td>'
+          + '<td style="font-weight:500">' + (v.cliente||'—') + '</td>'
+          + '<td style="color:var(--ink-2)">' + (v.producto||'') + '</td>'
+          + '<td style="text-align:right;font-weight:600">' + fmt(ingresoVenta(v)) + '</td>'
+          + '<td style="text-align:right;color:' + (saldoReal(v)>0?'var(--red)':'var(--ink-3)') + '">' + (saldoReal(v)>0?fmt(saldoReal(v)):'—') + '</td>'
+        + '</tr>'));
+    });
+    if(!ventasCiclo.length) html = tablaDetalle([{txt:'—'}], []);
+
+  } else if(tipo === 'margen') {
+    titulo = 'Margen bruto por producto';
+    const porProd = {};
+    ventasCiclo.forEach(v => {
+      const lineas = v.esMultiple && Array.isArray(v.productosVenta)
+        ? v.productosVenta.map(l => ({ nombre:l.nombre, cant:Number(l.cant||1) }))
+        : [{ nombre: v.producto || '(sin nombre)', cant: Number(v.cant||1) }];
+      const m = calcularMargenVenta(v);
+      const ing = ingresoVenta(v);
+      const nLineas = lineas.length || 1;
+      lineas.forEach(l => {
+        const k = l.nombre || '(sin nombre)';
+        porProd[k] = porProd[k] || { nombre:k, cant:0, ingreso:0, margen:0, sinCosto:false };
+        porProd[k].cant += l.cant;
+        porProd[k].ingreso += ing / nLineas;
+        if(m === null) porProd[k].sinCosto = true; else porProd[k].margen += m / nLineas;
+      });
+    });
+    const lista = Object.values(porProd).sort((a,b) => b.margen - a.margen);
+    const totalMargen = lista.reduce((s,p) => s + p.margen, 0);
+    html += bloqueGrupo('Margen del ciclo', fmt(totalMargen), lista.length + ' producto' + (lista.length>1?'s':''));
+    html += tablaDetalle(
+      [{txt:'Producto'},{txt:'Unid.',der:true},{txt:'Ingreso',der:true},{txt:'Margen',der:true},{txt:'%',der:true}],
+      lista.map(p => {
+        const pct = p.ingreso > 0 ? Math.round((p.margen/p.ingreso)*100) : 0;
+        return '<tr>'
+          + '<td style="font-weight:500">' + p.nombre + (p.sinCosto ? ' <span style="font-size:10px;color:var(--amber)">· sin costo</span>' : '') + '</td>'
+          + '<td style="text-align:right">' + p.cant + '</td>'
+          + '<td style="text-align:right">' + fmt(p.ingreso) + '</td>'
+          + '<td style="text-align:right;font-weight:600;color:' + (p.margen>=0?'var(--green)':'var(--red)') + '">' + fmt(p.margen) + '</td>'
+          + '<td style="text-align:right;color:var(--ink-3)">' + pct + '%</td>'
+        + '</tr>';
+      }));
+
+  } else if(tipo === 'gastos') {
+    titulo = 'Lo que salió del banco';
+    const cats = {};
+    gastosCiclo.forEach(g => {
+      const k = esCompraMercancia(g) ? '__mercancia' : (g.cat || 'otro');
+      (cats[k] = cats[k] || []).push(g);
+    });
+    const orden = Object.keys(cats).sort((a,b) =>
+      cats[b].reduce((s,g)=>s+Number(g.valor||0),0) - cats[a].reduce((s,g)=>s+Number(g.valor||0),0));
+    orden.forEach(k => {
+      const gs = cats[k].sort((a,b) => Number(b.valor||0) - Number(a.valor||0));
+      const sub = gs.reduce((s,g) => s + Number(g.valor||0), 0);
+      const nombre = k === '__mercancia' ? '📦 Compra de mercancía — no es gasto, es inventario' : (CATS[k] || k);
+      html += bloqueGrupo(nombre, fmt(sub), gs.length + ' registro' + (gs.length>1?'s':''));
+      html += tablaDetalle(
+        [{txt:'Fecha'},{txt:'Descripción'},{txt:'Tipo'},{txt:'Valor',der:true}],
+        gs.map(g => '<tr>'
+          + '<td style="color:var(--ink-3);white-space:nowrap">' + fCorta(g.fecha) + '</td>'
+          + '<td style="font-weight:500">' + (g.desc||'') + '</td>'
+          + '<td style="font-size:11px;color:' + (esGastoFijo(g)?'var(--blue)':'var(--ink-3)') + '">' + (esGastoFijo(g)?'Fijo':'Variable') + '</td>'
+          + '<td style="text-align:right;font-weight:600">' + fmt(g.valor) + '</td>'
+        + '</tr>'));
+    });
+    if(!gastosCiclo.length) html = tablaDetalle([{txt:'—'}], []);
+
+  } else if(tipo === 'cobrar') {
+    titulo = 'Lo que te deben';
+    const deudores = calcularDeudores().sort((a,b) => (b.diasMora||0) - (a.diasMora||0));
+    const total = deudores.reduce((s,d) => s + Number(d.total||0), 0);
+    html += bloqueGrupo('Total por cobrar', fmt(total), deudores.length + ' cliente' + (deudores.length>1?'s':''));
+    html += tablaDetalle(
+      [{txt:'Cliente'},{txt:'Debe',der:true},{txt:'Días'},{txt:'Estado'}],
+      deudores.map(d => '<tr>'
+        + '<td style="font-weight:600">' + d.cliente + '</td>'
+        + '<td style="text-align:right;font-weight:600;color:var(--red)">' + fmt(d.total) + '</td>'
+        + '<td style="color:var(--ink-3)">' + (d.diasMora||0) + '</td>'
+        + '<td><span style="padding:2px 8px;border-radius:12px;font-size:10px;font-weight:600;background:'
+          + (d.enMora?'var(--red-bg)':'var(--amber-bg)') + ';color:' + (d.enMora?'var(--red)':'var(--amber)') + '">'
+          + (d.enMora?'En mora':'Al día') + '</span></td>'
+      + '</tr>'));
+  }
+
+  document.getElementById('det-title').textContent = titulo;
+  document.getElementById('det-sub').textContent = 'Ciclo ' + fCorta(ciclo.inicio) + ' – ' + fCorta(ciclo.fin);
+  document.getElementById('det-contenido').innerHTML = html;
+  openModal('modal-detalle');
+};
 
 function renderMetas() {
   const hoy = new Date();
