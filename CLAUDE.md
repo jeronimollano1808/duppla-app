@@ -587,5 +587,19 @@ Estuvo ahí desde la importación. No se veía porque esas mismas ventas tenían
 
 **Y la lección de método:** el número que sube sin explicación es una alarma, no un regalo. Si una corrección debía bajar el margen y lo subió, hay que perseguir la diferencia hasta entenderla. Aquí la verificación encontró más que la auditoría.
 
+### 14.19 Qué merece notificar (comentarios 765–767)
+
+Pedido de Ángel:
+
+> *"No quiero que cuando lo abra me lleguen todas esas notificaciones de inventario bajo. Bórralas, no quiero que me vuelva a llegar eso, porque eso lo veo yo cuando abra la sesión nada más. De pronto me puedes hacer las notificaciones acerca de los deudores, acerca de cosas relevantes o de cuando cierra el mes, pero no del stock."*
+
+**765. El stock deja de notificar.** Eran 4 puntos: la revisión diaria al cargar inventario y tres avisos que salían al vender (venta múltiple, venta simple y combo). `checkStockAlerts()` queda vacía a propósito, con el comentario explicando por qué — se deja la función para no romper la llamada del listener y para que quede claro que es una decisión, no un olvido. **El aviso de stock bajo sigue vivo en Inicio**, que es donde Ángel dijo que lo mira.
+
+**766. La mora sí queda en la campana.** Antes `chequearAlertaMoraDiaria` solo mostraba un toast y una notificación del navegador — las dos se van solas. Si no estabas mirando la pantalla en ese momento, la mora no existía. Ahora además hace `pushNotif` tipo `'mora'`, así que sobrevive a cerrar la app.
+
+**767. Aviso de cierre de ciclo.** Nuevo. La primera vez que se abre la app dentro de un ciclo nuevo, avisa que el anterior cerró con su resumen: vendido, % de margen y utilidad real. Usa `getCicloActual`, `ingresoVenta`, `calcularMargenVenta` y `esCompraMercancia` — las mismas fuentes de verdad de Inicio, sin recalcular nada aparte. Se marca en `localStorage` con la fecha de inicio del ciclo, así avisa una sola vez por ciclo y por dispositivo.
+
+**El criterio, para lo que venga:** una notificación se gana el derecho a interrumpir solo si pide una acción que no puede esperar a que la persona se siente a mirar. Cobrar una mora sí. Revisar el mes que cerró sí. El stock bajo no — eso se mira cuando uno abre la app, y para eso está el aviso de Inicio. Antes de agregar una notificación nueva, la pregunta es *"¿esto exige que suelte lo que está haciendo?"*, no *"¿esto es información útil?"*.
+
 ---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*

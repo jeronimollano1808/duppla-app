@@ -2905,7 +2905,7 @@ function startListeners() {
       if(col === 'inventario') checkStockAlerts();
       // 579. El badge de deudores en mora del menú depende de ventas — lo
       //      refrescamos aunque no estés parado en Deudores ni en Dashboard.
-      if(col === 'ventas') { buildNav(); chequearAlertaMoraDiaria(); }
+      if(col === 'ventas') { buildNav(); chequearAlertaMoraDiaria(); chequearCierreDeCiclo(); }
       // 642. El badge de recompras también depende de duracionDias en Inventario.
       if(col === 'inventario') buildNav();
       // 598. Generamos los gastos recurrentes del ciclo actual apenas
@@ -3047,6 +3047,48 @@ function chequearAlertaMoraDiaria() {
   const cuerpo = enMora.length + ' cliente' + (enMora.length>1?'s':'') + ' te deben ' + fmt(totalMora) + ' hace más de ' + UMBRAL_MORA_DIAS + ' días';
   toast('⏰ ' + cuerpo, 'info');
   showBrowserNotif('⏰ Deudores en mora', cuerpo);
+  // 766. La mora también queda en la campana. Antes era solo un toast que se
+  //      iba en tres segundos: si no estabas mirando la pantalla en ese
+  //      momento, la mora no existía. Esta sí merece quedar — hay que salir
+  //      a cobrar y el aviso tiene que sobrevivir a que cierres la app.
+  pushNotif('⏰ Deudores en mora', cuerpo, 'mora', { seccion:'deudores' });
+}
+
+// ============================================================
+// 767. AVISO DE CIERRE DE CICLO
+// El otro caso que sí merece interrumpir: el mes cerró. Se dispara la
+// primera vez que se abre la app dentro de un ciclo nuevo, con el
+// resumen del que acaba de cerrar — vendido, margen y utilidad real.
+// Usa las mismas fuentes de verdad de Inicio, no recalcula nada aparte.
+// ============================================================
+function chequearCierreDeCiclo() {
+  const ciclo = getCicloActual(0);
+  if(localStorage.getItem('duppla_cierre_avisado') === ciclo.inicio) return;
+  const ant = getCicloActual(1);
+  const ventasAnt = DATA.ventas.filter(v => v.fecha >= ant.inicio && v.fecha <= ant.fin);
+  if(!ventasAnt.length) return;   // sin datos del ciclo anterior no hay nada que contar
+  localStorage.setItem('duppla_cierre_avisado', ciclo.inicio);
+
+  const vendido = ventasAnt.reduce((s,v) => s + ingresoVenta(v), 0);
+  let costo = 0;
+  ventasAnt.forEach(v => {
+    const m = calcularMargenVenta(v);
+    if(m !== null) { costo += Number(v.total||0) - m; return; }
+    const prod = DATA.inventario.find(p => p.id === v.prodId);
+    if(prod?.costo) costo += Number(prod.costo) * Number(v.cant||1);
+  });
+  const margen = vendido - costo;
+  const gastosAnt = DATA.gastos.filter(g => g.fecha >= ant.inicio && g.fecha <= ant.fin);
+  const operativos = gastosAnt.filter(g => !esCompraMercancia(g)).reduce((s,g) => s + Number(g.valor||0), 0);
+  const utilidad = margen - operativos;
+  const pct = vendido > 0 ? Math.round((margen/vendido)*100) : 0;
+
+  const cuerpo = 'Vendiste ' + fmt(vendido) + ' con ' + pct + '% de margen. '
+    + 'Utilidad real ' + (utilidad >= 0 ? fmt(utilidad) : '−' + fmt(Math.abs(utilidad))) + '.';
+  const titulo = '🗂️ Cerró ' + ant.label;
+  toast(titulo + ' — ' + fmt(vendido), 'info');
+  showBrowserNotif(titulo, cuerpo);
+  pushNotif(titulo, cuerpo, 'cierre', { seccion:'inicio' });
 }
 async function pushNotif(titulo, cuerpo, tipo, destino) {
   // 307. destino es opcional: { seccion, id } para notificaciones navegables
@@ -3166,20 +3208,22 @@ window.markNotifsRead = async () => {
 };
 
 // ============================================================
-// 53. ALERTA DE STOCK BAJO
-// Verifica inventario y envía notificación si hay productos
-// por debajo del mínimo. Solo una vez por día por producto
+// 765. EL STOCK NO NOTIFICA. Decisión de Ángel:
+//
+//   "No quiero que cuando lo abra me lleguen todas esas notificaciones
+//    de inventario bajo. Bórralas, no quiero que me vuelva a llegar eso,
+//    porque eso lo veo yo cuando abra la sesión nada más."
+//
+// El stock bajo sigue avisando donde sí sirve —el aviso de Inicio, que se
+// ve al entrar— pero deja de generar notificaciones. Una notificación se
+// gana el derecho a interrumpir solo si pide una acción que no puede
+// esperar; el stock no lo es: se mira cuando uno se sienta a mirar.
+//
+// Lo que SÍ notifica: deudores en mora (hay que salir a cobrar), el cierre
+// del ciclo (hay que revisar el mes) y los movimientos de plata.
 // ============================================================
 function checkStockAlerts() {
-  const low = DATA.inventario.filter(p => p.stock <= (p.stockMinimo||5));
-  if(low.length > 0) {
-    const key = 'duppla_stock_alert_' + today();
-    if(!localStorage.getItem(key)) {
-      const nombres = low.map(p=>`${p.nombre} (${p.stock})`).join(', ');
-      pushNotif('⚠️ Stock bajo', nombres, 'stock', {seccion:'inventario'});
-      localStorage.setItem(key, '1');
-    }
-  }
+  // A propósito no hace nada. Ver 765. El aviso vive en Inicio (renderInicio).
 }
 
 // ============================================================
@@ -4594,9 +4638,8 @@ window.guardarVenta = async () => {
 
         // 367. Cada línea de la venta múltiple guarda su propio costo histórico
         productosVenta.push({ prodId:l.prodId, nombre:prod.nombre, cant:l.cant, precio:l.precio, tipoPrecio:l.tipoPrecio, costoUnit:costoUnitLinea, ubicacionStock:ubicacionFinal2, loteConsumo: fifo2 ? fifo2.consumo : null });
-        const stockRestante = (prod.stockJero||0) + (prod.stockAngel||0) - l.cant;
-        if(stockRestante <= (prod.stockMinimo||5))
-          await pushNotif('⚠️ Stock bajo', prod.nombre + ' quedó con ' + stockRestante + ' uds', 'stock', {seccion:'inventario', id:l.prodId});
+        // 765. Aquí salía una notificación de stock bajo. Ya no: Ángel lo
+        //      revisa desde el aviso de Inicio cuando abre la app.
       }
       const nombresProductos = productosVenta.map(p => p.nombre.split(' ').slice(0,2).join(' ')).join(' + ');
       const datosVenta = {
@@ -4620,13 +4663,7 @@ window.guardarVenta = async () => {
     else
       await pushNotif('💰 Nueva venta', (cliente?cliente+' — ':'') + fmt(total), 'venta', {seccion:'ventas'});
 
-    // Alertas de stock bajo para venta simple
-    if(lineasValidas.length === 1) {
-      const l = lineasValidas[0];
-      const prod = DATA.inventario.find(p => p.id === l.prodId);
-      if(prod && prod.stock - l.cant <= (prod.stockMinimo||5))
-        await pushNotif('⚠️ Stock bajo', prod.nombre + ' quedó con ' + (prod.stock-l.cant) + ' uds', 'stock', {seccion:'inventario', id:l.prodId});
-    }
+    // 765. Aquí salía una notificación de stock bajo tras la venta. Ya no.
   }
   closeModal('modal-venta');
 };
@@ -8572,8 +8609,7 @@ window.guardarVentaCombo = async () => {
     if(!prod) continue;
     item.costoUnit = Number(prod.costo)||0;
     await updateDoc(doc(db,'inventario',item.prodId), { stock: prod.stock - item.cant });
-    if(prod.stock - item.cant <= (prod.stockMinimo||5))
-      await pushNotif('⚠️ Stock bajo', `${prod.nombre} quedó con ${prod.stock-item.cant} uds`, 'stock', {seccion:'inventario', id:item.prodId});
+    // 765. Aquí salía una notificación de stock bajo. Ya no.
   }
 
   // 195. Registramos la venta del combo como una sola entrada
