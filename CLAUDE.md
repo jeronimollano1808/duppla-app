@@ -677,5 +677,49 @@ Por eso "Te pagaron" se partió en dos renglones: **"Te pagaron de contado"** y 
 **Y la regla de datos, que vale para toda la app:** *`v.pagado` es acumulado, no es el pago del día de la venta.* Antes de sumar `pagado` junto a los abonos en cualquier cálculo nuevo, restarle sus abonos. Es la misma familia de error del comentario 727 (contar la venta y su cobro) con otro disfraz — y esta vez el disfraz era mío.
 
 
+### 14.21 La pestaña de Gastos: una cuenta y un desglose (comentario 773)
+
+Ángel, sobre la pantalla vieja:
+
+> *"Acá aparecen los gastos fijos y 'salió del banco' de lo mismo, información repetida. Y luego abajo desglosa el gasto de marketing, el de los intereses y el total de gastos. Necesito que organicemos estas pestañas... que aparezca todo organizado y no doble. Y que el desglose no aparezca abajo por allá, sino que yo le dé clic a cada cosita y se desglose toda la info."*
+
+**Lo que estaba pasando.** El ciclo de agosto tenía **dos** gastos, $1.525.000 en total. La página los mostraba así:
+
+| Dónde | Qué decía |
+|---|---|
+| Tarjeta "Gastos fijos" | $1.525.000 |
+| Tarjeta "Salió del banco" | $1.525.000 |
+| Tarjeta "Marketing" | $1.000.000 |
+| Tarjeta "Finanzas" | $525.000 |
+| Tarjeta "Total gastos" | $1.525.000 |
+| Tabla del fondo | las dos filas otra vez |
+
+Seis apariciones de la misma plata. Y no era un caso raro: **siempre que no hay gastos variables ni mercancía, "gastos fijos" y "salió del banco" son el mismo número por definición** — dos tarjetas del mismo tamaño diciendo lo mismo, que es exactamente lo que hace desconfiar de un tablero.
+
+**Ahora hay dos bloques y nada más:**
+
+**1. 🧾 La cuenta del ciclo** — resumen, no se toca. Usa el mismo `renglon` que el resultado de Inicio (769), para que las dos pantallas se lean igual:
+
+```
+Gastos fijos              $1.525.000   se pagan igual vendas o no
+Gastos variables                  $0   suben con el movimiento
+──────────────────────────────────────
+Total de gastos           $1.525.000
+Compra de mercancía               $0   no es gasto: es plata que se vuelve inventario
+──────────────────────────────────────
+En total salió del banco  $1.525.000
+```
+
+Dos totales a propósito: el de **gastos** (el que manda en el punto de equilibrio) y el de **lo que salió del banco** (que suma la mercancía). Que coincidan deja de ser sospechoso porque se ven los ceros que lo explican.
+
+**2. 📂 En qué se fue** — un renglón plegado por categoría, ordenado por monto. Se toca y ahí mismo se abren **sus** registros, con editar y borrar. La tabla suelta del fondo desapareció: los registros viven dentro de su categoría, que es donde uno los va a buscar.
+
+La mercancía es su propio grupo al final, así **todo registro cae en algún grupo y la suma de los grupos da exactamente lo que salió del banco** — auditable de un vistazo, sin cuadrar nada a mano.
+
+Detalles que importan: los registros van en filas flexibles y no en tabla, porque esta página se mira desde el celular y una tabla de seis columnas ahí no se lee. El estado abierto/cerrado vive en un `Set` de módulo (`gastosGruposAbiertos`), así sobrevive al re-render que dispara cada `onSnapshot`.
+
+**Regla de diseño que sale de aquí, y aplica a toda pestaña que se reorganice después:** *un número puede aparecer dos veces solo si los dos sitios responden preguntas distintas, y el segundo sitio tiene que explicarse solo.* Cuatro tarjetas del mismo tamaño con la misma plata no son cuatro datos: son un dato y tres ruidos. Cuando un corte es útil (por categoría, por tipo), va **como desglose de un total ya mostrado** — no como una fila de tarjetas paralela compitiendo con él.
+
+
 ---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*

@@ -6404,6 +6404,35 @@ window.verCicloGastos = (offset) => {
   renderGastos();
 };
 
+// ============================================================
+// 773. GASTOS — una sola cuenta y un solo desglose.
+//
+// Ángel, mirando la pantalla vieja: "acá aparecen los gastos fijos y
+// 'salió del banco' de lo mismo, información repetida... y luego abajo
+// desglosa el gasto de marketing, el de los intereses y el total de gastos.
+// Que aparezca todo organizado y no doble, y que yo le dé clic a cada
+// cosita y se desglose la info."
+//
+// Tenía razón: la página mostraba la MISMA plata cuatro veces —tarjeta de
+// fijos, tarjeta de "salió del banco", tarjetas por categoría, tarjeta de
+// total— y encima la tabla completa hasta abajo. Con dos gastos en el ciclo
+// eso son seis apariciones de $1.525.000.
+//
+// Ahora hay exactamente dos bloques, y cada peso aparece una vez en cada uno:
+//   1. La cuenta del ciclo  → fijos + variables = gastos; + mercancía = lo que
+//      salió del banco. Es un resumen, no se toca.
+//   2. El desglose          → un renglón por categoría, plegado. Se le da clic
+//      y ahí mismo se abren SUS registros, con editar y borrar.
+// La tabla suelta del fondo desaparece: los registros ya viven dentro de su
+// categoría, que es donde uno los va a buscar.
+// ============================================================
+const gastosGruposAbiertos = new Set();
+window.toggleGrupoGasto = (k) => {
+  if(gastosGruposAbiertos.has(k)) gastosGruposAbiertos.delete(k);
+  else gastosGruposAbiertos.add(k);
+  renderGastos();
+};
+
 function renderGastos() {
   const verTodoG = gastosCicloOffset === -1;
   const cicloG = verTodoG ? null : getCicloActual(gastosCicloOffset);
@@ -6411,9 +6440,9 @@ function renderGastos() {
     ? DATA.gastos
     : DATA.gastos.filter(g => g.fecha >= cicloG.inicio && g.fecha <= cicloG.fin);
 
-  const totPorCat = Object.entries(CATS).map(([k,l]) => ({
-    k, l, t:gastosVentana.filter(g=>g.cat===k).reduce((s,g)=>s+Number(g.valor||0),0)
-  })).filter(c=>c.t>0);
+  // 773. `totPorCat` se eliminó: las tarjetas por categoría que alimentaba eran
+  //      justo la repetición que sobraba. Ese corte ahora vive en el desglose
+  //      plegable, que además lleva los registros adentro.
   const total = gastosVentana.reduce((s,g)=>s+Number(g.valor||0),0);
 
   // 713. Los tres números que de verdad importan del ciclo: qué fue mercancía
@@ -6438,47 +6467,88 @@ function renderGastos() {
     + 'color:' + (verTodoG?'#fff':'var(--ink-2)') + ';font-weight:' + (verTodoG?'600':'400') + '">Todo</button>';
   const selectorGastosHtml = '<div style="display:flex;gap:7px;overflow-x:auto;padding-bottom:4px;margin-bottom:14px">' + chipsG + '</div>';
 
-  const resumenTiposHtml =
-    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:9px;margin-bottom:16px">'
-    + '<div class="card" style="padding:12px 14px"><div style="font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)">Gastos fijos</div>'
-      + '<div style="font-size:18px;font-weight:800;color:var(--blue)">' + fmt(fijos) + '</div>'
-      + '<div style="font-size:11px;color:var(--ink-3)">se pagan igual vendas o no</div></div>'
-    + '<div class="card" style="padding:12px 14px"><div style="font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)">Gastos variables</div>'
-      + '<div style="font-size:18px;font-weight:800;color:var(--amber)">' + fmt(variables) + '</div>'
-      + '<div style="font-size:11px;color:var(--ink-3)">suben con el movimiento</div></div>'
-    + '<div class="card" style="padding:12px 14px"><div style="font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)">Compra de mercancía</div>'
-      + '<div style="font-size:18px;font-weight:800;color:var(--ink-2)">' + fmt(compras) + '</div>'
-      + '<div style="font-size:11px;color:var(--ink-3)">no es gasto, es inventario</div></div>'
-    + '<div class="card" style="padding:12px 14px"><div style="font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)">Salió del banco</div>'
-      + '<div style="font-size:18px;font-weight:800;color:var(--red)">' + fmt(total) + '</div>'
-      + '<div style="font-size:11px;color:var(--ink-3)">' + gastosVentana.length + ' registro' + (gastosVentana.length!==1?'s':'') + '</div></div>'
-    + '</div>';
+  // 773-a. La cuenta del ciclo. Mismo renglón que el resultado de Inicio (769),
+  //        para que las dos pantallas se lean igual. Dos totales a propósito:
+  //        el de gastos (que es el que manda en el punto de equilibrio) y el
+  //        de lo que salió del banco, que suma la mercancía.
+  const renglonG = (etiqueta, valor, nota, color, esTotal) => `
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;
+      padding:${esTotal?'9px 0 3px':'6px 0'};${esTotal?'border-top:1.5px solid var(--border);margin-top:3px':''}">
+      <span style="min-width:0">
+        <span style="font-size:${esTotal?'13.5':'13'}px;${esTotal?'font-weight:700;color:var(--ink)':'color:var(--ink-2)'}">${etiqueta}</span>
+        ${nota ? `<span style="display:block;font-size:11px;color:var(--ink-3);line-height:1.35">${nota}</span>` : ''}
+      </span>
+      <span style="font-size:${esTotal?'16':'13.5'}px;font-weight:${esTotal?'800':'600'};white-space:nowrap;
+        font-variant-numeric:tabular-nums;color:${color||'var(--ink-2)'}">${fmt(valor)}</span>
+    </div>`;
 
-  // 159. Ordenamos gastos por fecha descendente igual que ventas
-  const gastosOrdenados = [...gastosVentana].sort((a,b) => {
+  const resumenTiposHtml = `
+    <div class="card" style="padding:16px;margin-bottom:16px">
+      <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2);margin-bottom:8px">
+        🧾 La cuenta del ciclo
+      </div>
+      ${renglonG('Gastos fijos', fijos, 'se pagan igual vendas o no', 'var(--blue)')}
+      ${renglonG('Gastos variables', variables, 'suben con el movimiento', 'var(--amber)')}
+      ${renglonG('Total de gastos', fijos + variables, '', 'var(--red)', true)}
+      ${renglonG('Compra de mercancía', compras, 'no es gasto: es plata que se vuelve inventario y vuelve al vender', 'var(--ink-2)')}
+      ${renglonG('En total salió del banco', total, '', 'var(--ink)', true)}
+    </div>`;
+
+  // 773-b. El desglose. Un grupo por categoría, plegado, ordenado por monto.
+  //        La mercancía va en su propio grupo al final: así todo registro está
+  //        dentro de algún grupo y la suma de los grupos da exactamente lo que
+  //        salió del banco — se puede auditar de un vistazo.
+  const porFecha = (a,b) => {
     if(b.fecha !== a.fecha) return b.fecha > a.fecha ? 1 : -1;
     return (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0);
+  };
+  const gruposGasto = [];
+  const noMercancia = gastosVentana.filter(g => !esCompraMercancia(g));
+  const catsVistas = new Set();
+  noMercancia.forEach(g => catsVistas.add(g.cat || 'otro'));
+  catsVistas.forEach(k => {
+    const gs = noMercancia.filter(g => (g.cat || 'otro') === k).sort(porFecha);
+    gruposGasto.push({ k, label: CATS[k] || k, gastos: gs, total: gs.reduce((s2,g) => s2 + Number(g.valor||0), 0) });
   });
-  const catHtml = [...totPorCat, {k:'total',l:'Total gastos',t:total}].map(c => `
-    <div class="metric-card">
-      <div class="metric-label">${c.l}</div>
-      <div class="metric-value" style="color:${c.k==='total'?'var(--red)':'var(--amber)'};font-size:18px">${fmt(c.t)}</div>
-    </div>`).join('');
+  gruposGasto.sort((a,b) => b.total - a.total);
+  const merc = gastosVentana.filter(esCompraMercancia).sort(porFecha);
+  if(merc.length) gruposGasto.push({
+    k: '__mercancia', label: '📦 Compra de mercancía', gastos: merc, total: compras,
+    nota: 'no es gasto, es inventario'
+  });
 
-  const rows = gastosOrdenados.map(g => `
-    <tr>
-      <td style="color:var(--ink-3)">${g.fecha||''}</td>
-      <td><span class="badge b-warning">${CATS[g.cat]||g.cat}</span></td>
-      <td style="font-weight:500">${g.desc||''}</td>
-      <td style="font-size:11px;color:${esCompraMercancia(g)?'var(--ink-3)':esGastoFijo(g)?'var(--blue)':'var(--amber)'}">${esCompraMercancia(g)?'Mercancía':esGastoFijo(g)?'Fijo':'Variable'}</td>
-      <td style="font-weight:600;color:var(--red)">${fmt(g.valor)}</td>
-      <td>
-        <div style="display:flex;gap:5px">
-          <button class="btn btn-xs" onclick="editarGasto('${g.id}')">✏️</button>
-          <button class="btn btn-xs btn-danger" onclick="eliminarDoc('gastos','${g.id}')">✕</button>
-        </div>
-      </td>
-    </tr>`).join('');
+  // Un registro. En fila flexible y no en tabla: esta página se mira desde el
+  // celular y una tabla de seis columnas ahí no se lee.
+  const filaGasto = (g) => `
+    <div style="display:flex;align-items:center;gap:9px;padding:9px 14px 9px 30px;border-top:1px solid var(--border)">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600;color:var(--ink);overflow-wrap:anywhere">${g.desc||'(sin descripción)'}</div>
+        <div style="font-size:11px;color:var(--ink-3)">${fCorta(g.fecha)}
+          · <span style="color:${esCompraMercancia(g)?'var(--ink-3)':esGastoFijo(g)?'var(--blue)':'var(--amber)'}">${esCompraMercancia(g)?'Mercancía':esGastoFijo(g)?'Fijo':'Variable'}</span></div>
+      </div>
+      <div style="font-size:13.5px;font-weight:700;color:var(--red);white-space:nowrap;font-variant-numeric:tabular-nums">${fmt(g.valor)}</div>
+      <button class="btn btn-xs" onclick="editarGasto('${g.id}')">✏️</button>
+      <button class="btn btn-xs btn-danger" onclick="eliminarDoc('gastos','${g.id}')">✕</button>
+    </div>`;
+
+  const desgloseHtml = gruposGasto.map(gr => {
+    const abierto = gastosGruposAbiertos.has(gr.k);
+    return `
+      <div style="border-top:1px solid var(--border)">
+        <button onclick="toggleGrupoGasto('${gr.k}')" aria-expanded="${abierto}"
+          style="display:flex;align-items:center;gap:10px;width:100%;text-align:left;cursor:pointer;
+            background:none;border:none;padding:13px 14px;font-family:inherit">
+          <span style="font-size:11px;color:var(--ink-3);width:10px">${abierto ? '▾' : '▸'}</span>
+          <span style="flex:1;min-width:0">
+            <span style="font-size:13.5px;font-weight:600;color:var(--ink)">${gr.label}</span>
+            <span style="display:block;font-size:11px;color:var(--ink-3)">${gr.gastos.length} registro${gr.gastos.length!==1?'s':''}${gr.nota ? ' · ' + gr.nota : ''}</span>
+          </span>
+          <span style="font-size:14.5px;font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums;
+            color:${gr.k==='__mercancia'?'var(--ink-2)':'var(--red)'}">${fmt(gr.total)}</span>
+        </button>
+        ${abierto ? gr.gastos.map(filaGasto).join('') : ''}
+      </div>`;
+  }).join('');
 
   // 601. Sección de gastos recurrentes (arriendo, nómina, suscripciones) —
   //      plantillas que se generan solas cada ciclo (ver generarGastosRecurrentesDelCiclo)
@@ -6514,15 +6584,19 @@ function renderGastos() {
     </div>
     ${selectorGastosHtml}
     ${recurrentesHtml}
-    ${resumenTiposHtml}
-    <div class="metrics-grid" style="margin-bottom:16px">${catHtml}</div>
-    <div class="card">
-      ${gastosVentana.length ?
-        `<div class="table-wrap"><table class="tbl">
-          <thead><tr><th>Fecha</th><th>Categoría</th><th>Descripción</th><th>Tipo</th><th>Valor</th><th></th></tr></thead>
-          <tbody>${rows}</tbody>
-        </table></div>`
-        : `<div class="empty-state"><div class="empty-state-icon">💸</div><div class="empty-state-text">${DATA.gastos.length ? 'Sin gastos en este ciclo' : 'Sin gastos registrados'}</div></div>`}
+    ${gastosVentana.length ? resumenTiposHtml : ''}
+    <div class="card" style="padding:0;overflow:hidden">
+      ${gastosVentana.length ? `
+        <div style="padding:14px 14px 11px">
+          <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2)">
+            📂 En qué se fue
+          </div>
+          <div style="font-size:11.5px;color:var(--ink-3);margin-top:3px;line-height:1.4">
+            Toca cualquier renglón para ver los registros que lo componen.
+          </div>
+        </div>
+        ${desgloseHtml}`
+        : `<div class="empty-state" style="padding:28px"><div class="empty-state-icon">💸</div><div class="empty-state-text">${DATA.gastos.length ? 'Sin gastos en este ciclo' : 'Sin gastos registrados'}</div></div>`}
     </div>`;
 }
 
