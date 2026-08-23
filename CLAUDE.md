@@ -530,5 +530,41 @@ La app detectó que a OLIMPO GYM se le vende SYNTHA 6 5L a **$288.000** cuando c
 
 **No es un precio para corregir.** Cualquier alerta futura de "margen bajo" o "vendido por debajo de costo" tiene que poder excluir este caso, o al menos no tratarlo como error. Antes de señalar un precio bajo como problema, mirar si ese cliente compra volumen en otras referencias.
 
+### 14.16 El distribuidor se escoge de una lista, y va primero (comentarios 762–763)
+
+Pedido de Ángel, y la raíz de dos problemas que salieron en el sondeo:
+
+> *"Cuando se vaya a hacer la compra de un distribuidor, primero se selecciona eso, y que aparezca un selector con los nombres ya registrados para no registrarlo de una manera diferente y crear más confusión."*
+
+**Cómo estaba:** el selector de distribuidor vivía **al final** del formulario, debajo del bloque de pago, con la etiqueta *"Opcional — para llevar historial por distribuidor"*. El nombre del cliente se escribía aparte, a mano, en un campo libre. Resultado medido en producción: **19 ventas por $5.683.304** con canal distribuidor y sin vincular a nadie, y distribuidores duplicados por escribir el nombre distinto (`SEBAS BEDOYA` / `SEBASTIAN BEDOYA`, `GREEN ROOTS` / `SERGIO GREEN ROOTS`).
+
+**762.** El selector sube justo debajo del canal, deja de ser opcional y `guardarVenta` bloquea el guardado si el canal es distribuidor y no se escogió ninguno. Al escoger, `elegirDistribuidorVenta` **llena el nombre del cliente y lo bloquea** — el nombre de la venta y el del distribuidor ya no se pueden separar. La lista va ordenada alfabéticamente. Y hay un *"Créalo aquí"* que abre el modal de distribuidor y **vuelve a la venta** con el nuevo ya seleccionado, sin perder lo que se llevaba escrito (`volverAVentaTrasDistribuidor`).
+
+**763.** Para venta directa el campo sigue siendo libre —siempre entra gente nueva— pero ahora trae `<datalist>` con todos los clientes y distribuidores ya registrados, y `revisarClienteParecido` avisa mientras se escribe si el nombre se parece a uno que ya existe, con un botón para usar el existente. Reutiliza `clientesSimilares` (709). Es la misma defensa que el importador, pero en el registro a mano.
+
+**Regla que sale de aquí:** cuando dos campos tienen que decir lo mismo (el nombre del cliente y el del distribuidor), no se piden dos veces — se pide uno y el otro se deriva. Pedirlos por separado garantiza que algún día no coincidan.
+
+### 14.17 Decisiones de Ángel en el sondeo de cierre (23 ago 2026)
+
+Respuestas una por una, para no volver a preguntarlas:
+
+| Tema | Decisión |
+|---|---|
+| 6 pagos descuadrados | Los seis pagaron completo. $779.659 recuperados en caja. |
+| Ventas de distribuidor sin vincular | Creados MATEO CARDENAS, ALEJANDRO PEREA y STIVEN GALLEGO (este último, otro profesor con gimnasio propio). `CAMILO ENTRENADOR` = Camilo Gallego → renombrado a **CAMILO GALLEGO ENTRENADOR**. `J ENTRENADOR` = Juan Gabriel Entrenador. `NAGA` = Nagatomo. |
+| Jerónimo Arroyave, venta del 5 may | Fue venta real hecha por el socio, la plata entró. Pasada a **canal directo** para no meter al socio en el ranking de distribuidores. |
+| Pre Entreno Electrón | Costaba **$87.137**, no $103.000. Eran 5 ventas con el costo del Intenze pegado. |
+| Distribuidores duplicados | Misma persona. Quedan **SEBASTIAN BEDOYA** y **GREEN ROOTS**. |
+| Whey Elite 8 lbs | Costaba **$346.500**. Presentación descontinuada, solo se le vendía a Go Up. |
+| Precios por distribuidor | **No** se implementan. Ángel lo maneja a ojo al facturar. |
+| Amino X | Estaba con precio de distribuidor = costo. Real: costo **$91.000**, distribuidor **$98.000**, público **$130.000**. |
+| Creatina MuscleTech | `CREATINA PLATINUM MUSCLETECH 450g` y `CREATINA 90 SERVICIOS MUSCLETECH NUEVO` son **la misma referencia**. Fusionadas: 14 unidades a **$97.000** (precio del último pedido, no promedio ponderado). |
+| Alerta de producto estancado | **No** la quiere. |
+| David Inpec / Inpec / Maide Inpec | **Tres personas distintas** del mismo lugar. No unificar. |
+
+**Trampa encontrada al fusionar:** 10 ventas de Creatina Platinum seguían con `prodId` apuntando a **CAFEINA PLATINUM MUSCLETECH**. El arreglo de costos (14.11) corrigió `costoUnit` pero a propósito no tocó `prodId` (748). Consecuencia: el top de productos y las alertas de stock atribuían las creatinas a la cafeína, y por eso el inventario parecía tener $1.164.000 de creatina quieta que en realidad sí se había vendido. Se repuntaron las 10 — seguro porque todas tenían `stockDescontado: false` (749), así que mover el `prodId` no movió inventario.
+
+**Lección:** corregir el costo sin corregir el producto deja el dinero bien y la información mal. Cuando una línea de venta apunta al producto equivocado hay que arreglar las dos cosas, y `stockDescontado` es lo que dice si es seguro hacerlo.
+
 ---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*

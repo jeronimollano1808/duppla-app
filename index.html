@@ -1221,6 +1221,26 @@ body{
       </div>
     </div>
 
+    <!--
+         762. El distribuidor se escoge PRIMERO, justo debajo del canal, y de una
+         lista cerrada. Antes esto vivía al final del formulario, debajo del pago,
+         marcado "opcional", y el nombre del cliente se escribía a mano aparte: así
+         nacieron "SEBAS BEDOYA" y "SEBASTIAN BEDOYA" como dos personas, y 19 ventas
+         quedaron con canal distribuidor sin vincular a nadie. Ahora al escoger de
+         la lista se llena el nombre solo y no hay forma de inventarse una variante.
+    -->
+    <div class="f-group" id="v-dist-grupo" style="display:none">
+      <label class="f-label">¿Cuál distribuidor? *</label>
+      <select id="v-dist-id" class="f-input" onchange="elegirDistribuidorVenta(this.value)">
+        <option value="">— Escoge uno de la lista —</option>
+      </select>
+      <div style="font-size:11px;color:var(--ink-3);margin-top:4px;line-height:1.4">
+        Escógelo de la lista para que la venta le quede en su historial.
+        ¿Es nuevo? <button type="button" onclick="abrirNuevoDistribuidorDesdeVenta()"
+          style="background:none;border:none;padding:0;color:var(--lime);font-weight:600;cursor:pointer;text-decoration:underline;font-size:11px">Créalo aquí</button>
+      </div>
+    </div>
+
     <!-- 271. Toggle: inventario / manual / combo — 629. oculto al editar una
          venta múltiple existente (el modo se fuerza a "inventario" para no
          perder las líneas ya cargadas) -->
@@ -1272,7 +1292,14 @@ body{
       <div id="prev-vtotal" style="font-size:12px;margin-top:4px;font-weight:700;color:var(--lime)"></div>
     </div>
 
-    <div class="f-group"><label class="f-label">Cliente</label><input type="text" id="v-cliente" class="f-input" placeholder="Nombre del cliente"></div>
+    <!-- 763. Sugerencias de clientes ya registrados. No obliga a escoger de la
+         lista (siempre entra gente nueva) pero evita que el mismo cliente quede
+         como "ISABELLA CERTUCHE" y "CERTUCHE" por escribirlo distinto. -->
+    <div class="f-group"><label class="f-label">Cliente</label>
+      <input type="text" id="v-cliente" class="f-input" placeholder="Nombre del cliente" list="dl-clientes-venta" autocomplete="off" oninput="revisarClienteParecido()">
+      <datalist id="dl-clientes-venta"></datalist>
+      <div id="v-cliente-aviso" style="font-size:11px;color:var(--ink-3);margin-top:4px;display:none"></div>
+    </div>
 
     <!-- Pago -->
     <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:14px">
@@ -1318,14 +1345,6 @@ body{
       <div id="v-estado-pago" style="margin-top:10px;font-size:12px;color:var(--ink-3)">
         Completa el total para ver el estado de pago
       </div>
-    </div>
-    <!-- 330. Distribuidor vinculado — aparece si el canal es distribuidor -->
-    <div class="f-group" id="v-dist-grupo" style="display:none">
-      <label class="f-label">Distribuidor / Gimnasio</label>
-      <select id="v-dist-id" class="f-input">
-        <option value="">— Sin vincular —</option>
-      </select>
-      <div style="font-size:11px;color:var(--ink-3);margin-top:3px">Opcional — para llevar historial por distribuidor</div>
     </div>
     <div class="f-group"><label class="f-label">Nota (opcional)</label><input type="text" id="v-nota" class="f-input" placeholder="Referencia adicional"></div>
     <div class="modal-footer">
@@ -4005,6 +4024,13 @@ window.abrirModalVenta = () => {
     if(distGrupo) distGrupo.style.display = 'none';
     const distSel = document.getElementById('v-dist-id');
     if(distSel) distSel.value = '';
+    // 762/763. El campo de cliente vuelve a ser editable y se recargan las
+    //          sugerencias de nombres ya registrados.
+    const cliInp = document.getElementById('v-cliente');
+    if(cliInp) { cliInp.readOnly = false; cliInp.style.opacity = ''; }
+    const cliAviso = document.getElementById('v-cliente-aviso');
+    if(cliAviso) cliAviso.style.display = 'none';
+    actualizarSugerenciasCliente();
     // 362. Reset campos mixto
     const mixtoGrupo = document.getElementById('v-mixto-grupo');
     if(mixtoGrupo) mixtoGrupo.style.display = 'none';
@@ -4414,6 +4440,14 @@ window.guardarVenta = async () => {
   const distribuidorId = canal === 'distribuidor'
     ? (document.getElementById('v-dist-id')?.value || null)
     : null;
+  // 762. Con canal distribuidor, escogerlo es OBLIGATORIO. Era "opcional" y así
+  //      quedaron 19 ventas por $5.683.304 que no le sumaban a nadie.
+  if(canal === 'distribuidor' && !distribuidorId) {
+    alert('Escoge de la lista a qué distribuidor es la venta.\n\n'
+      + 'Si no lo haces, la venta no le queda en su historial ni en el ranking. '
+      + 'Si es un distribuidor nuevo, créalo con el enlace que está debajo de la lista.');
+    return;
+  }
   // 361. Desglose mixto — solo se guarda si el método es mixto
   const mixtoEfectivo = metodoPago === 'mixto' ? Number(document.getElementById('v-mixto-efectivo').value)||0 : null;
   const mixtoTransferencia = metodoPago === 'mixto' ? Number(document.getElementById('v-mixto-transferencia').value)||0 : null;
@@ -9284,20 +9318,92 @@ window.enviarRecordatorioWhatsApp = () => {
 window.toggleDistribuidorField = (canal) => {
   const grupo = document.getElementById('v-dist-grupo');
   if(!grupo) return;
+  const cli = document.getElementById('v-cliente');
   if(canal === 'distribuidor') {
     grupo.style.display = 'block';
     const sel = document.getElementById('v-dist-id');
     if(sel) {
-      sel.innerHTML = '<option value="">— Sin vincular —</option>'
-        + DATA.distribuidores.map(d =>
+      const actual = sel.value;
+      sel.innerHTML = '<option value="">— Escoge uno de la lista —</option>'
+        + [...DATA.distribuidores].sort((a,b) => String(a.nombre||'').localeCompare(String(b.nombre||''),'es'))
+          .map(d =>
             '<option value="' + d.id + '">'
             + (d.tipo==='gimnasio'?'🏋️':d.tipo==='tienda'?'🏪':'👤')
             + ' ' + d.nombre + (d.ciudad?' — '+d.ciudad:'') + '</option>'
           ).join('');
+      if(actual) sel.value = actual;
     }
   } else {
     grupo.style.display = 'none';
+    const sel = document.getElementById('v-dist-id');
+    if(sel) sel.value = '';
+    // 762. Al salir del canal distribuidor se devuelve el control del nombre.
+    if(cli) { cli.readOnly = false; cli.style.opacity = ''; }
   }
+  actualizarSugerenciasCliente();
+};
+
+// 762. Escoger el distribuidor llena el nombre del cliente y lo bloquea: el
+//      nombre de la venta y el del distribuidor NO se pueden separar nunca más.
+window.elegirDistribuidorVenta = (id) => {
+  const cli = document.getElementById('v-cliente');
+  if(!cli) return;
+  const d = DATA.distribuidores.find(x => x.id === id);
+  if(d) {
+    cli.value = d.nombre;
+    cli.readOnly = true;
+    cli.style.opacity = '.75';
+  } else {
+    cli.readOnly = false;
+    cli.style.opacity = '';
+  }
+};
+
+// 762. Crear un distribuidor sin perder la venta a medio llenar.
+window.abrirNuevoDistribuidorDesdeVenta = () => {
+  volverAVentaTrasDistribuidor = true;
+  abrirNuevoDistribuidor();
+};
+
+let volverAVentaTrasDistribuidor = false;
+
+// 763. Lista de clientes ya registrados, para no crear el mismo dos veces con
+//      nombres distintos. Es sugerencia, no obligación: siempre entra gente nueva.
+function actualizarSugerenciasCliente() {
+  const dl = document.getElementById('dl-clientes-venta');
+  if(!dl) return;
+  const nombres = [...new Set([
+    ...DATA.ventas.map(v => v.cliente),
+    ...DATA.distribuidores.map(d => d.nombre)
+  ].filter(Boolean))].sort((a,b) => String(a).localeCompare(String(b),'es'));
+  dl.innerHTML = nombres.map(n => '<option value="' + String(n).replace(/"/g,'&quot;') + '">').join('');
+}
+
+// 763. Aviso suave si el nombre escrito se parece mucho a uno que ya existe.
+window.revisarClienteParecido = () => {
+  const cli = document.getElementById('v-cliente');
+  const aviso = document.getElementById('v-cliente-aviso');
+  if(!cli || !aviso) return;
+  const txt = cli.value.trim();
+  aviso.style.display = 'none';
+  if(txt.length < 4 || cli.readOnly) return;
+  const exactos = new Set([...DATA.ventas.map(v => v.cliente), ...DATA.distribuidores.map(d => d.nombre)].filter(Boolean));
+  if(exactos.has(txt)) return;
+  const parecido = [...exactos].find(n => clientesSimilares(n, txt));
+  if(parecido) {
+    aviso.style.display = 'block';
+    aviso.innerHTML = '¿Te refieres a <button type="button" onclick="usarClienteExistente('
+      + JSON.stringify(parecido).replace(/"/g,'&quot;') + ')" '
+      + 'style="background:none;border:none;padding:0;color:var(--lime);font-weight:700;cursor:pointer;text-decoration:underline;font-size:11px">'
+      + parecido + '</button>? Así no queda como dos clientes distintos.';
+  }
+};
+
+window.usarClienteExistente = (nombre) => {
+  const cli = document.getElementById('v-cliente');
+  if(cli) cli.value = nombre;
+  const aviso = document.getElementById('v-cliente-aviso');
+  if(aviso) aviso.style.display = 'none';
 };
 
 window.abrirNuevoDistribuidor = () => {
@@ -9341,8 +9447,20 @@ window.guardarDistribuidor = async () => {
     await updateDoc(doc(db,'distribuidores',id), data);
     toast('✅ Distribuidor actualizado');
   } else {
-    await addDoc(collection(db,'distribuidores'), { ...data, createdAt: serverTimestamp() });
+    const ref = await addDoc(collection(db,'distribuidores'), { ...data, createdAt: serverTimestamp() });
     toast('✅ Distribuidor agregado');
+    // 762. Si venía de "Créalo aquí" dentro de una venta, se vuelve a la venta
+    //      con el distribuidor nuevo ya escogido — sin perder lo que llevaba.
+    if(volverAVentaTrasDistribuidor) {
+      volverAVentaTrasDistribuidor = false;
+      closeModal('modal-distribuidor');
+      DATA.distribuidores = [{ id: ref.id, ...data }, ...DATA.distribuidores];
+      openModal('modal-venta');
+      toggleDistribuidorField('distribuidor');
+      const sel = document.getElementById('v-dist-id');
+      if(sel) { sel.value = ref.id; elegirDistribuidorVenta(ref.id); }
+      return;
+    }
   }
   closeModal('modal-distribuidor');
 };
