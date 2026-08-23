@@ -1509,6 +1509,75 @@ body{
   </div>
 </div>
 
+<!--
+     735. MODAL: REGISTRAR COBRO DE CUENTA
+     El hueco que hacía que todo esto se dañara. Cuando entraba plata de una
+     cuenta vieja no había dónde ponerla, así que se metía como una venta más
+     y el mismo peso quedaba contado dos veces (ver 727). Este es el lugar.
+     Si la venta SÍ está registrada en la app, no se usa esto: se abre la
+     venta y se le pone "+ Abono", que además baja el saldo del cliente.
+-->
+<div class="modal-bg" id="modal-cobro">
+  <div class="modal" style="max-width:430px">
+    <div class="modal-header">
+      <span class="modal-title">Registrar cobro de cuenta</span>
+      <button class="modal-close" onclick="closeModal('modal-cobro')">✕</button>
+    </div>
+    <div style="background:var(--blue-bg);border:1px solid #BFDBFE;border-radius:var(--radius);padding:11px 13px;margin-bottom:16px;font-size:12.5px;color:#1E3A8A;line-height:1.45">
+      Esto es plata que entra pagando algo <strong>vendido en un mes anterior</strong>.
+      Suma en caja, no en lo vendido de este ciclo.
+      <div style="margin-top:6px;color:#1E40AF">
+        ¿La venta está registrada en la app? Entonces ciérrala desde
+        <strong>Cobrar → + Abono</strong>: así también le baja la deuda al cliente.
+      </div>
+    </div>
+    <div class="f-group">
+      <label class="f-label">Fecha *</label>
+      <input type="date" id="cb-fecha" class="f-input">
+    </div>
+    <div class="f-group">
+      <label class="f-label">¿De quién? *</label>
+      <input type="text" id="cb-cliente" class="f-input" list="dl-clientes-cobro"
+        placeholder="Ej: DANIEL SANTAMARIA" oninput="sugerirTipoCobro()">
+      <datalist id="dl-clientes-cobro"></datalist>
+    </div>
+    <div class="f-group">
+      <label class="f-label">Valor ($) *</label>
+      <input type="number" id="cb-valor" class="f-input" placeholder="Ej: 500000"
+        oninput="previoCOP('cb-valor','prev-cb-valor')">
+      <div id="prev-cb-valor" style="font-size:11px;margin-top:4px;font-weight:600"></div>
+    </div>
+    <div class="f-group">
+      <label class="f-label">¿Qué es?</label>
+      <select id="cb-tipo" class="f-input">
+        <option value="abono">Abono a la cuenta de un cliente</option>
+        <option value="reembolso">Reembolso de un socio (consumo propio)</option>
+      </select>
+    </div>
+    <div class="f-group">
+      <label class="f-label">Concepto (opcional)</label>
+      <input type="text" id="cb-nota" class="f-input" placeholder="Ej: restante whey elite 5L">
+    </div>
+    <div class="f-group">
+      <label class="f-label">Método de pago</label>
+      <div style="display:flex;gap:8px">
+        <button type="button" id="cb-mp-efectivo" onclick="setMetodoPagoCobro('efectivo')"
+          style="flex:1;padding:7px;border-radius:var(--radius);border:2px solid var(--border);background:var(--surface-2);color:var(--ink-2);font-size:12px;font-weight:600;cursor:pointer">
+          💵 Efectivo
+        </button>
+        <button type="button" id="cb-mp-transferencia" onclick="setMetodoPagoCobro('transferencia')"
+          style="flex:1;padding:7px;border-radius:var(--radius);border:2px solid var(--ink);background:var(--ink);color:#fff;font-size:12px;font-weight:600;cursor:pointer">
+          📲 Transferencia
+        </button>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-cobro')">Cancelar</button>
+      <button class="btn btn-lime" onclick="guardarCobro()">Registrar cobro</button>
+    </div>
+  </div>
+</div>
+
 <!-- Modal: Nuevo producto -->
 <div class="modal-bg" id="modal-producto">
   <div class="modal">
@@ -2178,7 +2247,9 @@ const auth = getAuth(app);
 // sin necesitar consultar Firebase en cada interacción
 // ============================================================
 let DATA = {
-  ventas:[], inventario:[], gastos:[],
+  ventas:[],
+  cobros:[],  // 727. plata que entra contra una cuenta vieja — NO es venta (ver 727)
+  inventario:[], gastos:[],
   proveedores:[], pedidos:[], metas:[],
   notificaciones:[], combos:[],
   consumos:[],
@@ -2471,6 +2542,71 @@ function ingresoVenta(v) {
   return Math.max(Number(v?.total||0), Number(v?.pagado||0));
 }
 
+// ============================================================
+// 727. VENTA vs COBRO — la regla contable que faltaba.
+//
+// Una venta se cuenta UNA sola vez: el día que sale la mercancía, por su
+// valor total. Si el cliente no paga todo ese día, la diferencia queda como
+// saldo, pero el ingreso YA quedó contado (ver ingresoVenta, 566).
+//
+// Cuando después paga, eso NO es un ingreso nuevo: es plata que entra a caja
+// contra un saldo que ya existía. Si se registra como una venta más, el mismo
+// peso se cuenta dos veces.
+//
+// Eso es exactamente lo que venía pasando. En la hoja no había dónde poner un
+// pago suelto, así que se anotaba como una fila de venta:
+//
+//   20/05  ABONO SANTA                     $500.000
+//   27/05  ABONO ANGEL                     $400.000
+//   03/06  ABONO SANTA                   $1.400.000
+//   03/06  ABONO JERONIMO                  $100.000
+//   22/06  ABONO SANTAMARIA                $250.000
+//   01/07  ABONO ANGEL CERTUCHE            $350.000
+//   08/07  RESTANTE WHEY ELITE 5L SANTA    $216.000
+//                                       ─────────────
+//                                        $3.216.000
+//
+// Por qué ninguno es venta:
+//  - SANTA (Daniel Santamaría) recibió $2.338.000 de mercancía en marzo y
+//    abril (19/03 $278.000 · 31/03 $1.060.000 · 09/04 $1.000.000) y esas SÍ
+//    se contaron como venta en su mes. Sus abonos de mayo a julio están
+//    pagando esa misma cuenta.
+//  - ÁNGEL y JERÓNIMO sacan producto a costo para consumo propio (hoja
+//    "consumo socios": $970.665 y $393.295 hasta hoy). Cuando reponen la
+//    plata es un reembolso, no una venta.
+//
+// De aquí en adelante estos movimientos viven en DATA.cobros, no en
+// DATA.ventas. Se guardan en la MISMA colección de Firestore (mismo
+// historial, misma papelera, se siguen editando igual) pero se separan al
+// entrar a memoria. Así ninguna suma de vendido, margen, metas, top de
+// productos ni ranking de distribuidores los ve — que era la parte imposible
+// de garantizar a mano con 56 lugares distintos leyendo DATA.ventas.
+// La caja sí los suma, porque la plata sí entró.
+// ============================================================
+const TIPOS_COBRO = ['abono', 'reembolso'];
+
+function esCobro(v) {
+  return TIPOS_COBRO.includes(v?.tipoMov);
+}
+
+// 728. Reconoce por el texto una fila que es un cobro disfrazado de venta.
+//      Se usa al importar de la hoja y en el detector de la herramienta de
+//      revisión. RESTANTE entra porque así se escribe en la hoja el cobro
+//      del saldo de un producto ya entregado.
+const RE_COBRO_TEXTO = /^\s*(abono|restante|saldo|pago\s+de\s+cuenta|reembolso)\b/i;
+
+function pareceCobro(texto) {
+  return RE_COBRO_TEXTO.test(String(texto || ''));
+}
+
+// 729. Un cobro de un socio es reembolso de consumo propio; el de cualquier
+//      otro es abono a su cuenta. Cambia solo la etiqueta, no la plata.
+const SOCIOS_DUPPLA = /(angel|ángel)\s*certuche|jer[oó]nimo\s*arroyave/i;
+
+function tipoCobroSugerido(cliente) {
+  return SOCIOS_DUPPLA.test(String(cliente || '')) ? 'reembolso' : 'abono';
+}
+
 // 575. UMBRAL_MORA_DIAS — antes vivía solo dentro de renderDeudores() y no se
 // podía reutilizar. Ahora también la usan el badge del menú y el aviso
 // automático al abrir la app (ver calcularDeudores más abajo).
@@ -2717,6 +2853,15 @@ function startListeners() {
     const q = query(collection(db, col), orderBy('createdAt','desc'));
     onSnapshot(q, snap => {
       DATA[col] = snap.docs.map(d => ({id:d.id, ...d.data()}));
+      // 730. Único punto donde se separan ventas y cobros (ver 727). Se hace
+      //      aquí, al entrar los datos a memoria, y no en cada suma: si se
+      //      dejara a criterio de cada pantalla, tarde o temprano una se
+      //      olvida y el error vuelve a aparecer sin que nadie lo note.
+      if(col === 'ventas') {
+        const todos = DATA.ventas;
+        DATA.cobros = todos.filter(esCobro);
+        DATA.ventas = todos.filter(v => !esCobro(v));
+      }
       // Solo redibujamos si estamos en la página relevante o el dashboard
       // 680. FIX — Inicio lee de casi todas las colecciones pero no se llama
       //      como ninguna, así que nunca entraba en esta condición: al entrar
@@ -3329,6 +3474,17 @@ function renderDashboard() {
       else cajaEfectivo += Number(a.valor||0);
     });
   });
+  // 733. Cobros de cuentas viejas (ver 727). Están fuera de DATA.ventas, así
+  //      que si no se suman aquí el flujo de caja se queda corto por esa plata.
+  DATA.cobros.forEach(c => {
+    if(!c.fecha || c.fecha < inicio || c.fecha > fin) return;
+    const val = ingresoVenta(c);
+    if(c.metodoPago === 'mixto') {
+      cajaEfectivo      += Number(c.mixtoEfectivo||0);
+      cajaTransferencia += Number(c.mixtoTransferencia||0);
+    } else if(c.metodoPago === 'transferencia') cajaTransferencia += val;
+    else cajaEfectivo += val;
+  });
   const cajaTotal = cajaEfectivo + cajaTransferencia;
   const pctEfectivo = cajaTotal > 0 ? Math.round((cajaEfectivo/cajaTotal)*100) : 0;
   const pctTransferencia = 100 - pctEfectivo;
@@ -3591,6 +3747,50 @@ function renderVentas() {
       </div>
     </div>`;
 
+  // 743. Aviso si se coló un cobro registrado como venta. Se arregla en un clic.
+  const malRegistradas = ventasQueSonCobros();
+  const avisoCobrosMalRegistrados = malRegistradas.length ? `
+    <div style="background:var(--amber-bg);border:1px solid #FDE68A;border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <span style="font-size:16px">⚠️</span>
+      <span style="flex:1;min-width:220px;font-size:12.5px;color:#92400E;line-height:1.45">
+        <strong>${malRegistradas.length} movimiento(s) por ${fmt(malRegistradas.reduce((s,v)=>s+ingresoVenta(v),0))} están contados como venta pero son cobros</strong>
+        de cuentas de meses anteriores. Así, ese dinero se cuenta dos veces: cuando se vendió y cuando lo pagaron.
+      </span>
+      <button class="btn btn-sm" style="white-space:nowrap" onclick="convertirVentasEnCobros()">Arreglarlo</button>
+    </div>` : '';
+
+  // 734. Los cobros de cuentas viejas (ver 727) van en su propia tabla, debajo
+  //      de las ventas. Fuera de los totales de arriba —no son venta— pero a
+  //      la vista y editables, para que no queden en un limbo invisible.
+  const cobrosPeriodo = (rangoInicio && rangoFin)
+    ? DATA.cobros.filter(c => c.fecha >= rangoInicio && c.fecha <= rangoFin)
+    : DATA.cobros;
+  const totalCobros = cobrosPeriodo.reduce((s,c) => s + ingresoVenta(c), 0);
+  const cobrosHtml = cobrosPeriodo.length ? `
+    <div style="margin-top:18px">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:8px">
+        <div>
+          <div style="font-size:14px;font-weight:700;color:var(--ink)">💳 Cobros de cuentas anteriores</div>
+          <div style="font-size:11.5px;color:var(--ink-3);line-height:1.4;max-width:640px">
+            Plata que entró pagando ventas de meses pasados. Suma en caja, no en lo vendido del período — esa venta ya se contó cuando salió la mercancía.
+          </div>
+        </div>
+        <span style="font-size:15px;font-weight:800;color:var(--blue);white-space:nowrap">${fmt(totalCobros)}</span>
+      </div>
+      <div class="card"><div class="table-wrap"><table class="tbl">
+        <thead><tr><th>Fecha</th><th>De quién</th><th>Concepto</th><th>Tipo</th><th style="text-align:right">Valor</th><th></th></tr></thead>
+        <tbody>${[...cobrosPeriodo].sort((a,b) => b.fecha > a.fecha ? 1 : -1).map(c => `
+          <tr>
+            <td style="color:var(--ink-3);white-space:nowrap">${fCorta(c.fecha)}</td>
+            <td style="font-weight:500">${c.cliente||'—'}</td>
+            <td style="color:var(--ink-2)">${c.producto||c.nota||''}</td>
+            <td><span class="badge b-info" style="font-size:10px">${c.tipoMov === 'reembolso' ? 'Reembolso socio' : 'Abono a cuenta'}</span></td>
+            <td style="text-align:right;font-weight:600;color:var(--blue)">${fmt(ingresoVenta(c))}</td>
+            <td><button class="btn btn-xs btn-danger" onclick="eliminarDoc('ventas','${c.id}')">✕</button></td>
+          </tr>`).join('')}</tbody>
+      </table></div></div>
+    </div>` : '';
+
   // 158. Ordenamos las ventas del ciclo activo por fecha descendente
   const ventasOrdenadas = [...ventasPeriodoActual].sort((a,b) => {
     if(b.fecha !== a.fecha) return b.fecha > a.fecha ? 1 : -1;
@@ -3711,10 +3911,12 @@ function renderVentas() {
         <button class="btn btn-sm" onclick="exportarCSV()">↓ CSV</button>
         <button class="btn btn-sm" onclick="abrirImportarVentas()">⬆️ Importar</button>
         <button class="btn btn-sm" style="color:var(--amber);border-color:#FDE68A" onclick="abrirRevisarPrecios()">⚠️ Revisar precios</button>
+        <button class="btn btn-sm" onclick="abrirModalCobro()">💳 Cobro</button>
         <button class="btn btn-lime btn-sm" onclick="abrirModalVenta()">+ Nueva venta</button>
       </div>
     </div>
     ${selectorPeriodoHtml}
+    ${avisoCobrosMalRegistrados}
     ${resumenHtml}
     <!-- 243. Barra de búsqueda de ventas -->
     <div style="position:relative;margin-bottom:14px">
@@ -3734,7 +3936,8 @@ function renderVentas() {
           <tbody id="ventas-tabla-body">${rows}</tbody>
         </table></div>`
         : `<div class="empty-state"><div class="empty-state-icon">🛒</div><div class="empty-state-text">${DATA.ventas.length ? 'Sin ventas en este período' : 'Sin ventas registradas'}</div></div>`}
-    </div>`;
+    </div>
+    ${cobrosHtml}`;
 }
 
 // 276. Estado de las líneas de productos en la venta actual
@@ -4518,6 +4721,94 @@ window.guardarAbono = async () => {
 
   closeModal('modal-abono');
   abonoVentaId = null;
+};
+
+// ============================================================
+// 736. COBRO DE CUENTA — el registro que faltaba (ver 727 y 735).
+// Guarda en la colección 'ventas' con tipoMov, así que hereda papelera,
+// historial y edición sin código nuevo; pero al entrar a memoria se va a
+// DATA.cobros (ver 730) y ninguna suma de vendido lo ve.
+// ============================================================
+let metodoPagoCobro = 'transferencia';
+
+window.setMetodoPagoCobro = (tipo) => {
+  metodoPagoCobro = tipo;
+  [['cb-mp-efectivo','efectivo'],['cb-mp-transferencia','transferencia']].forEach(([id,t]) => {
+    const el = document.getElementById(id);
+    if(!el) return;
+    const on = t === tipo;
+    el.style.border     = '2px solid ' + (on ? 'var(--ink)' : 'var(--border)');
+    el.style.background = on ? 'var(--ink)' : 'var(--surface-2)';
+    el.style.color      = on ? '#fff' : 'var(--ink-2)';
+  });
+};
+
+// 737. Si el nombre es de un socio, el cobro es reembolso de consumo propio.
+//      Solo cambia la etiqueta — la plata entra igual.
+window.sugerirTipoCobro = () => {
+  const sel = document.getElementById('cb-tipo');
+  if(sel && !sel.dataset.tocado) sel.value = tipoCobroSugerido(document.getElementById('cb-cliente')?.value);
+};
+
+window.abrirModalCobro = () => {
+  document.getElementById('cb-fecha').value   = today();
+  document.getElementById('cb-cliente').value = '';
+  document.getElementById('cb-valor').value   = '';
+  document.getElementById('cb-nota').value    = '';
+  document.getElementById('prev-cb-valor').textContent = '';
+  const sel = document.getElementById('cb-tipo');
+  sel.value = 'abono';
+  delete sel.dataset.tocado;
+  sel.onchange = () => { sel.dataset.tocado = '1'; };
+  // Sugerencias de nombre: quien ya tiene saldo abierto primero, luego todos.
+  const conDeuda = [...new Set(DATA.ventas.filter(v => saldoReal(v) > 0).map(v => v.cliente).filter(Boolean))];
+  const resto    = [...new Set([...DATA.ventas.map(v => v.cliente), ...DATA.distribuidores.map(d => d.nombre)].filter(Boolean))];
+  document.getElementById('dl-clientes-cobro').innerHTML =
+    [...new Set([...conDeuda, ...resto])].map(n => '<option value="' + String(n).replace(/"/g,'&quot;') + '">').join('');
+  setMetodoPagoCobro('transferencia');
+  openModal('modal-cobro');
+};
+
+window.guardarCobro = async () => {
+  const fecha   = document.getElementById('cb-fecha').value;
+  const cliente = document.getElementById('cb-cliente').value.trim();
+  const valor   = Number(document.getElementById('cb-valor').value) || 0;
+  const tipoMov = document.getElementById('cb-tipo').value === 'reembolso' ? 'reembolso' : 'abono';
+  const nota    = document.getElementById('cb-nota').value.trim();
+
+  if(!fecha)         return toast('⚠️ Ponle fecha al cobro');
+  if(!cliente)       return toast('⚠️ Falta de quién es el cobro');
+  if(valor <= 0)     return toast('⚠️ El valor tiene que ser mayor a cero');
+
+  // 738. Aviso, no bloqueo: si esa persona tiene una venta con saldo en la app,
+  //      lo correcto es cerrarla con "+ Abono" para que la deuda baje. Se
+  //      avisa y se deja decidir, porque puede ser una cuenta vieja distinta.
+  const conSaldo = DATA.ventas.filter(v => saldoReal(v) > 0 && clientesSimilares(v.cliente, cliente));
+  if(conSaldo.length) {
+    const deuda = conSaldo.reduce((s,v) => s + saldoReal(v), 0);
+    if(!confirm(cliente + ' tiene ' + fmt(deuda) + ' pendiente en una venta registrada en la app.\n\n'
+      + 'Si este cobro es de ESA venta, cancela y regístralo desde Cobrar → + Abono: '
+      + 'así también le baja la deuda.\n\n¿Aun así lo guardo como cobro de cuenta vieja?')) return;
+  }
+
+  await addDoc(collection(db,'ventas'), {
+    tipoMov,                       // 727. lo saca de DATA.ventas y lo manda a DATA.cobros
+    fecha, cliente,
+    producto: nota || (tipoMov === 'reembolso' ? 'Reembolso de socio' : 'Abono a cuenta'),
+    nota,
+    total: valor, pagado: valor, saldo: 0, estadoPago: 'pagado',
+    metodoPago: metodoPagoCobro,
+    canal: 'directo', cant: 1, precio: valor,
+    esManual: true, abonos: [],
+    createdAt: serverTimestamp()
+  });
+
+  await pushNotif('💳 Cobro registrado',
+    cliente + ' pagó ' + fmt(valor) + (tipoMov === 'reembolso' ? ' (reembolso de socio)' : ' a su cuenta'),
+    'abono', {seccion:'ventas'});
+
+  closeModal('modal-cobro');
+  toast('✅ Cobro registrado — suma en caja, no en lo vendido');
 };
 
 // ============================================================
@@ -7090,6 +7381,9 @@ function renderInicio() {
 
   const ventasCiclo = DATA.ventas.filter(v => v.fecha >= ciclo.inicio && v.fecha <= ciclo.fin);
   const gastosCiclo = DATA.gastos.filter(g => g.fecha >= ciclo.inicio && g.fecha <= ciclo.fin);
+  // 731. Cobros de cuentas viejas del ciclo (ver 727) — entran a caja, nunca a vendido.
+  const cobrosCiclo = DATA.cobros.filter(c => c.fecha >= ciclo.inicio && c.fecha <= ciclo.fin);
+  const cobrado     = cobrosCiclo.reduce((s,c) => s + ingresoVenta(c), 0);
 
   // 681. Comparación justa contra el ciclo anterior. Comparar un ciclo a
   //      medias contra uno completo siempre da "vamos abajo" aunque vayamos
@@ -7227,7 +7521,11 @@ function renderInicio() {
   // sin haber perdido un peso, si el rojo viene de haber comprado mercancía.
   // "No estamos perdiendo dinero, tenemos dinero en mercancía."
   const utilidadReal = margenCiclo - operativos;
-  const caja = vendido - gastado;
+  // 731. La caja suma lo vendido MÁS lo cobrado de cuentas viejas. Esa plata
+  //      entró de verdad al banco este ciclo aunque su venta se haya contado
+  //      en otro mes (ver 727). La utilidad real NO los suma: su margen ya se
+  //      reconoció el día de la venta.
+  const caja = vendido + cobrado - gastado;
   const inventarioValorizado = DATA.inventario.reduce((s,p) => s + Number(p.stock||0) * Number(p.costo||0), 0);
   const colorUtil = utilidadReal >= 0 ? 'var(--green)' : 'var(--red)';
   const colorCaja = caja >= 0 ? 'var(--ink)' : 'var(--red)';
@@ -7253,7 +7551,7 @@ function renderInicio() {
       <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
         <div>
           <div style="font-size:13.5px;font-weight:700;color:var(--ink)">Caja del ciclo</div>
-          <div style="font-size:11.5px;color:var(--ink-3)">Lo que entró − todo lo que salió, mercancía incluida</div>
+          <div style="font-size:11.5px;color:var(--ink-3)">Lo que entró${cobrado > 0 ? ' (ventas + ' + fmt(cobrado) + ' de cobros)' : ''} − todo lo que salió, mercancía incluida</div>
         </div>
         <span style="font-size:18px;font-weight:800;color:${colorCaja};white-space:nowrap;font-variant-numeric:tabular-nums">${caja >= 0 ? '' : '−'}${fmt(Math.abs(caja))}</span>
       </div>
@@ -7333,6 +7631,9 @@ function renderInicio() {
       ${stat('Vendido', fmt(vendido), varTxt, varColor, 'vendido')}
       ${stat('Margen bruto', fmt(margenCiclo), margenPctCiclo + '% del vendido', 'var(--ink-3)', 'margen')}
       ${stat('Salió del banco', fmt(gastado), compras > 0 ? fmt(compras) + ' fue mercancía' : 'sin compras de mercancía', 'var(--ink-3)', 'gastos')}
+      ${cobrado > 0 ? stat('Cobros de cuentas', fmt(cobrado),
+          cobrosCiclo.length + ' movimiento' + (cobrosCiclo.length>1?'s':'') + ' · no es venta nueva',
+          'var(--blue)', 'cobros') : ''}
       ${stat('Por cobrar', fmt(porCobrar),
           esCicloActual
             ? (mora.length ? mora.length + ' en mora' : 'nada en mora')
@@ -7488,6 +7789,32 @@ window.abrirDetalleInicio = (tipo) => {
         + '<td><span style="padding:2px 8px;border-radius:12px;font-size:10px;font-weight:600;background:'
           + (d.enMora?'var(--red-bg)':'var(--amber-bg)') + ';color:' + (d.enMora?'var(--red)':'var(--amber)') + '">'
           + (d.enMora?'En mora':'Al día') + '</span></td>'
+      + '</tr>'));
+
+  // 732. Detalle de los cobros de cuentas viejas (ver 727). Va aparte del
+  //      vendido a propósito: es la pantalla donde se ve, en una línea, por
+  //      qué esa plata entró al banco pero no cuenta como venta del ciclo.
+  } else if(tipo === 'cobros') {
+    titulo = 'Cobros de cuentas anteriores';
+    const cobros = DATA.cobros
+      .filter(c => c.fecha >= ciclo.inicio && c.fecha <= ciclo.fin)
+      .sort((a,b) => b.fecha > a.fecha ? 1 : -1);
+    const total = cobros.reduce((s,c) => s + ingresoVenta(c), 0);
+    html += '<div style="background:var(--blue-bg);border:1px solid #BFDBFE;border-radius:var(--radius);'
+      + 'padding:11px 13px;margin-bottom:4px;font-size:12.5px;color:#1E3A8A;line-height:1.45">'
+      + 'Plata que entró al banco pagando cuentas de meses anteriores. <strong>No suma en "Vendido"</strong>: '
+      + 'esa venta ya se contó el día que salió la mercancía. Sumarla otra vez sería contar el mismo peso dos veces.'
+      + '</div>';
+    html += bloqueGrupo('Total cobrado', fmt(total), cobros.length + ' movimiento' + (cobros.length>1?'s':''));
+    html += tablaDetalle(
+      [{txt:'Fecha'},{txt:'De quién'},{txt:'Concepto'},{txt:'Tipo'},{txt:'Valor',der:true}],
+      cobros.map(c => '<tr>'
+        + '<td style="color:var(--ink-3);white-space:nowrap">' + fCorta(c.fecha) + '</td>'
+        + '<td style="font-weight:500">' + (c.cliente||'—') + '</td>'
+        + '<td style="color:var(--ink-2)">' + (c.producto||c.nota||'') + '</td>'
+        + '<td style="font-size:11px;color:var(--ink-3)">'
+          + (c.tipoMov === 'reembolso' ? 'Reembolso de socio' : 'Abono a cuenta') + '</td>'
+        + '<td style="text-align:right;font-weight:600;color:var(--blue)">' + fmt(ingresoVenta(c)) + '</td>'
       + '</tr>'));
   }
 
@@ -8745,7 +9072,10 @@ function renderDeudores() {
     : '<div class="empty-state"><div class="empty-state-icon">📦</div><div class="empty-state-text">Sin consumos registrados</div><div class="empty-state-sub">Registra lo que Ángel o Jero retiran del inventario</div></div>';
 
   document.getElementById('page-deudores').innerHTML =
-    '<div class="page-header"><div><div class="page-title">Deudores</div></div></div>'
+    '<div class="page-header"><div><div class="page-title">Deudores</div>'
+      + '<div class="page-sub">Para cerrar una venta con saldo usa <strong>+ Abono</strong>. '
+      + 'Si te pagan algo de un mes viejo que no está en la app, va por <strong>Cobro de cuenta</strong>.</div></div>'
+      + '<button class="btn btn-sm" onclick="abrirModalCobro()">💳 Cobro de cuenta</button></div>'
     + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'
       + '<div style="font-size:13px;font-weight:700;color:var(--ink);text-transform:uppercase;letter-spacing:.04em">Clientes — Cartera pendiente</div>'
       + (totalCartera > 0 ? '<span style="font-size:16px;font-weight:800;color:var(--red)">' + fmt(totalCartera) + '</span>' : '')
@@ -10062,9 +10392,16 @@ function parsearFilasHoja(texto) {
     const num = s => Number(String(s||'').replace(/[^\d]/g,'')) || 0;
     const total = num(cel[4]);
     if(!total) { errores.push('Línea ' + (i+1) + ': sin valor total'); return; }
+    const producto = cel[1].replace(/\.$/,'').trim();
     filas.push({
       fecha: m[3] + '-' + String(m[2]).padStart(2,'0') + '-' + String(m[1]).padStart(2,'0'),
-      producto: cel[1].replace(/\.$/,'').trim(),
+      producto,
+      // 739. En la hoja los pagos de cuentas viejas se escriben como una fila
+      //      de venta más ("ABONO SANTA", "RESTANTE WHEY ELITE 5L"). Si se
+      //      importan como venta, el mismo peso queda contado dos veces
+      //      (ver 727). Se marcan aquí y el importador los manda al bloque
+      //      de cobros, nunca al de ventas.
+      esFilaCobro: pareceCobro(producto),
       cant: Number(cel[2]) || 1,
       unit: num(cel[3]),
       total,
@@ -10395,6 +10732,37 @@ function agruparImportacion(filas) {
 }
 
 let importGrupos = [];
+let cobrosImport = [];  // 740. filas de la hoja que son cobros, no ventas (ver 727)
+
+// ============================================================
+// 743. DETECTOR PERMANENTE DE COBROS MAL REGISTRADOS
+// El importador ya los separa (739) y ahora hay un modal propio para
+// registrarlos (735), pero una venta se puede meter a mano desde el
+// celular a las 11 de la noche. Esto lo revisa solo, cada vez que se
+// abre Ventas, y ofrece arreglarlo en un clic.
+// ============================================================
+function ventasQueSonCobros() {
+  return DATA.ventas.filter(v => pareceCobro(v.producto) || pareceCobro(v.nota));
+}
+
+window.convertirVentasEnCobros = async () => {
+  const malas = ventasQueSonCobros();
+  if(!malas.length) return;
+  const total = malas.reduce((s,v) => s + ingresoVenta(v), 0);
+  if(!confirm(malas.length + ' venta(s) por ' + fmt(total) + ' son en realidad cobros de cuentas viejas:\n\n'
+    + malas.slice(0,8).map(v => '· ' + fCorta(v.fecha) + '  ' + (v.cliente||'') + '  ' + fmt(ingresoVenta(v))).join('\n')
+    + (malas.length > 8 ? '\n· y ' + (malas.length-8) + ' más' : '')
+    + '\n\nNo se borra nada ni se pierde un peso: la plata sigue contando en caja, '
+    + 'pero deja de sumar como venta del ciclo.\n\n¿Las convierto?')) return;
+  let n = 0;
+  for(const v of malas) {
+    try {
+      await updateDoc(doc(db,'ventas',v.id), { tipoMov: tipoCobroSugerido(v.cliente) });
+      n++;
+    } catch(e) {}
+  }
+  toast('✅ ' + n + ' movimiento(s) reclasificado(s) como cobro');
+};
 
 window.abrirImportarVentas = () => {
   document.getElementById('imp-texto').value = '';
@@ -10406,6 +10774,7 @@ window.abrirImportarVentas = () => {
   document.getElementById('imp-btn').style.display = 'none';
   document.getElementById('imp-descontar').checked = false;
   importGrupos = [];
+  cobrosImport = [];
   openModal('modal-importar');
 };
 
@@ -10423,7 +10792,25 @@ window.previsualizarImportacion = () => {
     return;
   }
 
-  importGrupos = agruparImportacion(filas);
+  // 740. Las filas de cobro salen del flujo de ventas ANTES de agrupar (ver
+  //      739). Se agrupan aparte y se muestran en su propio bloque, con el
+  //      tipo ya sugerido, para que Ángel vea de una qué se va a subir como
+  //      venta y qué como cobro.
+  const filasCobro = filas.filter(f => f.esFilaCobro);
+  const filasVenta = filas.filter(f => !f.esFilaCobro);
+
+  cobrosImport = filasCobro.map(f => {
+    const ya = DATA.cobros.some(c => c.fecha === f.fecha && ingresoVenta(c) === f.total
+      && clientesSimilares(c.cliente, f.cliente));
+    return {
+      fecha: f.fecha, cliente: f.cliente, concepto: f.producto, valor: f.total,
+      metodoPago: /EFECTIVO/i.test(f.pago) ? 'efectivo' : 'transferencia',
+      tipoMov: tipoCobroSugerido(f.cliente),
+      estado: ya ? 'ya' : 'falta'
+    };
+  });
+
+  importGrupos = agruparImportacion(filasVenta);
   const faltan  = importGrupos.filter(g => g.estado === 'falta');
   const parcial = importGrupos.filter(g => g.estado === 'parcial' || g.estado === 'posible');
   const ya      = importGrupos.filter(g => g.estado === 'ya');
@@ -10441,7 +10828,38 @@ window.previsualizarImportacion = () => {
     + (parcial.length ? '<div class="card" style="padding:10px 13px;flex:1;min-width:120px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);font-weight:700">Revisar</div>'
       + '<div style="font-size:18px;font-weight:800;color:var(--amber)">' + parcial.length + '</div>'
       + '<div style="font-size:11px;color:var(--ink-3)">no cuadran</div></div>' : '')
+    + (cobrosImport.length ? '<div class="card" style="padding:10px 13px;flex:1;min-width:120px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);font-weight:700">Cobros</div>'
+      + '<div style="font-size:18px;font-weight:800;color:var(--blue)">' + fmt(cobrosImport.filter(c=>c.estado==='falta').reduce((s,c)=>s+c.valor,0)) + '</div>'
+      + '<div style="font-size:11px;color:var(--ink-3)">no es venta</div></div>' : '')
     + '</div>';
+
+  // 741. Bloque de cobros. Se muestra ANTES de la tabla de ventas porque es la
+  //      parte que la gente no espera: explicar por qué esa plata no suma en
+  //      vendido importa más que la lista misma.
+  if(cobrosImport.length) {
+    const faltanC = cobrosImport.filter(c => c.estado === 'falta');
+    html += '<div style="background:var(--blue-bg);border:1px solid #BFDBFE;border-radius:var(--radius);padding:11px 13px;margin-bottom:12px;font-size:12.5px;color:#1E3A8A;line-height:1.45">'
+      + '<strong>' + cobrosImport.length + ' fila(s) de la hoja no son ventas, son cobros.</strong> '
+      + 'Están pagando mercancía que ya se vendió (y ya se contó) en un mes anterior. '
+      + 'Si entraran como venta, el mismo peso quedaría contado dos veces. '
+      + 'Se suben como cobro: suman en caja, no en lo vendido.'
+      + '</div>'
+      + '<div class="table-wrap" style="margin-bottom:14px"><table class="tbl"><thead><tr>'
+      + '<th>Fecha</th><th>De quién</th><th>Concepto</th><th>Tipo</th><th style="text-align:right">Valor</th><th></th>'
+      + '</tr></thead><tbody>'
+      + cobrosImport.map(c => '<tr style="opacity:' + (c.estado==='falta'?'1':'.55') + '">'
+        + '<td style="color:var(--ink-3);white-space:nowrap">' + fCorta(c.fecha) + '</td>'
+        + '<td style="font-weight:600">' + c.cliente + '</td>'
+        + '<td style="font-size:11.5px;color:var(--ink-2)">' + c.concepto + '</td>'
+        + '<td style="font-size:11px;color:var(--ink-3)">' + (c.tipoMov === 'reembolso' ? 'Reembolso socio' : 'Abono a cuenta') + '</td>'
+        + '<td style="text-align:right;font-weight:600;color:var(--blue)">' + fmt(c.valor) + '</td>'
+        + '<td>' + (c.estado === 'falta'
+            ? '<span style="padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;background:var(--blue-bg);color:#1D4ED8">Se sube</span>'
+            : '<span style="padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;background:var(--surface-3);color:var(--ink-3)">Ya está</span>') + '</td>'
+      + '</tr>').join('')
+      + '</tbody></table></div>';
+    if(!faltanC.length) html += '';
+  }
 
   if(parcial.length) {
     html += '<div style="background:var(--amber-bg);border:1px solid #FDE68A;border-radius:var(--radius);padding:11px 13px;margin-bottom:12px;font-size:12.5px;color:#92400E;line-height:1.45">'
@@ -10476,9 +10894,13 @@ window.previsualizarImportacion = () => {
   }
 
   cont.innerHTML = html;
-  if(faltan.length) {
+  const nCobros = cobrosImport.filter(c => c.estado === 'falta').length;
+  if(faltan.length || nCobros) {
     btn.style.display = 'inline-flex';
-    btn.textContent = 'Subir las ' + faltan.length + ' que faltan';
+    btn.textContent = 'Subir ' + [
+      faltan.length ? faltan.length + ' venta' + (faltan.length>1?'s':'') : '',
+      nCobros ? nCobros + ' cobro' + (nCobros>1?'s':'') : ''
+    ].filter(Boolean).join(' y ');
   } else {
     btn.style.display = 'none';
   }
@@ -10486,10 +10908,14 @@ window.previsualizarImportacion = () => {
 
 window.ejecutarImportacion = async () => {
   const faltan = importGrupos.filter(g => g.estado === 'falta');
-  if(!faltan.length) return;
+  const cobrosFaltan = cobrosImport.filter(c => c.estado === 'falta');
+  if(!faltan.length && !cobrosFaltan.length) return;
   const descontar = document.getElementById('imp-descontar').checked;
   const total = faltan.reduce((s,g) => s + g.total, 0);
+  const totalCobrosImp = cobrosFaltan.reduce((s,c) => s + c.valor, 0);
   if(!confirm('Se van a crear ' + faltan.length + ' venta(s) por ' + fmt(total) + '.\n\n'
+    + (cobrosFaltan.length ? cobrosFaltan.length + ' cobro(s) de cuenta por ' + fmt(totalCobrosImp)
+        + ' (suman en caja, NO en lo vendido).\n\n' : '')
     + (descontar ? 'SÍ se va a descontar del inventario.' : 'NO se toca el inventario.') + '\n\n'
     + 'Nada de lo que ya existe se modifica ni se borra.\n\n¿Seguimos?')) return;
 
@@ -10551,10 +10977,33 @@ window.ejecutarImportacion = async () => {
     } catch(e) { fallidas++; }
   }
 
+  // 742. Los cobros se crean en la misma colección pero con tipoMov, así que
+  //      entran directo a DATA.cobros y ninguna suma de vendido los toca.
+  let cobrosHechos = 0;
+  for(const c of cobrosFaltan) {
+    try {
+      await addDoc(collection(db,'ventas'), {
+        tipoMov: c.tipoMov,
+        fecha: c.fecha, cliente: c.cliente,
+        producto: c.concepto, nota: 'Importado de la hoja de Google',
+        total: c.valor, pagado: c.valor, saldo: 0, estadoPago: 'pagado',
+        metodoPago: c.metodoPago, canal: 'directo',
+        cant: 1, precio: c.valor, esManual: true, abonos: [],
+        importadoDeHoja: true,
+        createdAt: serverTimestamp()
+      });
+      cobrosHechos++;
+      btn.textContent = 'Subiendo cobros ' + cobrosHechos + ' de ' + cobrosFaltan.length + '…';
+    } catch(e) { fallidas++; }
+  }
+
   btn.disabled = false;
   closeModal('modal-importar');
-  toast('✅ ' + hechas + ' venta(s) importada(s)' + (fallidas ? ' · ' + fallidas + ' fallaron' : ''));
-  await pushNotif('⬆️ Importación', hechas + ' ventas subidas desde la hoja · ' + fmt(total), 'venta', {seccion:'ventas'});
+  toast('✅ ' + hechas + ' venta(s)' + (cobrosHechos ? ' y ' + cobrosHechos + ' cobro(s)' : '') + ' importado(s)'
+    + (fallidas ? ' · ' + fallidas + ' fallaron' : ''));
+  await pushNotif('⬆️ Importación',
+    hechas + ' ventas' + (cobrosHechos ? ' y ' + cobrosHechos + ' cobros' : '') + ' desde la hoja · ' + fmt(total),
+    'venta', {seccion:'ventas'});
 };
 
 // 698. Ciclo que se está mirando en Distribuidores. Mismo patrón que Inicio
