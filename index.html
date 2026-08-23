@@ -7631,49 +7631,88 @@ function renderInicio() {
       </div>`;
   }
 
-  // ---- 679. Resultado del ciclo: utilidad real vs. caja ----
-  // La distinción que pidió Ángel: un ciclo puede cerrar con la caja en rojo
-  // sin haber perdido un peso, si el rojo viene de haber comprado mercancía.
-  // "No estamos perdiendo dinero, tenemos dinero en mercancía."
+  // ============================================================
+  // 769. RESULTADO DEL CICLO — reescrito.
+  //
+  // Ángel sobre la versión anterior: "ese ítem es muy inconcluso". Y tenía
+  // razón: mostraba dos totales sueltos —utilidad real y caja— sin enseñar
+  // de dónde salían, así que había que creerle a la app en vez de poder
+  // seguir la cuenta. Ahora se muestra la cuenta completa, renglón por
+  // renglón, en los mismos términos de las tarjetas de arriba: vendido,
+  // margen, gastos, por cobrar.
+  //
+  // Son dos cuentas distintas y por eso van separadas:
+  //   · Lo que ganó el negocio  → margen − gastos de operación
+  //   · Lo que pasó en el banco → lo que pagaron − todo lo que se pagó
+  // ============================================================
   const utilidadReal = margenCiclo - operativos;
-  // 731. La caja suma lo vendido MÁS lo cobrado de cuentas viejas. Esa plata
-  //      entró de verdad al banco este ciclo aunque su venta se haya contado
-  //      en otro mes (ver 727). La utilidad real NO los suma: su margen ya se
-  //      reconoció el día de la venta.
-  const caja = vendido + cobrado - gastado;
+
+  // 770. FIX: la caja contaba como recibida toda venta del ciclo, aunque el
+  //      cliente no hubiera pagado. Ahora suma solo la plata que de verdad
+  //      entró: el pago de cada venta, los abonos fechados en el ciclo y los
+  //      cobros de cuentas viejas. Lo fiado se muestra aparte, que es lo que
+  //      falta por llegar.
+  const pagadoEnCiclo = ventasCiclo.reduce((s,v) => s + Number(v.pagado||0), 0);
+  let abonosEnCiclo = 0;
+  DATA.ventas.forEach(v => (v.abonos||[]).forEach(a => {
+    if(a.fecha >= ciclo.inicio && a.fecha <= ciclo.fin) abonosEnCiclo += Number(a.valor||0);
+  }));
+  const entroAlBanco = pagadoEnCiclo + abonosEnCiclo + cobrado;
+  const quedoFiado   = Math.max(0, vendido - pagadoEnCiclo);
+  const caja = entroAlBanco - gastado;
+
   const inventarioValorizado = DATA.inventario.reduce((s,p) => s + Number(p.stock||0) * Number(p.costo||0), 0);
   const colorUtil = utilidadReal >= 0 ? 'var(--green)' : 'var(--red)';
   const colorCaja = caja >= 0 ? 'var(--ink)' : 'var(--red)';
 
-  const explicacion = (caja < 0 && compras > 0 && utilidadReal >= 0)
-    ? `La caja está en rojo <strong>porque compraste ${fmt(compras)} de mercancía</strong> este ciclo. Esa plata no se perdió: está en el estante. El negocio sí dio utilidad.`
-    : (compras > 0
-      ? `Incluye ${fmt(compras)} de compra de mercancía, que no es pérdida sino inventario.`
-      : `Sin compras de mercancía este ciclo.`);
+  // Un renglón de la cuenta. signo: '' suma, '−' resta, null = resultado.
+  const renglon = (etiqueta, valor, signo, esTotal, color) => `
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:${esTotal?'9px 0 2px':'5px 0'};
+      ${esTotal?'border-top:1.5px solid var(--border);margin-top:4px':''}">
+      <span style="font-size:${esTotal?'13.5':'12.5'}px;${esTotal?'font-weight:700;color:var(--ink)':'color:var(--ink-2)'}">${etiqueta}</span>
+      <span style="font-size:${esTotal?'16':'13'}px;font-weight:${esTotal?'800':'600'};white-space:nowrap;
+        font-variant-numeric:tabular-nums;color:${color||(esTotal?'var(--ink)':'var(--ink-2)')}">${signo||''}${fmt(Math.abs(valor))}</span>
+    </div>`;
 
   const resultadoHtml = `
     <div class="card" style="padding:16px">
-      <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2);margin-bottom:11px">
-        📐 Resultado del ciclo
+      <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2);margin-bottom:4px">
+        📐 Lo que ganó el negocio
       </div>
-      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding-bottom:9px;border-bottom:1px solid var(--border)">
-        <div>
-          <div style="font-size:13.5px;font-weight:700;color:var(--ink)">Utilidad real</div>
-          <div style="font-size:11.5px;color:var(--ink-3)">Margen de lo vendido − gastos de operación</div>
-        </div>
-        <span style="font-size:18px;font-weight:800;color:${colorUtil};white-space:nowrap;font-variant-numeric:tabular-nums">${utilidadReal >= 0 ? '' : '−'}${fmt(Math.abs(utilidadReal))}</span>
+      <div style="font-size:11.5px;color:var(--ink-3);margin-bottom:8px;line-height:1.4">
+        La mercancía no entra aquí: su costo ya está descontado dentro del margen.
       </div>
-      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
-        <div>
-          <div style="font-size:13.5px;font-weight:700;color:var(--ink)">Caja del ciclo</div>
-          <div style="font-size:11.5px;color:var(--ink-3)">Lo que entró${cobrado > 0 ? ' (ventas + ' + fmt(cobrado) + ' de cobros)' : ''} − todo lo que salió, mercancía incluida</div>
-        </div>
-        <span style="font-size:18px;font-weight:800;color:${colorCaja};white-space:nowrap;font-variant-numeric:tabular-nums">${caja >= 0 ? '' : '−'}${fmt(Math.abs(caja))}</span>
+      ${renglon('Vendido', vendido, '')}
+      ${renglon('Costo de lo que vendiste', costoVendido, '−')}
+      ${renglon('Margen bruto (' + margenPctCiclo + '%)', margenCiclo, '', true)}
+      ${renglon('Gastos de operación', operativos, '−')}
+      ${renglon('Utilidad real', utilidadReal, utilidadReal >= 0 ? '' : '−', true, colorUtil)}
+    </div>
+
+    <div class="card" style="padding:16px">
+      <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2);margin-bottom:4px">
+        🏦 Lo que pasó en el banco
       </div>
-      <div style="font-size:12.5px;color:var(--ink-2);line-height:1.45;padding-top:10px">
-        ${explicacion}
-        ${inventarioValorizado > 0 ? ` Hoy tienes <strong>${fmt(inventarioValorizado)}</strong> en inventario a precio de costo.` : ''}
+      <div style="font-size:11.5px;color:var(--ink-3);margin-bottom:8px;line-height:1.4">
+        Aquí sí cuenta todo lo que salió, la mercancía incluida — porque del banco salió.
       </div>
+      ${renglon('Te pagaron', pagadoEnCiclo + abonosEnCiclo, '')}
+      ${cobrado > 0 ? renglon('Cobros de cuentas viejas', cobrado, '') : ''}
+      ${compras > 0 ? renglon('Compra de mercancía', compras, '−') : ''}
+      ${renglon('Gastos de operación', operativos, '−')}
+      ${renglon('Movimiento del banco', caja, caja >= 0 ? '' : '−', true, colorCaja)}
+      ${quedoFiado > 0 ? `
+        <div style="font-size:12px;color:var(--ink-3);line-height:1.45;padding-top:9px;border-top:1px solid var(--border);margin-top:8px">
+          Aparte quedaron <strong style="color:var(--ink-2)">${fmt(quedoFiado)}</strong> fiados de este ciclo. Esa plata todavía no ha llegado al banco.
+        </div>` : ''}
+      ${(caja < 0 && compras > 0 && utilidadReal >= 0) ? `
+        <div style="font-size:12.5px;color:var(--ink-2);line-height:1.45;padding-top:10px">
+          El banco quedó en rojo <strong>porque compraste ${fmt(compras)} de mercancía</strong>. Esa plata no se perdió: está en el estante.
+          ${inventarioValorizado > 0 ? `Hoy tienes <strong>${fmt(inventarioValorizado)}</strong> en inventario a precio de costo.` : ''}
+        </div>` : (inventarioValorizado > 0 ? `
+        <div style="font-size:12px;color:var(--ink-3);line-height:1.45;padding-top:9px">
+          Hoy tienes <strong style="color:var(--ink-2)">${fmt(inventarioValorizado)}</strong> en inventario a precio de costo.
+        </div>` : '')}
     </div>`;
 
   // ---- 695. Selector de ciclos ----
@@ -7745,7 +7784,13 @@ function renderInicio() {
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:9px;margin-bottom:16px">
       ${stat('Vendido', fmt(vendido), varTxt, varColor, 'vendido')}
       ${stat('Margen bruto', fmt(margenCiclo), margenPctCiclo + '% del vendido', 'var(--ink-3)', 'margen')}
-      ${stat('Salió del banco', fmt(gastado), compras > 0 ? fmt(compras) + ' fue mercancía' : 'sin compras de mercancía', 'var(--ink-3)', 'gastos')}
+      ${/* 769. Antes decía "Salió del banco" y mostraba TODO lo que salió,
+              mercancía incluida — que contradice la regla de que la mercancía
+              no es gasto. Ahora el número grande son los gastos de verdad y la
+              mercancía va debajo, visible pero sin mezclarse. */''}
+      ${stat('Gastos', fmt(operativos),
+          compras > 0 ? '+ ' + fmt(compras) + ' de mercancía' : 'sin compras de mercancía',
+          'var(--ink-3)', 'gastos')}
       ${cobrado > 0 ? stat('Cobros de cuentas', fmt(cobrado),
           cobrosCiclo.length + ' movimiento' + (cobrosCiclo.length>1?'s':'') + ' · no es venta nueva',
           'var(--blue)', 'cobros') : ''}
@@ -7852,7 +7897,10 @@ window.abrirDetalleInicio = (tipo) => {
       }));
 
   } else if(tipo === 'gastos') {
-    titulo = 'Lo que salió del banco';
+    // 771. La tarjeta ya no se llama "Salió del banco" (ver 769), así que el
+    //      detalle tampoco: se abre desde "Gastos". Adentro se sigue viendo la
+    //      mercancía aparte, con su renglón que aclara que no es gasto.
+    titulo = 'Gastos del ciclo';
     const cats = {};
     gastosCiclo.forEach(g => {
       const k = esCompraMercancia(g) ? '__mercancia' : (g.cat || 'otro');

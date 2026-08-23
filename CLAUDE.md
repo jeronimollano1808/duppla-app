@@ -605,5 +605,53 @@ Pedido de Ángel:
 
 **Patrón general, ya visto dos veces en esta app** (aquí y en el bug 680 de Inicio): *cualquier cosa que resuma varias colecciones no puede confiar en el oyente de una sola.* O verifica que todas estén cargadas antes de calcular, o se ejecuta desde todas.
 
+### 14.20 El resultado del ciclo, con la cuenta completa (comentarios 769–771)
+
+Ángel, sobre la tarjeta anterior:
+
+> *"Ese ítem es muy inconcluso. Que quede el vendido, la margen, por cobrar. Quiero que eso de 'salió del banco' mejor diga gastos o algo más humanizado, y en el resultado del ciclo, los mismos ítems que te digo."*
+
+Tenía razón en las dos cosas.
+
+**El problema de fondo.** La tarjeta mostraba dos totales sueltos —utilidad real y caja— sin enseñar de dónde salían. Un número sin su cuenta obliga a creerle a la app; y en una app de contabilidad, creer es exactamente lo que no se debe pedir.
+
+**769-a. "Salió del banco" → "Gastos".** El nombre viejo mostraba *todo* lo que salió, mercancía incluida, lo cual contradice de frente la regla de la app: **la mercancía no es gasto, es inventario** (`esCompraMercancia`). Ahora el número grande son los gastos de operación de verdad y la mercancía va de subtítulo — visible, pero sin mezclarse en el mismo total.
+
+**771.** Por coherencia, el detalle que abre esa tarjeta ya no se titula "Lo que salió del banco" sino **"Gastos del ciclo"**. Adentro sigue apareciendo la mercancía en su propio bloque, con el renglón que aclara que no es gasto.
+
+**769-b. Dos cuentas, no dos totales.** El resultado se parte en dos tarjetas, porque son dos preguntas distintas y mezclarlas es la fuente de casi toda la confusión contable de un negocio pequeño:
+
+| 📐 Lo que ganó el negocio | 🏦 Lo que pasó en el banco |
+|---|---|
+| Vendido | Te pagaron |
+| − Costo de lo que vendiste | + Cobros de cuentas viejas |
+| **= Margen bruto (%)** | − Compra de mercancía |
+| − Gastos de operación | − Gastos de operación |
+| **= Utilidad real** | **= Movimiento del banco** |
+
+Los renglones usan las mismas palabras de las tarjetas de arriba —vendido, margen, gastos, por cobrar— para que la vista completa se lea como una sola cuenta y no como cuatro medidas independientes. El helper `renglon(etiqueta, valor, signo, esTotal, color)` es lo único que se agregó de estructura.
+
+La mercancía aparece en la cuenta del banco y **no** en la del negocio: en la del negocio su costo ya está descontado dentro del margen (solo el de lo que *se vendió*), y contarla otra vez sería el mismo doble conteo del comentario 727 con otro disfraz.
+
+**770. La caja contaba plata que no había llegado.** Bug real, no cosmético. `caja` restaba los gastos de **todo lo vendido en el ciclo**, hubiera pagado el cliente o no. Ahora suma solo lo que de verdad entró:
+
+```js
+const pagadoEnCiclo = ventasCiclo.reduce((s,v) => s + Number(v.pagado||0), 0);
+let abonosEnCiclo = 0;
+DATA.ventas.forEach(v => (v.abonos||[]).forEach(a => {
+  if(a.fecha >= ciclo.inicio && a.fecha <= ciclo.fin) abonosEnCiclo += Number(a.valor||0);
+}));
+const entroAlBanco = pagadoEnCiclo + abonosEnCiclo + cobrado;
+const quedoFiado   = Math.max(0, vendido - pagadoEnCiclo);
+const caja = entroAlBanco - gastado;
+```
+
+Los abonos se suman **por su fecha**, no por la de la venta: un abono de agosto a una venta de julio es plata que entró en agosto. Es la misma lógica de caja del comentario 727, aplicada al ciclo.
+
+Lo fiado no desaparece: se muestra aparte, con el texto de que esa plata todavía no ha llegado. Agosto pasa de $10.266.384 a ~$9.756.134 por los $510.250 que quedaron a crédito.
+
+**Regla que sale de aquí, y aplica a cualquier tarjeta futura:** *lo devengado y lo cobrado son dos cuentas y se muestran separadas, cada una con sus renglones a la vista.* Un total que no se puede reconstruir mirándolo es un total que nadie va a poder defender frente a la hoja.
+
+
 ---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*
