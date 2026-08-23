@@ -10500,22 +10500,104 @@ function numerosDe(s) {
   return (String(s||'').match(/\d+/g) || []).map(Number).sort((a,b)=>a-b).join(',');
 }
 
-function productosSimilares(a, b) {
-  const na = normalizarNombreHoja(a), nb = normalizarNombreHoja(b);
-  if(!na || !nb) return false;
-  if(na === nb) return true;
-  if(numerosDe(na) !== numerosDe(nb)) return false;
-  const ta = tokensNombre(na), tb = tokensNombre(nb);
-  if(!ta.length || !tb.length) return false;
-  let calces = 0;
-  ta.forEach(x => { if(tb.some(y => x === y || (x.length>=4 && y.startsWith(x)) || (y.length>=4 && x.startsWith(y)))) calces++; });
-  return calces >= 2 && calces >= Math.min(ta.length, tb.length) - 1;
+// ============================================================
+// 750. REESCRITURA DE productosSimilares — emparejaba productos distintos.
+//
+// La versión anterior aceptaba con "calces >= mínimo − 1", o sea permitía que
+// UNA palabra no calzara. Con el catálogo real eso emparejaba 30 pares de 66
+// productos. La mayoría son sabores del mismo producto y cuestan igual, pero
+// no todos:
+//
+//   CREATINA PLATINUM MUSCLETECH  →  CAFEINA PLATINUM MUSCLETECH  ($50.000)
+//   CRISP BAR                     →  CRISP BAR CAJA.              ($6.175 vs $74.100)
+//   OMEGA 3 (NUTRIFY 120 CÁPS)    →  OMEGA 3 (120 CAPSULAS VEGANO) ($89.050 vs $55.000)
+//
+// El de la creatina es el peor: el producto correcto SÍ existe
+// ("CREATINA PLATINUM MUSCLETECH 450g") pero la regla vieja de números lo
+// descartaba (uno trae 450 y el otro no) y caía en la cafeína. Un costo
+// equivocado no se ve en ninguna pantalla: se disuelve dentro del margen.
+//
+// Tres cambios:
+//  1. ASIMÉTRICA. El primer argumento es la entrada del catálogo, el segundo
+//     lo que se está buscando. TODAS las palabras de la consulta tienen que
+//     calzar; al catálogo se le permite traer palabras de más (marca,
+//     presentación). Así "GLICINATO DE MAGNESIO" encuentra "GLICINATO DE
+//     MAGNESIO (180 CAPS)" pero "CRISP BAR" ya no encuentra "CRISP BAR CAJA".
+//  2. Los números de la consulta tienen que estar en el catálogo, no ser
+//     idénticos: "CREATINA PLATINUM MUSCLETECH" (sin cifras) sí puede ser la
+//     de 450g, pero "WHEY ELITE 2L" nunca es la de 5L.
+//  3. Se ignoran las palabras que solo dicen unidad (2LBS, 500G, ML). El
+//     tamaño ya lo controla la regla de números.
+// ============================================================
+const RE_TOKEN_UNIDAD = /^\d+(L|LB|LBS|G|GR|GRS|KG|ML|OZ|CAPS?)?$/;
+
+function tokensProducto(s) {
+  return tokensNombre(s).filter(t => !RE_TOKEN_UNIDAD.test(t) && !/^(LBS?|GRS?|KG|OZ)$/.test(t));
 }
 
+// 753. Los gramos no cuentan como tamaño. La hoja escribe "CREATINA IRON
+//      NUTRITION 500G" y el inventario solo "CREATINA IRON NUTRITION": exigir
+//      que el 500 apareciera en los dos dejaba sin costo un producto que sí
+//      está. Las libras y los litros SÍ cuentan — ahí está la diferencia entre
+//      el tarro de 2L y el de 5L, que valen muy distinto.
+function numerosTamano(s) {
+  return numerosDe(String(s||'').replace(/\d+\s*(G|GR|GRS|MG|KG|ML|OZ)\b/gi, ' '));
+}
+
+function numerosContenidos(numsConsulta, numsCatalogo) {
+  if(!numsConsulta) return true;   // la consulta no trae cifras: no discrimina
+  const cat = numsCatalogo ? numsCatalogo.split(',') : [];
+  return numsConsulta.split(',').every(n => cat.includes(n));
+}
+
+// 751. calcePalabras — devuelve null si no son el mismo producto, y si lo son,
+//      CUÁNTAS palabras de la consulta sobraron (0 = cobertura perfecta).
+//      Ese número es el que después desempata entre candidatos.
+//
+//      Se permite UNA palabra suelta de la consulta, porque la hoja escribe la
+//      marca y el inventario no ("GLICINATO DE MAGNESIO NUTRICOST" vs
+//      "GLICINATO DE MAGNESIO (180 CAPS)"). Pero NUNCA la primera: esa es la
+//      que dice qué es la cosa, y dejarla pasar fue lo que emparejó CREATINA
+//      con CAFEINA. Y siempre tienen que calzar al menos dos palabras.
+function calcePalabras(catalogo, consulta) {
+  const na = normalizarNombreHoja(catalogo), nb = normalizarNombreHoja(consulta);
+  if(!na || !nb) return null;
+  if(na === nb) return 0;
+  if(!numerosContenidos(numerosTamano(nb), numerosTamano(na))) return null;
+  const ta = tokensProducto(na), tb = tokensProducto(nb);
+  if(!ta.length || !tb.length) return null;
+  const calza = (x, y) => x === y || (x.length>=4 && y.startsWith(x)) || (y.length>=4 && x.startsWith(y));
+  const sueltas = tb.filter(y => !ta.some(x => calza(x, y)));
+  if(sueltas.length > 1) return null;
+  // 754. La palabra suelta solo se perdona si va al FINAL — ahí es donde la
+  //      hoja pega la marca ("… NUTRICOST"). En el medio o al principio es la
+  //      que dice qué es la cosa: perdonarla emparejaba CREATINA con CAFEINA,
+  //      y "WHEY ELITE 2L VAINILLA" con "WHEY 100% 2L POTE VAINILLA".
+  if(sueltas.length === 1 && sueltas[0] !== tb[tb.length-1]) return null;
+  if(tb.length - sueltas.length < 2) return null;
+  return sueltas.length;
+}
+
+function productosSimilares(catalogo, consulta) {
+  return calcePalabras(catalogo, consulta) !== null;
+}
+
+// 752. Ante dos candidatos igual de buenos, ninguno. Antes se devolvía el
+//      primero de la lista, que es escoger al azar entre "WHEY 100% 4L
+//      VAINILLA" y "WHEY 100% 4L CHOCOLATE". Sin costo la venta queda marcada
+//      y visible en "Ventas sin costo" (745); con el costo equivocado no la ve
+//      nadie nunca.
 function buscarProductoInventario(nombre) {
-  return DATA.inventario.find(p => normalizarNombreHoja(p.nombre) === normalizarNombreHoja(nombre))
-      || DATA.inventario.find(p => productosSimilares(p.nombre, nombre))
-      || null;
+  const exacto = DATA.inventario.find(p => normalizarNombreHoja(p.nombre) === normalizarNombreHoja(nombre));
+  if(exacto) return exacto;
+  const cands = DATA.inventario
+    .map(p => ({ p, sueltas: calcePalabras(p.nombre, nombre) }))
+    .filter(c => c.sueltas !== null);
+  // Cobertura perfecta le gana a cobertura parcial ("CAJA CRISP BAR" es
+  // "CRISP BAR CAJA", no "CRISP BAR").
+  const perfectos = cands.filter(c => c.sueltas === 0);
+  const elegibles = perfectos.length ? perfectos : cands;
+  return elegibles.length === 1 ? elegibles[0].p : null;
 }
 
 // ============================================================

@@ -448,5 +448,30 @@ Alcance real medido en producción: **$9.4M de $57.9M vendidos (16%)** sin costo
 - **Excepción legítima:** las filas `GANANCIA X` son comisión pura sobre producto que Duppla nunca compró. Costo cero ahí es correcto — `esVentaComision` las excluye.
 - **No se escribe `prodId`** al arreglar (748): esas ventas nunca descontaron stock, y ponerles `prodId` haría que al borrarlas `restaurarStockVenta` subiera el inventario por mercancía que nunca volvió. Por lo mismo el importador ahora guarda `stockDescontado` y `restaurarStockVenta` lo respeta (749).
 
+### 14.11 El emparejador de productos emparejaba productos distintos (comentarios 750–754)
+
+Encontrado al revisar las sugerencias de 14.10 **antes** de aplicarlas: propuso ponerle a una venta de `CREATINA PLATINUM MUSCLETECH` el costo de `CAFEINA PLATINUM MUSCLETECH` ($50.000). El producto correcto sí existe (`CREATINA PLATINUM MUSCLETECH 450g`) pero la regla vieja de números lo descartaba —uno trae 450 y el otro no— y caía en la cafeína.
+
+La versión anterior de `productosSimilares` aceptaba con `calces >= mínimo − 1`: permitía que UNA palabra cualquiera no calzara. Con el catálogo real (66 productos) eso emparejaba **30 pares**. La mayoría son sabores del mismo producto y cuestan igual, pero no todos:
+
+| | |
+|---|---|
+| `CRISP BAR` ($6.175) | `CRISP BAR CAJA.` ($74.100) |
+| `OMEGA 3 (NUTRIFY 120 CÁPS)` ($89.050) | `OMEGA 3 (120 CAPSULAS VEGANO)` ($55.000) |
+| `CREATINA PLATINUM MUSCLETECH` | `CAFEINA PLATINUM MUSCLETECH` |
+
+Un costo equivocado es peor que ninguno: no se ve en ninguna pantalla, se disuelve dentro del margen. Sin costo, la venta aparece en "Ventas sin costo" y se puede arreglar.
+
+**Reescritura (750–754):**
+1. **Asimétrica.** `productosSimilares(catalogo, consulta)`. Todas las palabras de la consulta tienen que calzar; al catálogo se le permiten palabras de más (marca, presentación).
+2. **Una palabra suelta, y solo al final.** Ahí es donde la hoja pega la marca (`GLICINATO DE MAGNESIO NUTRICOST` vs `GLICINATO DE MAGNESIO (180 CAPS)`). En el medio o al principio es la que dice qué es la cosa — perdonarla fue lo que unió CREATINA con CAFEINA, y `WHEY ELITE 2L VAINILLA` con `WHEY 100% 2L POTE VAINILLA`.
+3. **Números como subconjunto, no como igualdad.** Los de la consulta tienen que estar en el catálogo. Así `CREATINA PLATINUM MUSCLETECH` (sin cifras) sí puede ser la de 450g, pero `WHEY ELITE 2L` nunca es la de 5L.
+4. **Los gramos no son tamaño** (`numerosTamano`, 753). La hoja escribe `CREATINA IRON NUTRITION 500G` y el inventario solo `CREATINA IRON NUTRITION`. Litros y libras SÍ cuentan: ahí está la diferencia entre el tarro de 2L y el de 5L.
+5. **Ante dos candidatos igual de buenos, ninguno** (`buscarProductoInventario`, 752). Antes devolvía el primero de la lista — escoger al azar entre `WHEY 100% 4L VAINILLA` y `WHEY 100% 4L CHOCOLATE`. Cobertura perfecta le gana a parcial, para que `CAJA CRISP BAR` sí encuentre `CRISP BAR CAJA.`.
+
+**Propiedades verificadas contra el catálogo real (66 productos):** los 66 se encuentran a sí mismos, **cero** cruces de sabor, y los pares peligrosos de arriba ya no se emparejan. El test vive en el patrón de harness de 14.5.
+
+**Regla general que sale de aquí:** cuando un emparejamiento produce un NÚMERO (un costo, un precio), el umbral tiene que ser mucho más alto que cuando produce una ETIQUETA (vincular un cliente). Un nombre mal vinculado se ve; un costo mal puesto no lo ve nadie.
+
 ---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*
