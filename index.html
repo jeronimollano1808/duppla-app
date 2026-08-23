@@ -1043,6 +1043,34 @@ body{
 </div>
 
 <!-- 411. MODAL: RECORDATORIO DE COBRO POR WHATSAPP -->
+<!-- 721. MODAL: IMPORTAR GASTOS DESDE LA HOJA (ver comentario 718) -->
+<div class="modal-bg" id="modal-importar-gastos">
+  <div class="modal" style="max-width:900px">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">Importar gastos desde la hoja</div>
+        <div style="font-size:12px;color:var(--ink-3);margin-top:2px">Nunca duplica y nunca borra nada de lo que ya existe</div>
+      </div>
+      <button class="modal-close" onclick="closeModal('modal-importar-gastos')">&#10005;</button>
+    </div>
+    <div class="f-group">
+      <label class="f-label">Pega aqu&iacute; las filas de egresos (concepto, valor, fecha)</label>
+      <textarea id="ig-texto" class="f-input" rows="5" oninput="previsualizarGastosImport()"
+        style="font-family:ui-monospace,monospace;font-size:11.5px;resize:vertical"
+        placeholder="PAGO JUANFE.&#9;$1.000.000&#9;26/07/2026"></textarea>
+    </div>
+    <div class="f-group">
+      <label class="f-label">Fecha para las filas que traigan la fecha ilegible (opcional)</label>
+      <input type="date" id="ig-fecha-fallback" class="f-input" onchange="previsualizarGastosImport()">
+    </div>
+    <div id="ig-preview" style="max-height:50vh;overflow:auto;margin-bottom:12px"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-importar-gastos')">Cancelar</button>
+      <button class="btn btn-lime" id="ig-btn" onclick="ejecutarImportarGastos()" style="display:none">Subir</button>
+    </div>
+  </div>
+</div>
+
 <!-- 716. MODAL: UNIFICAR NOMBRES DE CLIENTE (ver comentario 715) -->
 <div class="modal-bg" id="modal-unificar">
   <div class="modal" style="max-width:820px">
@@ -6075,7 +6103,10 @@ function renderGastos() {
   document.getElementById('page-gastos').innerHTML = `
     <div class="page-header">
       <div><div class="page-title">Gastos</div><div class="page-sub">${gastosVentana.length} de ${DATA.gastos.length} registros${verTodoG ? '' : ' · ciclo ' + fCorta(cicloG.inicio) + ' – ' + fCorta(cicloG.fin)}</div></div>
-      <button class="btn btn-lime btn-sm" onclick="abrirModalGasto()">+ Registrar gasto</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-sm" onclick="abrirImportarGastos()">⬆️ Importar</button>
+        <button class="btn btn-lime btn-sm" onclick="abrirModalGasto()">+ Registrar gasto</button>
+      </div>
     </div>
     ${selectorGastosHtml}
     ${recurrentesHtml}
@@ -10083,6 +10114,208 @@ function diasEntreFechasISO(f1, f2) {
   return Math.round((new Date(a2,m2-1,d2) - new Date(a1,m1-1,d1)) / 86400000);
 }
 
+// 717. PRODUCTOS PARECIDOS — por qué 6 ventas importadas quedaron sin margen.
+// La hoja dice "GLICINATO DE MAGNESIO" y el inventario "GLICINATO DE MAGNESIO
+// NUTRICOST": es el mismo producto pero la comparación exacta no lo veía, así
+// que entraban como manuales sin costo y salían con margen N/D.
+//
+// Aquí NO sirve la regla de clientesSimilares: "WHEY ELITE 2L VAINILLA" y
+// "WHEY ELITE 5L VAINILLA" comparten tres palabras y son productos distintos
+// con costos muy distintos. Por eso los NÚMEROS mandan: si los dos nombres
+// traen cifras (2L, 5L, 120 caps) tienen que ser las mismas, y si uno trae y
+// el otro no, no se emparejan. Ante la duda se prefiere margen N/D antes que
+// un costo equivocado, que ensucia la utilidad sin que nadie lo note.
+function numerosDe(s) {
+  return (String(s||'').match(/\d+/g) || []).map(Number).sort((a,b)=>a-b).join(',');
+}
+
+function productosSimilares(a, b) {
+  const na = normalizarNombreHoja(a), nb = normalizarNombreHoja(b);
+  if(!na || !nb) return false;
+  if(na === nb) return true;
+  if(numerosDe(na) !== numerosDe(nb)) return false;
+  const ta = tokensNombre(na), tb = tokensNombre(nb);
+  if(!ta.length || !tb.length) return false;
+  let calces = 0;
+  ta.forEach(x => { if(tb.some(y => x === y || (x.length>=4 && y.startsWith(x)) || (y.length>=4 && x.startsWith(y)))) calces++; });
+  return calces >= 2 && calces >= Math.min(ta.length, tb.length) - 1;
+}
+
+function buscarProductoInventario(nombre) {
+  return DATA.inventario.find(p => normalizarNombreHoja(p.nombre) === normalizarNombreHoja(nombre))
+      || DATA.inventario.find(p => productosSimilares(p.nombre, nombre))
+      || null;
+}
+
+// ============================================================
+// 718. IMPORTAR GASTOS DESDE LA HOJA DE JUANFE
+// El estado de resultados de mayo, junio y julio vive fuera de la app, así
+// que los ciclos cerrados mienten: julio dice que ganó $4,3M cuando fueron
+// $1,9M. Mismo patrón que el importador de ventas y las mismas reglas duras.
+// Las fechas de esa hoja vienen sucias ("24707/2026", "JUNIO.", "2/8/2023"),
+// así que lo que no se pueda leer se aparta y se muestra, nunca se adivina.
+// ============================================================
+const REGLAS_CAT_GASTO = [
+  { re:/INTEGRAL|SUPLEMENTOS|PROFITNESS|AMAZON|ENVIO|ENV[ÍI]O|COMPRA/i, cat:'importacion', fijo:false },
+  { re:/FACEBOOK|META|INSTAGRAM|PAUTA|PUBLICIDAD/i,                     cat:'marketing',   fijo:true  },
+  { re:/SHOPIF/i,                                                        cat:'plataformas', fijo:true  },
+  // 722. El 4x1000 va en Finanzas pero NO es fijo: sube con el movimiento de
+  //      plata, asi que no entra al punto de equilibrio. Va antes que la regla
+  //      de intereses para que gane el caso mas especifico.
+  { re:/4\s*X\s*1000|GMF/i,                                              cat:'finanzas',    fijo:false },
+  { re:/INTER[ÉE]S|CUOTA CR[ÉE]DITO|COMISI[ÓO]N/i,                       cat:'finanzas',    fijo:true  },
+  { re:/JUANFE|ASESOR[ÍI]A|LA REAL/i,                                    cat:'operativo',   fijo:true  },
+  { re:/BOLSA|EMPAQUE|LOG[ÍI]STICA|FLETE/i,                              cat:'logistica',   fijo:false },
+];
+
+function clasificarGastoHoja(concepto) {
+  for(const r of REGLAS_CAT_GASTO) if(r.re.test(concepto)) return { cat:r.cat, esFijo:r.fijo };
+  return { cat:'otro', esFijo:false };
+}
+
+function parsearGastosHoja(texto, fechaFallback) {
+  const filas = [], sinFecha = [];
+  String(texto||'').split('\n').forEach(linea => {
+    if(!linea.trim()) return;
+    let cel = linea.includes('\t') ? linea.split('\t') : linea.replace(/^\||\|$/g,'').split('|');
+    cel = cel.map(x => x.trim());
+    if(cel.length < 2) return;
+    const desc = cel[0];
+    if(!desc || /^(concepto|total)$/i.test(desc)) return;
+    const valor = Number(String(cel[1]||'').replace(/[^\d]/g,'')) || 0;
+    if(!valor) return;
+    const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(cel[2] || '');
+    const anio = m ? Number(m[3]) : 0;
+    const fechaOk = m && anio >= 2024 && anio <= 2030 && Number(m[2]) >= 1 && Number(m[2]) <= 12;
+    const clas = clasificarGastoHoja(desc);
+    const base = { desc, valor, ...clas, fechaCruda: cel[2] || '' };
+    if(fechaOk) {
+      filas.push({ ...base, fecha: m[3] + '-' + String(m[2]).padStart(2,'0') + '-' + String(m[1]).padStart(2,'0') });
+    } else if(fechaFallback) {
+      filas.push({ ...base, fecha: fechaFallback, fechaAsignada: true });
+    } else {
+      sinFecha.push(base);
+    }
+  });
+  return { filas, sinFecha };
+}
+
+function agruparGastosImport(filas) {
+  return filas.map(f => {
+    // 719. Ya existe si hay un gasto del mismo valor exacto, con descripción
+    //      parecida, dentro de ±3 días. Los cobros de Meta son muchos y muy
+    //      seguidos, por eso el valor tiene que calzar exacto.
+    const ya = DATA.gastos.find(g =>
+      Number(g.valor||0) === f.valor &&
+      Math.abs(diasEntreFechasISO(g.fecha, f.fecha)) <= 3 &&
+      clientesSimilares(g.desc, f.desc));
+    return { ...f, estado: ya ? 'ya' : 'falta', yaId: ya ? ya.id : null };
+  }).sort((a,b) => a.fecha > b.fecha ? 1 : -1);
+}
+
+let gastosImportGrupos = [];
+
+window.abrirImportarGastos = () => {
+  document.getElementById('ig-texto').value = '';
+  document.getElementById('ig-fecha-fallback').value = '';
+  document.getElementById('ig-preview').innerHTML =
+    '<div style="font-size:13px;color:var(--ink-2);line-height:1.5">'
+    + 'Copia de la hoja las tres columnas de egresos — <strong>Concepto, Valor y Fecha</strong> — y pégalas aquí. '
+    + 'Te muestro qué falta, en qué categoría va cada uno y cuáles son fijos, antes de subir nada.</div>';
+  document.getElementById('ig-btn').style.display = 'none';
+  gastosImportGrupos = [];
+  openModal('modal-importar-gastos');
+};
+
+window.previsualizarGastosImport = () => {
+  const fb = document.getElementById('ig-fecha-fallback').value || '';
+  const { filas, sinFecha } = parsearGastosHoja(document.getElementById('ig-texto').value, fb);
+  const cont = document.getElementById('ig-preview');
+  const btn = document.getElementById('ig-btn');
+
+  if(!filas.length && !sinFecha.length) {
+    cont.innerHTML = '<div style="font-size:13px;color:var(--red)">No reconocí ninguna fila. '
+      + 'Pega las columnas en el orden de la hoja: concepto, valor, fecha.</div>';
+    btn.style.display = 'none';
+    return;
+  }
+
+  gastosImportGrupos = agruparGastosImport(filas);
+  const faltan = gastosImportGrupos.filter(g => g.estado === 'falta');
+  const ya     = gastosImportGrupos.filter(g => g.estado === 'ya');
+  const totalFalta = faltan.reduce((s,g) => s + g.valor, 0);
+  const fijosFalta = faltan.filter(g => g.esFijo).reduce((s,g) => s + g.valor, 0);
+  const mercFalta  = faltan.filter(g => g.cat === 'importacion').reduce((s,g) => s + g.valor, 0);
+
+  let html = '<div style="display:flex;gap:9px;flex-wrap:wrap;margin-bottom:14px">'
+    + '<div class="card" style="padding:10px 13px;flex:1;min-width:115px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);font-weight:700">Se suben</div>'
+      + '<div style="font-size:18px;font-weight:800;color:var(--green)">' + faltan.length + '</div><div style="font-size:11px;color:var(--ink-3)">' + fmt(totalFalta) + '</div></div>'
+    + '<div class="card" style="padding:10px 13px;flex:1;min-width:115px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);font-weight:700">De esos, fijos</div>'
+      + '<div style="font-size:18px;font-weight:800;color:var(--blue)">' + fmt(fijosFalta) + '</div><div style="font-size:11px;color:var(--ink-3)">punto de equilibrio</div></div>'
+    + '<div class="card" style="padding:10px 13px;flex:1;min-width:115px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);font-weight:700">Mercancía</div>'
+      + '<div style="font-size:18px;font-weight:800;color:var(--ink-2)">' + fmt(mercFalta) + '</div><div style="font-size:11px;color:var(--ink-3)">no es gasto</div></div>'
+    + '<div class="card" style="padding:10px 13px;flex:1;min-width:115px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);font-weight:700">Ya estaban</div>'
+      + '<div style="font-size:18px;font-weight:800;color:var(--ink-3)">' + ya.length + '</div><div style="font-size:11px;color:var(--ink-3)">se omiten</div></div>'
+    + '</div>';
+
+  if(sinFecha.length) {
+    html += '<div style="background:var(--amber-bg);border:1px solid #FDE68A;border-radius:var(--radius);padding:11px 13px;margin-bottom:12px;font-size:12.5px;color:#92400E;line-height:1.45">'
+      + '<strong>' + sinFecha.length + ' fila(s) traen la fecha ilegible</strong> ('
+      + sinFecha.slice(0,3).map(f => '"' + (f.fechaCruda||'vacía') + '"').join(', ')
+      + (sinFecha.length>3 ? ' y más' : '') + '). No las adivino. '
+      + 'Escribe arriba una fecha para asignárselas a todas, o súbelas después a mano.</div>';
+  }
+
+  html += '<div class="table-wrap"><table class="tbl"><thead><tr>'
+    + '<th>Fecha</th><th>Concepto</th><th>Categoría</th><th>Tipo</th><th style="text-align:right">Valor</th><th></th></tr></thead><tbody>';
+  gastosImportGrupos.forEach(g => {
+    const b = g.estado === 'falta'
+      ? '<span style="padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;background:#F0FDF4;color:var(--green)">Se sube</span>'
+      : '<span style="padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;background:var(--surface-3);color:var(--ink-3)">Ya está</span>';
+    const tipo = g.cat === 'importacion' ? 'Mercancía' : (g.esFijo ? 'Fijo' : 'Variable');
+    const tipoColor = g.cat === 'importacion' ? 'var(--ink-3)' : (g.esFijo ? 'var(--blue)' : 'var(--amber)');
+    html += '<tr style="opacity:' + (g.estado==='falta'?'1':'.5') + '">'
+      + '<td style="color:var(--ink-3);white-space:nowrap">' + fCorta(g.fecha) + (g.fechaAsignada ? ' <span style="font-size:10px;color:var(--amber)">asignada</span>' : '') + '</td>'
+      + '<td style="font-weight:500">' + g.desc + '</td>'
+      + '<td style="font-size:11.5px;color:var(--ink-2)">' + (CATS[g.cat]||g.cat) + '</td>'
+      + '<td style="font-size:11px;color:' + tipoColor + '">' + tipo + '</td>'
+      + '<td style="text-align:right;font-weight:600;white-space:nowrap">' + fmt(g.valor) + '</td>'
+      + '<td>' + b + '</td>'
+    + '</tr>';
+  });
+  html += '</tbody></table></div>';
+
+  cont.innerHTML = html;
+  if(faltan.length) { btn.style.display = 'inline-flex'; btn.textContent = 'Subir los ' + faltan.length + ' que faltan'; }
+  else btn.style.display = 'none';
+};
+
+window.ejecutarImportarGastos = async () => {
+  const faltan = gastosImportGrupos.filter(g => g.estado === 'falta');
+  if(!faltan.length) return;
+  const total = faltan.reduce((s,g) => s + g.valor, 0);
+  if(!confirm('Se van a crear ' + faltan.length + ' gasto(s) por ' + fmt(total) + '.\n\n'
+    + 'Nada de lo que ya existe se modifica ni se borra.\n\n¿Seguimos?')) return;
+  const btn = document.getElementById('ig-btn');
+  btn.disabled = true;
+  let hechas = 0;
+  for(const g of faltan) {
+    try {
+      await addDoc(collection(db,'gastos'), {
+        fecha: g.fecha, cat: g.cat, desc: g.desc, valor: g.valor,
+        esFijo: g.esFijo,
+        importadoDeHoja: true,   // trazabilidad, se puede revertir
+        createdAt: serverTimestamp()
+      });
+      hechas++;
+      btn.textContent = 'Subiendo ' + hechas + ' de ' + faltan.length + '…';
+    } catch(e) {}
+  }
+  btn.disabled = false;
+  closeModal('modal-importar-gastos');
+  toast('✅ ' + hechas + ' gasto(s) importado(s)');
+};
+
 // 704. Agrupa por día + cliente y compara contra lo que YA hay en la app.
 function agruparImportacion(filas) {
   const grupos = {};
@@ -10234,7 +10467,9 @@ window.ejecutarImportacion = async () => {
       const dist = g.esDist ? DATA.distribuidores.find(d => nombresCoinciden(d.nombre, g.cliente)) : null;
 
       const productosVenta = g.lineas.map(l => {
-        const prod = DATA.inventario.find(p => normalizarNombreHoja(p.nombre) === normalizarNombreHoja(l.producto));
+        // 720. Antes comparaba el nombre exacto y 6 ventas quedaron sin costo
+        //      ("GLICINATO DE MAGNESIO" vs "GLICINATO DE MAGNESIO NUTRICOST").
+        const prod = buscarProductoInventario(l.producto);
         return {
           prodId: prod ? prod.id : null, nombre: l.producto, cant: l.cant,
           precio: l.unit || Math.round(l.total / (l.cant||1)),
