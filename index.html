@@ -1043,6 +1043,21 @@ body{
 </div>
 
 <!-- 411. MODAL: RECORDATORIO DE COBRO POR WHATSAPP -->
+<!-- 685. MODAL: LIMPIAR VÍNCULOS MAL PUESTOS (ver comentario 683) -->
+<div class="modal-bg" id="modal-limpiar-vinculos">
+  <div class="modal" style="max-width:900px">
+    <div class="modal-header">
+      <span class="modal-title">Ventas mal vinculadas</span>
+      <button class="modal-close" onclick="closeModal('modal-limpiar-vinculos')">✕</button>
+    </div>
+    <div id="lv-contenido" style="max-height:60vh;overflow:auto"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-limpiar-vinculos')">Cerrar</button>
+      <button class="btn btn-danger" id="lv-btn-todas" onclick="desvincularTodasMalVinculadas()">Desvincular todas</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-bg" id="modal-recordatorio">
   <div class="modal" style="max-width:460px">
     <div class="modal-header">
@@ -8509,7 +8524,131 @@ window.desvincularVentaDistribuidor = async (ventaId) => {
   if(!v) return;
   if(!confirm('¿Desvincular esta venta (' + (v.producto||'') + ' — ' + fmt(v.total) + ') de este distribuidor? La venta no se borra, solo deja de contar aquí.')) return;
   await updateDoc(doc(db,'ventas',ventaId), { distribuidorId: null });
+  // 686. Parchamos DATA en memoria (mismo patrón de restaurarStockVenta) para
+  //      poder refrescar la lista de "Ventas mal vinculadas" de una, sin
+  //      esperar el round-trip de onSnapshot.
+  v.distribuidorId = null;
+  if(document.getElementById('modal-limpiar-vinculos')?.classList.contains('open')) abrirLimpiarVinculos();
   toast('✅ Venta desvinculada');
+};
+
+// ============================================================
+// 683. LIMPIEZA MASIVA DE VÍNCULOS MAL PUESTOS
+// Secuela del bug de los comentarios 657-660: mientras el modal de venta
+// dejaba "pegado" el distribuidor de la venta anterior, cada venta que se
+// registrara después quedaba colgada de ese distribuidor sin que se viera.
+// Ese bug ya está arreglado, pero los datos viejos quedaron sucios: hay
+// ventas de clientes de mostrador contando dentro del historial de un
+// gimnasio. La señal más clara es que el total "VINCULADO" es MAYOR que el
+// total del canal distribuidor.
+//
+// Regla de Ángel, tal cual: a cada distribuidor le corresponde únicamente
+// la venta cuyo cliente lleva su nombre. Todo lo demás se desvincula (la
+// venta NO se borra, solo deja de contar para ese distribuidor).
+//
+// Se comparan nombres normalizados: sin tildes, sin puntos ni comas, sin
+// mayúsculas ni espacios de más, para que "OLIMPO GYM." y "olimpo gym"
+// cuenten como el mismo. Se aceptan también las coincidencias parciales
+// ("GO UP GYM" dentro de "GO UP GYM SEDE 2") pero solo con nombres de 5
+// caracteres o más, para que un "gym" suelto no empareje con todo.
+// ============================================================
+function normalizarNombreVinculo(s) {
+  return String(s||'').trim().toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/[.,;:]/g,'')
+    .replace(/\s+/g,' ');
+}
+
+function nombresCoinciden(a, b) {
+  const x = normalizarNombreVinculo(a), y = normalizarNombreVinculo(b);
+  if(!x || !y) return false;
+  if(x === y) return true;
+  if(x.length >= 5 && y.length >= 5 && (x.includes(y) || y.includes(x))) return true;
+  return false;
+}
+
+// Devuelve [{venta, dist, motivo}] con TODA venta vinculada a un
+// distribuidor cuyo cliente no lleva el nombre de ese distribuidor, más
+// las que apuntan a un distribuidor que ya no existe.
+function ventasMalVinculadas() {
+  const out = [];
+  DATA.ventas.forEach(v => {
+    if(!v.distribuidorId) return;
+    const d = DATA.distribuidores.find(x => x.id === v.distribuidorId);
+    if(!d) { out.push({ venta:v, dist:null, motivo:'El distribuidor ya no existe' }); return; }
+    if(nombresCoinciden(v.cliente, d.nombre)) return;
+    out.push({
+      venta: v, dist: d,
+      motivo: v.canal !== 'distribuidor'
+        ? 'Es una venta ' + (v.canal === 'web' ? 'de la web' : 'directa') + ', no de distribuidor'
+        : 'El cliente no es ' + d.nombre
+    });
+  });
+  return out;
+}
+
+window.abrirLimpiarVinculos = () => {
+  const malas = ventasMalVinculadas();
+  const cont = document.getElementById('lv-contenido');
+  const total = malas.reduce((s,m) => s + ingresoVenta(m.venta), 0);
+
+  if(!malas.length) {
+    cont.innerHTML = '<div class="empty-state"><div class="empty-state-icon">✅</div>'
+      + '<div class="empty-state-text">Todos los vínculos están bien</div></div>';
+    document.getElementById('lv-btn-todas').style.display = 'none';
+  } else {
+    let filas = '';
+    malas.forEach(m => {
+      const v = m.venta;
+      filas += '<tr>'
+        + '<td style="color:var(--ink-3);white-space:nowrap">' + (v.fecha||'') + '</td>'
+        + '<td style="font-weight:600;color:var(--red)">' + (v.cliente||'—') + '</td>'
+        + '<td style="color:var(--ink-2)">' + (m.dist ? m.dist.nombre : '(borrado)') + '</td>'
+        + '<td>' + (v.producto||'') + '</td>'
+        + '<td style="font-weight:600;white-space:nowrap">' + fmt(ingresoVenta(v)) + '</td>'
+        + '<td style="font-size:11px;color:var(--ink-3)">' + m.motivo + '</td>'
+        + '<td><button class="btn btn-xs" onclick="desvincularVentaDistribuidor(\'' + v.id + '\')">Quitar</button></td>'
+      + '</tr>';
+    });
+    cont.innerHTML =
+      '<div style="background:var(--amber-bg);border:1px solid #FDE68A;border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;font-size:13px;color:#92400E;line-height:1.45">'
+        + '<strong>' + malas.length + ' venta' + (malas.length>1?'s':'') + ' por ' + fmt(total) + '</strong> '
+        + 'están contando dentro del historial de un distribuidor que no les corresponde. '
+        + 'Quedaron así por el error del selector que ya se corrigió. '
+        + 'Desvincularlas <strong>no borra ninguna venta</strong>: siguen en Ventas, en Clientes y en tus ingresos exactamente igual. '
+        + 'Solo dejan de contarle a ese distribuidor.'
+      + '</div>'
+      + '<div class="table-wrap"><table class="tbl">'
+      + '<thead><tr><th>Fecha</th><th>Cliente real</th><th>Aparece en</th><th>Producto</th><th>Total</th><th>Por qué</th><th></th></tr></thead>'
+      + '<tbody>' + filas + '</tbody></table></div>';
+    const btn = document.getElementById('lv-btn-todas');
+    btn.style.display = 'inline-flex';
+    btn.textContent = 'Desvincular las ' + malas.length;
+  }
+  openModal('modal-limpiar-vinculos');
+};
+
+window.desvincularTodasMalVinculadas = async () => {
+  const malas = ventasMalVinculadas();
+  if(!malas.length) return;
+  const total = malas.reduce((s,m) => s + ingresoVenta(m.venta), 0);
+  if(!confirm('Se van a desvincular ' + malas.length + ' venta(s) por ' + fmt(total) + '.\n\n'
+    + 'Ninguna venta se borra: siguen en Ventas y en tus ingresos igual. Solo dejan de contar para ese distribuidor.\n\n'
+    + '¿Seguimos?')) return;
+
+  const btn = document.getElementById('lv-btn-todas');
+  btn.disabled = true;
+  let hechas = 0;
+  for(const m of malas) {
+    try {
+      await updateDoc(doc(db,'ventas',m.venta.id), { distribuidorId: null });
+      hechas++;
+      btn.textContent = 'Desvinculando ' + hechas + ' de ' + malas.length + '…';
+    } catch(e) {}
+  }
+  btn.disabled = false;
+  closeModal('modal-limpiar-vinculos');
+  toast('✅ ' + hechas + ' venta(s) desvinculada(s) — ningún registro se borró');
 };
 
 window.eliminarDistribuidor = async (id) => {
@@ -9584,7 +9723,14 @@ function renderDistribuidores() {
   document.getElementById('page-distribuidores').innerHTML =
     '<div class="page-header">'
       + '<div><div class="page-title">Distribuidores</div><div class="page-sub">Gimnasios y distribuidores vinculados — rentabilidad real</div></div>'
+      + '<div style="display:flex;gap:8px">'
+      // 684. Acceso a la limpieza masiva de vínculos (ver comentario 683).
+      //      Solo aparece si de verdad hay algo mal vinculado.
+      + (ventasMalVinculadas().length
+          ? '<button class="btn btn-sm" style="color:var(--red);border-color:#FECACA" onclick="abrirLimpiarVinculos()">🧹 Revisar vínculos (' + ventasMalVinculadas().length + ')</button>'
+          : '')
       + '<button class="btn btn-lime btn-sm" onclick="abrirNuevoDistribuidor()">+ Agregar</button>'
+      + '</div>'
     + '</div>'
     + resumenHtml
     + sinRegistrarHtml
