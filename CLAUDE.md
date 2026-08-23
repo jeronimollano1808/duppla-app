@@ -650,7 +650,31 @@ Los abonos se suman **por su fecha**, no por la de la venta: un abono de agosto 
 
 Lo fiado no desaparece: se muestra aparte, con el texto de que esa plata todavía no ha llegado. Agosto pasa de $10.266.384 a ~$9.756.134 por los $510.250 que quedaron a crédito.
 
+**772. Trampa del propio arreglo, encontrada al verificarlo en producción.** La primera versión de 770 sumaba `v.pagado` de las ventas del ciclo **más** los abonos fechados en el ciclo. Pero `guardarAbono` hace `nuevoPagado = (venta.pagado||0) + valor`: **cada abono ya está dentro de `pagado`**. Todo abono hecho en el mismo ciclo de su venta se contaba dos veces. Agosto mostraba **$13.333.476 recibidos contra $11.791.384 vendidos** — imposible sin cuentas viejas de por medio, que es justo lo que delató el error.
+
+La descomposición correcta separa las dos entradas **por la fecha en que la plata llegó**:
+
+| Entrada | Cómo se calcula | Cuándo entra |
+|---|---|---|
+| Pago inicial | `pagado − Σ abonos` | el día de la venta |
+| Cada abono | `a.valor` | el día del abono |
+
+Así ningún peso se cuenta dos veces y cada uno queda fechado en el ciclo real. Y lo fiado dejó de ser una resta (`vendido − recibido`, que mezclaba abonos de ventas viejas) para ser lo que siempre debió ser: **el saldo vivo de las ventas de ese ciclo**, `Σ saldoReal(v)`.
+
+Verificado contra Firestore, ciclo por ciclo. Ningún ciclo recibe de sus propias ventas más de lo que vendió:
+
+| Ciclo | Vendido | De contado | Abonos | Cuentas viejas | Gastado | Movimiento del banco | Fiado |
+|---|---|---|---|---|---|---|---|
+| Mayo | 16.145.600 | 16.145.600 | 0 | 2.400.000 | 16.839.516 | 1.706.084 | 0 |
+| Junio | 15.867.354 | 11.859.104 | 1.029.000 | 600.000 | 17.956.958 | −4.468.854 | 0 |
+| Julio | 14.097.406 | 9.901.064 | 6.163.450 | 216.000 | 8.877.003 | 7.403.511 | 510.992 |
+| Agosto | 11.791.384 | 9.729.942 | 2.052.342 | 0 | 1.525.000 | 10.257.284 | 510.250 |
+
+Por eso "Te pagaron" se partió en dos renglones: **"Te pagaron de contado"** y **"Abonos que entraron"**. No es cosmético — es lo que hace visible que la plata de un ciclo puede llegar en otro.
+
 **Regla que sale de aquí, y aplica a cualquier tarjeta futura:** *lo devengado y lo cobrado son dos cuentas y se muestran separadas, cada una con sus renglones a la vista.* Un total que no se puede reconstruir mirándolo es un total que nadie va a poder defender frente a la hoja.
+
+**Y la regla de datos, que vale para toda la app:** *`v.pagado` es acumulado, no es el pago del día de la venta.* Antes de sumar `pagado` junto a los abonos en cualquier cálculo nuevo, restarle sus abonos. Es la misma familia de error del comentario 727 (contar la venta y su cobro) con otro disfraz — y esta vez el disfraz era mío.
 
 
 ---

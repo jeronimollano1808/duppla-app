@@ -7649,16 +7649,33 @@ function renderInicio() {
 
   // 770. FIX: la caja contaba como recibida toda venta del ciclo, aunque el
   //      cliente no hubiera pagado. Ahora suma solo la plata que de verdad
-  //      entró: el pago de cada venta, los abonos fechados en el ciclo y los
-  //      cobros de cuentas viejas. Lo fiado se muestra aparte, que es lo que
-  //      falta por llegar.
-  const pagadoEnCiclo = ventasCiclo.reduce((s,v) => s + Number(v.pagado||0), 0);
-  let abonosEnCiclo = 0;
-  DATA.ventas.forEach(v => (v.abonos||[]).forEach(a => {
-    if(a.fecha >= ciclo.inicio && a.fecha <= ciclo.fin) abonosEnCiclo += Number(a.valor||0);
-  }));
-  const entroAlBanco = pagadoEnCiclo + abonosEnCiclo + cobrado;
-  const quedoFiado   = Math.max(0, vendido - pagadoEnCiclo);
+  //      entró, y cada entrada en su propio renglón.
+  //
+  // 772. TRAMPA, encontrada al verificar 770 en producción: `v.pagado` NO es
+  //      el pago del día de la venta — `guardarAbono` le suma cada abono
+  //      (`nuevoPagado = pagado + valor`). Así que sumar `pagado` y además los
+  //      abonos del ciclo contaba dos veces todo abono hecho dentro del mismo
+  //      ciclo de la venta. Agosto mostraba $13.333.476 recibidos contra
+  //      $11.791.384 vendidos, que es imposible sin cuentas viejas.
+  //
+  //      La descomposición correcta separa las dos cosas por FECHA de entrada:
+  //        · pago inicial = pagado − todos sus abonos  → entra el día de la venta
+  //        · cada abono                                 → entra el día del abono
+  //      Así ninguna plata se cuenta dos veces y cada peso queda fechado en el
+  //      ciclo en que de verdad llegó al banco.
+  const pagoInicial = v =>
+    Number(v.pagado||0) - (v.abonos||[]).reduce((s,a) => s + Number(a.valor||0), 0);
+  let cobradoDeVentas = 0, abonosEnCiclo = 0;
+  DATA.ventas.forEach(v => {
+    if(v.fecha >= ciclo.inicio && v.fecha <= ciclo.fin) cobradoDeVentas += Math.max(0, pagoInicial(v));
+    (v.abonos||[]).forEach(a => {
+      if(a.fecha >= ciclo.inicio && a.fecha <= ciclo.fin) abonosEnCiclo += Number(a.valor||0);
+    });
+  });
+  const entroAlBanco = cobradoDeVentas + abonosEnCiclo + cobrado;
+  // Lo fiado es el saldo vivo de las ventas de ESTE ciclo — no una resta contra
+  // lo recibido, que mezclaría abonos de ventas viejas.
+  const quedoFiado = Math.round(ventasCiclo.reduce((s,v) => s + saldoReal(v), 0));
   const caja = entroAlBanco - gastado;
 
   const inventarioValorizado = DATA.inventario.reduce((s,p) => s + Number(p.stock||0) * Number(p.costo||0), 0);
@@ -7696,7 +7713,8 @@ function renderInicio() {
       <div style="font-size:11.5px;color:var(--ink-3);margin-bottom:8px;line-height:1.4">
         Aquí sí cuenta todo lo que salió, la mercancía incluida — porque del banco salió.
       </div>
-      ${renglon('Te pagaron', pagadoEnCiclo + abonosEnCiclo, '')}
+      ${renglon('Te pagaron de contado', cobradoDeVentas, '')}
+      ${abonosEnCiclo > 0 ? renglon('Abonos que entraron', abonosEnCiclo, '') : ''}
       ${cobrado > 0 ? renglon('Cobros de cuentas viejas', cobrado, '') : ''}
       ${compras > 0 ? renglon('Compra de mercancía', compras, '−') : ''}
       ${renglon('Gastos de operación', operativos, '−')}
