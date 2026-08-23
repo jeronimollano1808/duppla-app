@@ -6569,7 +6569,11 @@ async function generarGastosRecurrentesDelCiclo() {
       if(r.activo === false) continue;
       if(r.ultimoMesGenerado === mesActual) continue;
       await addDoc(collection(db,'gastos'), {
-        fecha: today(), cat: r.cat, desc: r.desc, valor: r.valor,
+        // 755. Antes usaba today(), o sea el día en que alguien abrió la app.
+        //      Ángel los paga el día 4 —"Los dos el día 4"— y ese es el primer
+        //      día del ciclo. Con today() un gasto del ciclo aparecía fechado
+        //      el 22, que no es cuando se pagó y desordena el detalle del mes.
+        fecha: getCicloActual(0).inicio, cat: r.cat, desc: r.desc, valor: r.valor,
         // 674. El gasto hereda el caracter fijo/variable de su plantilla
         esFijo: r.esFijo !== false,
         gastoRecurrenteId: r.id, createdAt: serverTimestamp()
