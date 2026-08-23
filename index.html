@@ -1043,6 +1043,39 @@ body{
 </div>
 
 <!-- 411. MODAL: RECORDATORIO DE COBRO POR WHATSAPP -->
+<!-- 706. MODAL: IMPORTAR VENTAS DESDE LA HOJA (ver comentario 703) -->
+<div class="modal-bg" id="modal-importar">
+  <div class="modal" style="max-width:900px">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">Importar ventas desde la hoja</div>
+        <div style="font-size:12px;color:var(--ink-3);margin-top:2px">Nunca duplica y nunca borra nada de lo que ya existe</div>
+      </div>
+      <button class="modal-close" onclick="closeModal('modal-importar')">✕</button>
+    </div>
+    <div class="f-group">
+      <label class="f-label">Pega aquí las filas de la hoja</label>
+      <textarea id="imp-texto" class="f-input" rows="5" oninput="previsualizarImportacion()"
+        style="font-family:ui-monospace,monospace;font-size:11.5px;resize:vertical"
+        placeholder="4/08/2026	PRE ENTRENO ELECTRON.	1	$93.150	$93.150	EFECTIVO	JERONIMO.	OLIMPO GYM (DISTRIBUIDOR)."></textarea>
+    </div>
+    <div id="imp-preview" style="max-height:50vh;overflow:auto;margin-bottom:12px"></div>
+    <div class="f-group">
+      <label style="display:flex;align-items:flex-start;gap:9px;cursor:pointer;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:11px 13px">
+        <input type="checkbox" id="imp-descontar" style="margin-top:2px;width:16px;height:16px;accent-color:var(--lime);cursor:pointer">
+        <span style="font-size:12.5px;color:var(--ink-2);line-height:1.4">
+          <strong style="color:var(--ink)">Descontar del inventario</strong><br>
+          Déjalo sin marcar si el stock de la app ya está contado a mano. Márcalo solo si estas ventas todavía no se descontaron.
+        </span>
+      </label>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-importar')">Cancelar</button>
+      <button class="btn btn-lime" id="imp-btn" onclick="ejecutarImportacion()" style="display:none">Subir</button>
+    </div>
+  </div>
+</div>
+
 <!-- 690. MODAL: DETALLE DE UN NÚMERO DE INICIO (ver comentario 688) -->
 <div class="modal-bg" id="modal-detalle">
   <div class="modal" style="max-width:820px">
@@ -3628,6 +3661,7 @@ function renderVentas() {
       </div>
       <div style="display:flex;gap:8px">
         <button class="btn btn-sm" onclick="exportarCSV()">↓ CSV</button>
+        <button class="btn btn-sm" onclick="abrirImportarVentas()">⬆️ Importar</button>
         <button class="btn btn-sm" style="color:var(--amber);border-color:#FDE68A" onclick="abrirRevisarPrecios()">⚠️ Revisar precios</button>
         <button class="btn btn-lime btn-sm" onclick="abrirModalVenta()">+ Nueva venta</button>
       </div>
@@ -9765,6 +9799,259 @@ window.verDetalleDistribuidor = (id) => {
 // ============================================================
 // 338. PÁGINA: DISTRIBUIDORES
 // ============================================================
+// ============================================================
+// 703. IMPORTAR VENTAS DESDE LA HOJA DE GOOGLE
+// La hoja "VENTAS PRO ELITE" y la app se desfasaron: agosto quedó a
+// medias en la app mientras se seguía llenando la hoja. En vez de
+// meter 36 ventas a mano, se pegan las filas aquí.
+//
+// Reglas duras:
+//  - NUNCA duplica. Compara por fecha + cliente contra lo que ya existe.
+//  - NUNCA borra ni modifica una venta existente.
+//  - Cada grupo (mismo día, mismo cliente) entra como UNA venta, con
+//    varios productos si la hoja traía varias líneas — así queda igual
+//    a como se registra desde el modal normal.
+//  - Por defecto NO toca el inventario: son ventas que ya ocurrieron y
+//    el stock físico de la app ya está contado a mano. Hay casilla para
+//    descontarlo si se necesita.
+// ============================================================
+function normalizarNombreHoja(s) {
+  // 707. OJO: la primera versión decía DISTRIBUIDORES? — el ? sólo hacía
+  //      opcional la S final, así que "DISTRIBUIDOR" suelto NO se limpiaba y
+  //      "OLIMPO GYM (DISTRIBUIDOR)." y "OLIMPO GYM DISTRIBUIDOR." quedaban
+  //      como dos clientes distintos. Va (?:ES)? sobre el grupo completo.
+  const base = String(s||'')
+    .replace(/\bDISTRIBUIDOR(?:ES)?\b/gi, '')
+    .replace(/[.,;:()]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase();
+  // 708. Si ya existe un distribuidor registrado que es claramente el mismo
+  //      ("OLIMPO" vs "OLIMPO GYM"), usamos SU nombre como el bueno. Así la
+  //      importación no crea un cliente paralelo al que ya tienes.
+  if(base && Array.isArray(DATA.distribuidores)) {
+    const d = DATA.distribuidores.find(x => nombresCoinciden(x.nombre, base));
+    if(d) return String(d.nombre).replace(/[.,;:()]/g,' ').replace(/\s+/g,' ').trim().toUpperCase();
+  }
+  return base;
+}
+
+function esClienteDistribuidorHoja(s) {
+  return /DISTRIBUIDOR/i.test(String(s||''));
+}
+
+function parsearFilasHoja(texto) {
+  const filas = [];
+  const errores = [];
+  String(texto||'').split('\n').forEach((linea, i) => {
+    if(!linea.trim()) return;
+    // Acepta pegado desde Google Sheets (tabulaciones) o desde una tabla
+    let cel = linea.includes('\t') ? linea.split('\t') : linea.replace(/^\||\|$/g,'').split('|');
+    cel = cel.map(x => x.trim());
+    if(cel.length < 8) { errores.push('Línea ' + (i+1) + ': solo ' + cel.length + ' columnas'); return; }
+    const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(cel[0]);
+    if(!m) { if(!/FECHA/i.test(cel[0])) errores.push('Línea ' + (i+1) + ': fecha no reconocida ("' + cel[0] + '")'); return; }
+    const num = s => Number(String(s||'').replace(/[^\d]/g,'')) || 0;
+    const total = num(cel[4]);
+    if(!total) { errores.push('Línea ' + (i+1) + ': sin valor total'); return; }
+    filas.push({
+      fecha: m[3] + '-' + String(m[2]).padStart(2,'0') + '-' + String(m[1]).padStart(2,'0'),
+      producto: cel[1].replace(/\.$/,'').trim(),
+      cant: Number(cel[2]) || 1,
+      unit: num(cel[3]),
+      total,
+      pago: cel[5],
+      vendedor: cel[6],
+      clienteOriginal: cel[7],
+      cliente: normalizarNombreHoja(cel[7]),
+      esDist: esClienteDistribuidorHoja(cel[7])
+    });
+  });
+  return { filas, errores };
+}
+
+// 704. Agrupa por día + cliente y compara contra lo que YA hay en la app.
+function agruparImportacion(filas) {
+  const grupos = {};
+  filas.forEach(f => {
+    const k = f.fecha + '||' + f.cliente;
+    grupos[k] = grupos[k] || {
+      fecha: f.fecha, cliente: f.cliente, clienteOriginal: f.clienteOriginal,
+      esDist: f.esDist, pago: f.pago, lineas: [], total: 0
+    };
+    grupos[k].lineas.push(f);
+    grupos[k].total += f.total;
+    if(f.esDist) grupos[k].esDist = true;
+  });
+  return Object.values(grupos).map(g => {
+    // Lo que la app ya tiene ese mismo día para ese mismo cliente
+    const yaEnApp = DATA.ventas
+      .filter(v => v.fecha === g.fecha && normalizarNombreHoja(v.cliente) === g.cliente)
+      .reduce((s,v) => s + ingresoVenta(v), 0);
+    const estado = yaEnApp >= g.total ? 'ya' : (yaEnApp > 0 ? 'parcial' : 'falta');
+    return { ...g, yaEnApp: Math.round(yaEnApp), estado };
+  }).sort((a,b) => a.fecha > b.fecha ? 1 : -1);
+}
+
+let importGrupos = [];
+
+window.abrirImportarVentas = () => {
+  document.getElementById('imp-texto').value = '';
+  document.getElementById('imp-preview').innerHTML =
+    '<div style="font-size:13px;color:var(--ink-2);line-height:1.5">'
+    + 'Abre tu hoja de Google, selecciona las filas del mes (sin el encabezado) y cópialas con Ctrl+C. '
+    + 'Pégalas aquí arriba y te muestro exactamente qué falta antes de subir nada.'
+    + '</div>';
+  document.getElementById('imp-btn').style.display = 'none';
+  document.getElementById('imp-descontar').checked = false;
+  importGrupos = [];
+  openModal('modal-importar');
+};
+
+window.previsualizarImportacion = () => {
+  const { filas, errores } = parsearFilasHoja(document.getElementById('imp-texto').value);
+  const cont = document.getElementById('imp-preview');
+  const btn = document.getElementById('imp-btn');
+
+  if(!filas.length) {
+    cont.innerHTML = '<div style="font-size:13px;color:var(--red)">No reconocí ninguna fila. '
+      + 'Revisa que estés pegando las columnas en el orden de la hoja: fecha, producto, cantidad, valor unitario, valor total, medio de pago, vendedor, nombre.'
+      + (errores.length ? '<br><br><span style="color:var(--ink-3);font-size:12px">' + errores.slice(0,5).join('<br>') + '</span>' : '')
+      + '</div>';
+    btn.style.display = 'none';
+    return;
+  }
+
+  importGrupos = agruparImportacion(filas);
+  const faltan  = importGrupos.filter(g => g.estado === 'falta');
+  const parcial = importGrupos.filter(g => g.estado === 'parcial');
+  const ya      = importGrupos.filter(g => g.estado === 'ya');
+  const totalFalta = faltan.reduce((s,g) => s + g.total, 0);
+
+  const badge = (txt, color, bg) => '<span style="padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;background:'+bg+';color:'+color+'">'+txt+'</span>';
+
+  let html = '<div style="display:flex;gap:9px;flex-wrap:wrap;margin-bottom:14px">'
+    + '<div class="card" style="padding:10px 13px;flex:1;min-width:120px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);font-weight:700">Se van a subir</div>'
+      + '<div style="font-size:18px;font-weight:800;color:var(--green)">' + faltan.length + '</div>'
+      + '<div style="font-size:11px;color:var(--ink-3)">' + fmt(totalFalta) + '</div></div>'
+    + '<div class="card" style="padding:10px 13px;flex:1;min-width:120px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);font-weight:700">Ya estaban</div>'
+      + '<div style="font-size:18px;font-weight:800;color:var(--ink-3)">' + ya.length + '</div>'
+      + '<div style="font-size:11px;color:var(--ink-3)">se omiten</div></div>'
+    + (parcial.length ? '<div class="card" style="padding:10px 13px;flex:1;min-width:120px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);font-weight:700">Revisar</div>'
+      + '<div style="font-size:18px;font-weight:800;color:var(--amber)">' + parcial.length + '</div>'
+      + '<div style="font-size:11px;color:var(--ink-3)">no cuadran</div></div>' : '')
+    + '</div>';
+
+  if(parcial.length) {
+    html += '<div style="background:var(--amber-bg);border:1px solid #FDE68A;border-radius:var(--radius);padding:11px 13px;margin-bottom:12px;font-size:12.5px;color:#92400E;line-height:1.45">'
+      + '<strong>' + parcial.length + ' no cuadran.</strong> Ese día ese cliente ya tiene ventas en la app, pero por menos plata que en la hoja. '
+      + 'No las voy a subir para no duplicarte nada — revísalas a mano.</div>';
+  }
+
+  html += '<div class="table-wrap"><table class="tbl"><thead><tr>'
+    + '<th>Fecha</th><th>Cliente</th><th>Productos</th><th style="text-align:right">Hoja</th><th style="text-align:right">App</th><th></th>'
+    + '</tr></thead><tbody>';
+  importGrupos.forEach(g => {
+    const b = g.estado === 'falta' ? badge('Se sube','var(--green)','#F0FDF4')
+            : g.estado === 'ya'    ? badge('Ya está','var(--ink-3)','var(--surface-3)')
+            :                        badge('Revisar','var(--amber)','var(--amber-bg)');
+    html += '<tr style="opacity:' + (g.estado==='falta'?'1':'.55') + '">'
+      + '<td style="color:var(--ink-3);white-space:nowrap">' + fCorta(g.fecha) + '</td>'
+      + '<td style="font-weight:600">' + g.cliente + (g.esDist ? ' <span style="font-size:10px;color:var(--amber)">dist.</span>' : '') + '</td>'
+      + '<td style="font-size:11.5px;color:var(--ink-2)">' + g.lineas.map(l => l.cant + '× ' + l.producto).join('<br>') + '</td>'
+      + '<td style="text-align:right;font-weight:600;white-space:nowrap">' + fmt(g.total) + '</td>'
+      + '<td style="text-align:right;color:var(--ink-3);white-space:nowrap">' + (g.yaEnApp ? fmt(g.yaEnApp) : '—') + '</td>'
+      + '<td>' + b + '</td>'
+    + '</tr>';
+  });
+  html += '</tbody></table></div>';
+
+  if(errores.length) {
+    html += '<div style="margin-top:12px;font-size:11.5px;color:var(--ink-3)">'
+      + errores.length + ' línea(s) no se pudieron leer: ' + errores.slice(0,4).join(' · ')
+      + (errores.length>4 ? ' y ' + (errores.length-4) + ' más' : '') + '</div>';
+  }
+
+  cont.innerHTML = html;
+  if(faltan.length) {
+    btn.style.display = 'inline-flex';
+    btn.textContent = 'Subir las ' + faltan.length + ' que faltan';
+  } else {
+    btn.style.display = 'none';
+  }
+};
+
+window.ejecutarImportacion = async () => {
+  const faltan = importGrupos.filter(g => g.estado === 'falta');
+  if(!faltan.length) return;
+  const descontar = document.getElementById('imp-descontar').checked;
+  const total = faltan.reduce((s,g) => s + g.total, 0);
+  if(!confirm('Se van a crear ' + faltan.length + ' venta(s) por ' + fmt(total) + '.\n\n'
+    + (descontar ? 'SÍ se va a descontar del inventario.' : 'NO se toca el inventario.') + '\n\n'
+    + 'Nada de lo que ya existe se modifica ni se borra.\n\n¿Seguimos?')) return;
+
+  const btn = document.getElementById('imp-btn');
+  btn.disabled = true;
+  let hechas = 0, fallidas = 0;
+
+  for(const g of faltan) {
+    try {
+      const canal = g.esDist ? 'distribuidor' : (/WEB/i.test(g.pago) ? 'web' : 'directo');
+      const metodoPago = /EFECTIVO/i.test(g.pago) ? 'efectivo' : 'transferencia';
+      const tipoPrecio = g.esDist ? 'distribuidor' : 'publico';
+      const dist = g.esDist ? DATA.distribuidores.find(d => nombresCoinciden(d.nombre, g.cliente)) : null;
+
+      const productosVenta = g.lineas.map(l => {
+        const prod = DATA.inventario.find(p => normalizarNombreHoja(p.nombre) === normalizarNombreHoja(l.producto));
+        return {
+          prodId: prod ? prod.id : null, nombre: l.producto, cant: l.cant,
+          precio: l.unit || Math.round(l.total / (l.cant||1)),
+          tipoPrecio, costoUnit: prod ? Number(prod.costo)||null : null,
+          esManual: !prod
+        };
+      });
+      const esMultiple = productosVenta.length > 1;
+
+      const venta = {
+        fecha: g.fecha, canal,
+        producto: esMultiple ? productosVenta.length + ' productos' : productosVenta[0].nombre,
+        prodId: esMultiple ? null : productosVenta[0].prodId,
+        esManual: esMultiple ? false : productosVenta[0].esManual,
+        esMultiple, productosVenta,
+        cant: esMultiple ? productosVenta.reduce((s,p)=>s+p.cant,0) : productosVenta[0].cant,
+        precio: esMultiple ? g.total : productosVenta[0].precio,
+        total: g.total, cliente: g.cliente, nota: 'Importado de la hoja de Google',
+        tipoPrecio, metodoPago,
+        pagado: g.total, saldo: 0, estadoPago: 'pagado', abonos: [],
+        mixtoEfectivo: null, mixtoTransferencia: null,
+        costoUnit: esMultiple ? null : productosVenta[0].costoUnit,
+        distribuidorId: dist ? dist.id : null,
+        importadoDeHoja: true,   // 705. Trazabilidad: se puede revertir buscando este flag
+        createdAt: serverTimestamp()
+      };
+      await addDoc(collection(db,'ventas'), venta);
+
+      if(descontar) {
+        for(const l of productosVenta) {
+          if(!l.prodId) continue;
+          const prod = DATA.inventario.find(p => p.id === l.prodId);
+          if(!prod) continue;
+          const nuevo = Math.max(0, Number(prod.stock||0) - Number(l.cant||0));
+          await updateDoc(doc(db,'inventario',l.prodId), { stock: nuevo });
+          prod.stock = nuevo;
+        }
+      }
+      hechas++;
+      btn.textContent = 'Subiendo ' + hechas + ' de ' + faltan.length + '…';
+    } catch(e) { fallidas++; }
+  }
+
+  btn.disabled = false;
+  closeModal('modal-importar');
+  toast('✅ ' + hechas + ' venta(s) importada(s)' + (fallidas ? ' · ' + fallidas + ' fallaron' : ''));
+  await pushNotif('⬆️ Importación', hechas + ' ventas subidas desde la hoja · ' + fmt(total), 'venta', {seccion:'ventas'});
+};
+
 // 698. Ciclo que se está mirando en Distribuidores. Mismo patrón que Inicio
 //      (ver 691): 0 = ciclo actual, 1 = el anterior… y -1 = todo el historial.
 //      Los distribuidores "arrancan de cero" cada mes en pantalla, pero el
