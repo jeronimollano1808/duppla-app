@@ -9870,6 +9870,45 @@ function parsearFilasHoja(texto) {
   return { filas, errores };
 }
 
+// 709. FIX DESPUÉS DE DUPLICAR 4 VENTAS EN PRODUCCIÓN.
+// La primera versión comparaba el nombre normalizado EXACTO. La hoja y la
+// app escriben distinto al mismo cliente, así que estas cuatro pasaron el
+// filtro y se duplicaron ($3.102.192):
+//   app "EDWARD RENDON"     vs hoja "EDWAR RENDON"
+//   app "SEBAS BEDOYA"      vs hoja "SEBASTIAN BEDOYA"
+//   app "RAICES SALUDABLES" vs hoja "RAICES MERCADO SALUDABLE"
+//   app "DANIEL SANTAMARIA" 6/08 vs hoja 5/08 (mismo monto, un día corrido)
+//
+// Ahora se comparan por TOKENS: dos nombres son la misma persona si
+// comparten dos palabras, contando como iguales las que son prefijo de la
+// otra con 4+ letras (SEBAS≈SEBASTIAN, SALUDABLE≈SALUDABLES). Si uno de los
+// dos es de una sola palabra, basta con que esa palabra calce (OLIMPO ≈
+// OLIMPO GYM). Y se mira una ventana de ±3 días, no solo el mismo día.
+function tokensNombre(s) {
+  return String(s||'').toUpperCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/\bDISTRIBUIDOR(?:ES)?\b/g,'')
+    .replace(/[^A-Z0-9\s]/g,' ')
+    .split(/\s+/).filter(t => t.length >= 3);
+}
+
+function clientesSimilares(a, b) {
+  const ta = tokensNombre(a), tb = tokensNombre(b);
+  if(!ta.length || !tb.length) return false;
+  let calces = 0;
+  ta.forEach(x => {
+    if(tb.some(y => x === y || (x.length >= 4 && y.startsWith(x)) || (y.length >= 4 && x.startsWith(y)))) calces++;
+  });
+  if(calces >= 2) return true;
+  return calces >= 1 && Math.min(ta.length, tb.length) === 1;
+}
+
+function diasEntreFechasISO(f1, f2) {
+  const [a1,m1,d1] = String(f1).split('-').map(Number);
+  const [a2,m2,d2] = String(f2).split('-').map(Number);
+  return Math.round((new Date(a2,m2-1,d2) - new Date(a1,m1-1,d1)) / 86400000);
+}
+
 // 704. Agrupa por día + cliente y compara contra lo que YA hay en la app.
 function agruparImportacion(filas) {
   const grupos = {};
@@ -9884,12 +9923,29 @@ function agruparImportacion(filas) {
     if(f.esDist) grupos[k].esDist = true;
   });
   return Object.values(grupos).map(g => {
-    // Lo que la app ya tiene ese mismo día para ese mismo cliente
-    const yaEnApp = DATA.ventas
-      .filter(v => v.fecha === g.fecha && normalizarNombreHoja(v.cliente) === g.cliente)
-      .reduce((s,v) => s + ingresoVenta(v), 0);
-    const estado = yaEnApp >= g.total ? 'ya' : (yaEnApp > 0 ? 'parcial' : 'falta');
-    return { ...g, yaEnApp: Math.round(yaEnApp), estado };
+    // 710. Lo que la app ya tiene ese mismo día para ese cliente (nombre
+    //      parecido, no idéntico — ver 709).
+    const mismoDia = DATA.ventas.filter(v => v.fecha === g.fecha && clientesSimilares(v.cliente, g.cliente));
+    const yaEnApp = mismoDia.reduce((s,v) => s + ingresoVenta(v), 0);
+
+    // 711. Aunque no haya nada ese día exacto, si el mismo cliente tiene una
+    //      venta por el MISMO monto dentro de ±3 días, es casi seguro la
+    //      misma venta con la fecha corrida. No se importa: se marca para
+    //      que Ángel decida. Perder una venta se arregla; duplicarla ensucia
+    //      la contabilidad y es mucho más difícil de detectar después.
+    const cercana = DATA.ventas.find(v =>
+      v.fecha !== g.fecha &&
+      Math.abs(diasEntreFechasISO(v.fecha, g.fecha)) <= 3 &&
+      clientesSimilares(v.cliente, g.cliente) &&
+      Math.abs(ingresoVenta(v) - g.total) <= Math.max(1000, g.total * 0.01));
+
+    let estado;
+    if(yaEnApp >= g.total)      estado = 'ya';
+    else if(cercana)            estado = 'posible';
+    else if(yaEnApp > 0)        estado = 'parcial';
+    else                        estado = 'falta';
+
+    return { ...g, yaEnApp: Math.round(yaEnApp), estado, cercana: cercana ? { fecha: cercana.fecha, cliente: cercana.cliente } : null };
   }).sort((a,b) => a.fecha > b.fecha ? 1 : -1);
 }
 
@@ -9924,7 +9980,7 @@ window.previsualizarImportacion = () => {
 
   importGrupos = agruparImportacion(filas);
   const faltan  = importGrupos.filter(g => g.estado === 'falta');
-  const parcial = importGrupos.filter(g => g.estado === 'parcial');
+  const parcial = importGrupos.filter(g => g.estado === 'parcial' || g.estado === 'posible');
   const ya      = importGrupos.filter(g => g.estado === 'ya');
   const totalFalta = faltan.reduce((s,g) => s + g.total, 0);
 
@@ -9944,23 +10000,25 @@ window.previsualizarImportacion = () => {
 
   if(parcial.length) {
     html += '<div style="background:var(--amber-bg);border:1px solid #FDE68A;border-radius:var(--radius);padding:11px 13px;margin-bottom:12px;font-size:12.5px;color:#92400E;line-height:1.45">'
-      + '<strong>' + parcial.length + ' no cuadran.</strong> Ese día ese cliente ya tiene ventas en la app, pero por menos plata que en la hoja. '
-      + 'No las voy a subir para no duplicarte nada — revísalas a mano.</div>';
+      + '<strong>' + parcial.length + ' hay que mirarlas a ojo.</strong> O ese día el cliente ya tiene ventas en la app por menos plata, '
+      + 'o hay una venta suya por el mismo monto a uno o dos días de distancia — casi seguro es la misma con la fecha corrida. '
+      + 'No se suben: duplicar una venta ensucia la contabilidad y cuesta mucho más encontrarlo después que meterla a mano.</div>';
   }
 
   html += '<div class="table-wrap"><table class="tbl"><thead><tr>'
     + '<th>Fecha</th><th>Cliente</th><th>Productos</th><th style="text-align:right">Hoja</th><th style="text-align:right">App</th><th></th>'
     + '</tr></thead><tbody>';
   importGrupos.forEach(g => {
-    const b = g.estado === 'falta' ? badge('Se sube','var(--green)','#F0FDF4')
-            : g.estado === 'ya'    ? badge('Ya está','var(--ink-3)','var(--surface-3)')
-            :                        badge('Revisar','var(--amber)','var(--amber-bg)');
+    const b = g.estado === 'falta'   ? badge('Se sube','var(--green)','#F0FDF4')
+            : g.estado === 'ya'      ? badge('Ya está','var(--ink-3)','var(--surface-3)')
+            : g.estado === 'posible' ? badge('¿Repetida?','var(--amber)','var(--amber-bg)')
+            :                          badge('Revisar','var(--amber)','var(--amber-bg)');
     html += '<tr style="opacity:' + (g.estado==='falta'?'1':'.55') + '">'
       + '<td style="color:var(--ink-3);white-space:nowrap">' + fCorta(g.fecha) + '</td>'
       + '<td style="font-weight:600">' + g.cliente + (g.esDist ? ' <span style="font-size:10px;color:var(--amber)">dist.</span>' : '') + '</td>'
       + '<td style="font-size:11.5px;color:var(--ink-2)">' + g.lineas.map(l => l.cant + '× ' + l.producto).join('<br>') + '</td>'
       + '<td style="text-align:right;font-weight:600;white-space:nowrap">' + fmt(g.total) + '</td>'
-      + '<td style="text-align:right;color:var(--ink-3);white-space:nowrap">' + (g.yaEnApp ? fmt(g.yaEnApp) : '—') + '</td>'
+      + '<td style="text-align:right;color:var(--ink-3);white-space:nowrap">' + (g.yaEnApp ? fmt(g.yaEnApp) : (g.cercana ? '<span style="font-size:10.5px">ya existe el ' + fCorta(g.cercana.fecha) + '</span>' : '—')) + '</td>'
       + '<td>' + b + '</td>'
     + '</tr>';
   });
