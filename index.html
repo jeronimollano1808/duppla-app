@@ -3747,6 +3747,18 @@ function renderVentas() {
       </div>
     </div>`;
 
+  // 745. Aviso de ventas sin costo — el margen inflado.
+  const sinCosto = ventasSinCosto();
+  const avisoSinCosto = sinCosto.length ? `
+    <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <span style="font-size:16px">📉</span>
+      <span style="flex:1;min-width:220px;font-size:12.5px;color:var(--ink-2);line-height:1.45">
+        <strong>${sinCosto.length} venta(s) por ${fmt(sinCosto.reduce((s,v)=>s+ingresoVenta(v),0))} no tienen costo guardado</strong>
+        — la app las cuenta con 100% de margen, así que el margen se ve mejor de lo que es.
+      </span>
+      <button class="btn btn-sm" style="white-space:nowrap" onclick="abrirVentasSinCosto()">Revisar</button>
+    </div>` : '';
+
   // 743. Aviso si se coló un cobro registrado como venta. Se arregla en un clic.
   const malRegistradas = ventasQueSonCobros();
   const avisoCobrosMalRegistrados = malRegistradas.length ? `
@@ -3917,6 +3929,7 @@ function renderVentas() {
     </div>
     ${selectorPeriodoHtml}
     ${avisoCobrosMalRegistrados}
+    ${avisoSinCosto}
     ${resumenHtml}
     <!-- 243. Barra de búsqueda de ventas -->
     <div style="position:relative;margin-bottom:14px">
@@ -8537,6 +8550,11 @@ window.guardarVentaCombo = async () => {
 //      múltiples y los combos quedaban con el stock descontado para siempre).
 async function restaurarStockVenta(venta) {
   if(!venta) return;
+  // 749. Las ventas importadas de la hoja NO descontaron inventario (son ventas
+  //      viejas, el stock de la app ya estaba contado a mano). Si al borrar una
+  //      le devolviéramos el stock, el inventario subiría por mercancía que
+  //      nunca volvió. Solo se restaura lo que de verdad se descontó.
+  if(venta.stockDescontado === false) return;
   // 633. Actualizamos también DATA.inventario en memoria (mismo patrón que
   // procesarRecepcionPedido) — si esto se llama desde editarVenta antes de
   // validar/descontar el stock nuevo, esa validación necesita ver el stock
@@ -8598,7 +8616,12 @@ window.eliminarDoc = async (col, id) => {
   if(!confirm('¿Eliminar este registro? Tendrás unos segundos para deshacerlo.')) return;
   if(pendienteEliminar) await confirmarEliminacionPendiente();
 
-  const snapshot = DATA[col]?.find(x => x.id === id) || null;
+  // 744. OJO: los cobros viven en la colección 'ventas' pero en memoria están
+  //      en DATA.cobros (ver 730). Sin este fallback el snapshot salía null y
+  //      el registro se borraba SIN pasar por la papelera — irrecuperable.
+  const snapshot = DATA[col]?.find(x => x.id === id)
+    || (col === 'ventas' ? DATA.cobros.find(x => x.id === id) : null)
+    || null;
   pendienteEliminar = { col, id, snapshot, timeoutId: null };
   mostrarBannerDeshacer('🗑️ Registro eliminado');
   pendienteEliminar.timeoutId = setTimeout(confirmarEliminacionPendiente, 6000);
@@ -10764,6 +10787,151 @@ window.convertirVentasEnCobros = async () => {
   toast('✅ ' + n + ' movimiento(s) reclasificado(s) como cobro');
 };
 
+// ============================================================
+// 745. VENTAS SIN COSTO — el margen estaba inflado y nadie lo veía.
+//
+// Cuando una venta se registra a mano con un nombre que no está igual en el
+// inventario ("HYDRXYUT MUSCLETECH" vs "QUEMADOR HYDROXYCUT"), o es un combo
+// escrito a mano, queda sin costoUnit. calcularMargenVenta devuelve null y
+// todas las pantallas caen al mismo respaldo: costo cero. Resultado: esa
+// venta aparece con 100% de margen.
+//
+// Hoy eso pasa en 1 de cada 6 pesos vendidos. No es un error de contabilidad
+// —la plata está bien— pero el margen y la utilidad real se ven mejores de lo
+// que son, y las decisiones se toman sobre ese número.
+//
+// Las filas "GANANCIA X" son la excepción legítima: ahí Duppla solo recibe su
+// comisión de un producto que nunca compró, así que costo cero es correcto.
+// ============================================================
+function costoConocidoVenta(v) {
+  if(v.esMultiple && v.productosVenta?.length)
+    return v.productosVenta.some(p => p.costoUnit != null || p.prodId);
+  if(v.esCombo && v.productosCombo?.length)
+    return v.productosCombo.some(p => p.costoUnit != null || p.prodId);
+  return v.costoUnit != null || (!v.esManual && !!v.prodId);
+}
+
+// 746. Comisión pura: no compramos el producto, así que costo cero es real.
+function esVentaComision(v) {
+  return /ganancia/i.test(String(v?.producto||'') + ' ' + (v?.productosVenta||[]).map(p=>p.nombre).join(' '));
+}
+
+// 747. Costo unitario sugerido para un nombre suelto: primero el catálogo de
+//      productos, luego el de combos (sumando el costo de sus componentes).
+function costoSugeridoNombre(nombre) {
+  const prod = buscarProductoInventario(nombre);
+  if(prod && Number(prod.costo) > 0) return { costo: Number(prod.costo), via: prod.nombre };
+  const combo = (DATA.combos||[]).find(c => productosSimilares(c.nombre, nombre));
+  if(combo && combo.productos?.length) {
+    let total = 0, completo = true;
+    combo.productos.forEach(p => {
+      const pr = DATA.inventario.find(x => x.id === p.prodId) || buscarProductoInventario(p.nombre);
+      if(pr && Number(pr.costo) > 0) total += Number(pr.costo) * Number(p.cant||1);
+      else completo = false;
+    });
+    if(total > 0) return { costo: total, via: 'combo ' + combo.nombre + (completo ? '' : ' (parcial)') };
+  }
+  return null;
+}
+
+function ventasSinCosto() {
+  return DATA.ventas.filter(v => !costoConocidoVenta(v) && !esVentaComision(v));
+}
+
+let sinCostoPropuestas = [];
+
+window.abrirVentasSinCosto = () => {
+  const ing = v => ingresoVenta(v);
+  sinCostoPropuestas = ventasSinCosto().map(v => {
+    if(v.esMultiple && v.productosVenta?.length) {
+      const lineas = v.productosVenta.map(p => ({ ...p, sug: costoSugeridoNombre(p.nombre) }));
+      const costoTotal = lineas.reduce((s,l) => s + (l.sug ? l.sug.costo * Number(l.cant||1) : 0), 0);
+      return { v, lineas, costoTotal, resuelta: lineas.every(l => l.sug), via: lineas.map(l => l.sug?.via || '?').join(' + ') };
+    }
+    const sug = costoSugeridoNombre(v.producto);
+    return { v, lineas: null, costoTotal: sug ? sug.costo * Number(v.cant||1) : 0, resuelta: !!sug, via: sug?.via || '' };
+  }).sort((a,b) => ing(b.v) - ing(a.v));
+
+  const total    = sinCostoPropuestas.reduce((s,p) => s + ing(p.v), 0);
+  const resueltas = sinCostoPropuestas.filter(p => p.resuelta);
+  const costoRec = resueltas.reduce((s,p) => s + p.costoTotal, 0);
+
+  let html = '';
+  if(!sinCostoPropuestas.length) {
+    html = '<div class="empty-state" style="padding:28px"><div class="empty-state-icon">✅</div>'
+      + '<div class="empty-state-text">Todas las ventas tienen su costo</div>'
+      + '<div class="empty-state-sub">El margen que ves es el margen real</div></div>';
+  } else {
+    html = '<div style="background:var(--amber-bg);border:1px solid #FDE68A;border-radius:var(--radius);'
+      + 'padding:12px 14px;margin-bottom:14px;font-size:12.5px;color:#92400E;line-height:1.5">'
+      + '<strong>' + sinCostoPropuestas.length + ' venta(s) por ' + fmt(total) + ' no tienen costo guardado.</strong> '
+      + 'La app no sabe cuánto costó esa mercancía, así que las cuenta con 100% de margen. '
+      + 'La plata está bien; lo que se ve mejor de lo que es, es el margen.'
+      + (resueltas.length
+        ? '<div style="margin-top:7px">Le encontré el producto a <strong>' + resueltas.length + '</strong> de ellas. '
+          + 'Aplicarlo le pone <strong>' + fmt(costoRec) + '</strong> de costo — el margen bajaría en esa cifra, pero sería el de verdad.</div>'
+        : '')
+      + '</div>';
+    if(resueltas.length) {
+      html += '<button class="btn btn-lime" style="width:100%;padding:12px;margin-bottom:14px;font-weight:700" '
+        + 'onclick="aplicarCostosSugeridos()">Ponerle el costo a las ' + resueltas.length + ' que reconocí</button>';
+    }
+    html += '<div class="table-wrap"><table class="tbl"><thead><tr>'
+      + '<th>Fecha</th><th>Cliente</th><th>Producto</th><th style="text-align:right">Venta</th>'
+      + '<th style="text-align:right">Costo que le pondría</th><th>De dónde</th></tr></thead><tbody>'
+      + sinCostoPropuestas.map(p => '<tr style="opacity:' + (p.resuelta?'1':'.6') + '">'
+        + '<td style="color:var(--ink-3);white-space:nowrap">' + fCorta(p.v.fecha) + '</td>'
+        + '<td style="font-weight:500">' + (p.v.cliente||'—') + '</td>'
+        + '<td style="color:var(--ink-2)">' + (p.v.producto||'') + '</td>'
+        + '<td style="text-align:right;font-weight:600">' + fmt(ingresoVenta(p.v)) + '</td>'
+        + '<td style="text-align:right;font-weight:600;color:' + (p.resuelta?'var(--ink)':'var(--ink-3)') + '">'
+          + (p.resuelta ? fmt(p.costoTotal) : 'no lo reconocí') + '</td>'
+        + '<td style="font-size:11px;color:var(--ink-3)">' + (p.via||'—') + '</td>'
+      + '</tr>').join('')
+      + '</tbody></table></div>';
+  }
+
+  document.getElementById('det-title').textContent = 'Ventas sin costo';
+  document.getElementById('det-sub').textContent = 'Por qué el margen se ve más alto de lo que es';
+  document.getElementById('det-contenido').innerHTML = html;
+  openModal('modal-detalle');
+};
+
+window.aplicarCostosSugeridos = async () => {
+  const resueltas = sinCostoPropuestas.filter(p => p.resuelta);
+  if(!resueltas.length) return;
+  const costoRec = resueltas.reduce((s,p) => s + p.costoTotal, 0);
+  if(!confirm('Se le va a guardar el costo a ' + resueltas.length + ' venta(s): ' + fmt(costoRec) + ' en total.\n\n'
+    + 'No se toca el inventario ni el valor de la venta — solo se guarda cuánto costó, '
+    + 'para que el margen deje de verse inflado.\n\n¿Seguimos?')) return;
+  let n = 0;
+  for(const p of resueltas) {
+    try {
+      if(p.lineas) {
+        await updateDoc(doc(db,'ventas',p.v.id), {
+          // 748. No se toca prodId a propósito: estas ventas nunca descontaron
+          //      stock, y ponerles prodId haría que al borrarlas el inventario
+          //      subiera por mercancía que nunca volvió (ver restaurarStockVenta).
+          productosVenta: p.lineas.map(l => ({
+            prodId: l.prodId || null, nombre: l.nombre, cant: l.cant, precio: l.precio,
+            tipoPrecio: l.tipoPrecio || 'publico',
+            costoUnit: l.sug ? l.sug.costo : (l.costoUnit ?? null),
+            esManual: l.esManual ?? false
+          }))
+        });
+      } else {
+        await updateDoc(doc(db,'ventas',p.v.id), {
+          costoUnit: Math.round(p.costoTotal / Number(p.v.cant||1)),
+          esManual: false   // si sigue en true, calcularMargenVenta ignora el costo
+        });
+      }
+      n++;
+    } catch(e) {}
+  }
+  closeModal('modal-detalle');
+  toast('✅ ' + n + ' venta(s) ya tienen su costo real');
+};
+
 window.abrirImportarVentas = () => {
   document.getElementById('imp-texto').value = '';
   document.getElementById('imp-preview').innerHTML =
@@ -10958,6 +11126,7 @@ window.ejecutarImportacion = async () => {
         costoUnit: esMultiple ? null : productosVenta[0].costoUnit,
         distribuidorId: dist ? dist.id : null,
         importadoDeHoja: true,   // 705. Trazabilidad: se puede revertir buscando este flag
+        stockDescontado: descontar,  // 749. para no devolver stock que nunca se descontó
         createdAt: serverTimestamp()
       };
       await addDoc(collection(db,'ventas'), venta);

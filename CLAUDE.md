@@ -392,5 +392,61 @@ El harness en Node validó la lógica, pero estos tres solo aparecieron abriendo
 
 **Nota de flujo de trabajo (agosto 2026):** Jero le dio acceso de escritura a la cuenta `certuche99`. Los cambios ahora se suben desde el navegador con la extensión Claude in Chrome (subir archivos a `main` desde la web de GitHub → Vercel despliega solo). La carpeta local del escritorio de Ángel es una copia de trabajo, **no** la fuente de verdad: antes de editar, verificar con `git log -1` que coincide con lo que hay en GitHub (ver trampa 8).
 
+### 14.9 REGLA CONTABLE: venta ≠ cobro (comentarios 727–744) — LA MÁS IMPORTANTE DE ESTA SESIÓN
+
+**El problema.** Una venta se cuenta UNA vez, el día que sale la mercancía, por su valor total (`ingresoVenta`, 566). Si el cliente no paga todo ese día queda `saldo`, pero el ingreso ya se reconoció. Cuando después paga, eso NO es ingreso nuevo: es caja contra un saldo que ya existía.
+
+En la hoja de Google no había dónde poner un pago suelto, así que se anotaba como una fila de venta más. Siete movimientos por **$3.216.000** estaban contados dos veces (o a punto de estarlo):
+
+| Fecha | Concepto | Valor | Qué era |
+|---|---|---|---|
+| 20/05 | ABONO SANTA | $500.000 | Santa paga mercancía de marzo/abril |
+| 27/05 | ABONO ANGEL | $400.000 | socio repone consumo propio |
+| 03/06 | ABONO SANTA | $1.400.000 | ídem Santa |
+| 03/06 | ABONO JERONIMO | $100.000 | socio repone consumo propio |
+| 22/06 | ABONO SANTAMARIA | $250.000 | ídem Santa |
+| 01/07 | ABONO ANGEL CERTUCHE | $350.000 | socio repone consumo propio |
+| 08/07 | RESTANTE WHEY ELITE 5L | $216.000 | saldo de producto ya entregado |
+
+Evidencia: Santa (Daniel Santamaría) recibió $2.338.000 de mercancía en marzo–abril (19/03 $278.000 · 31/03 $1.060.000 · 09/04 $1.000.000), ya contados como venta en su mes. Ángel y Jerónimo sacan producto a costo para consumo propio (hoja "consumo socios": $970.665 y $393.295) y cuando reponen la plata es reembolso, no venta.
+
+**La solución.** Campo `tipoMov` en la colección `ventas`:
+- ausente o `'venta'` → venta de producto (comportamiento de siempre)
+- `'abono'` → cobro de la cuenta de un cliente
+- `'reembolso'` → socio repone su consumo
+
+`esCobro(v)` es la fuente única de verdad. **La separación ocurre en UN solo punto**: el listener de `onSnapshot` (730) parte la colección en `DATA.ventas` y `DATA.cobros`. Se hizo así a propósito: hay 56 lugares distintos leyendo `DATA.ventas` y confiar en que cada uno filtre es garantizar que algún día uno se olvide. Los cobros suman en **caja** (Inicio 731, flujo de caja del dashboard 733) y nunca en vendido, margen, metas, top de productos ni ranking de distribuidores.
+
+**Dónde se registra un cobro ahora:** modal `modal-cobro` (735/736), botón en Deudores y en Ventas. Si la venta SÍ está en la app, lo correcto sigue siendo `Cobrar → + Abono`, que además baja el saldo del cliente — el modal lo avisa y hasta detecta el caso (738).
+
+**Defensas para que no vuelva a pasar:**
+- El importador (739–742) reconoce `ABONO|RESTANTE|SALDO|PAGO DE CUENTA|REEMBOLSO` al principio del producto, los saca del bloque de ventas y los sube como cobro, con el tipo ya sugerido.
+- Detector permanente (743): cada vez que se abre Ventas se revisa si se coló un cobro registrado como venta y se ofrece arreglarlo en un clic.
+- `tipoCobroSugerido` marca reembolso si el nombre es de un socio.
+
+**Trampa que casi se cuela (744):** `eliminarDoc('ventas', id)` buscaba el snapshot solo en `DATA.ventas`. Como los cobros ya no viven ahí, el snapshot salía `null` y el registro se borraba **sin pasar por la papelera** — irrecuperable. Cualquier separación futura de una colección en memoria tiene que revisar quién busca por id en ella.
+
+**Verificación (agosto 2026).** Tras separar cobros y cargar mayo, hoja vs app por ciclo, comparando solo ventas reales:
+
+| Ciclo | Hoja | App | Diferencia |
+|---|---|---|---|
+| 4 may – 3 jun | $16.260.600 | $16.145.600 | −$115.000 (MAIDE INPEC quedó fechada 5 jun) |
+| 4 jun – 3 jul | $15.879.350 | $15.867.354 | −$11.996 |
+| 4 jul – 3 ago | $14.097.410 | $14.097.406 | −$4 |
+| 4 ago – 3 sep | $11.790.392 | $11.791.384 | +$992 |
+
+Y contra Juanfe: su mayo ($17.160.600) menos los dos abonos que él sí sumó ($900.000) da $16.260.600 — **exactamente** lo mismo que la hoja de ventas sin abonos. Los $1.400.000 que no cuadraban eran una sola fila: el ABONO SANTA del 3/06, que la hoja de ventas cobra y la de Juanfe deja en blanco.
+
+### 14.10 El margen estaba inflado (comentarios 745–749)
+
+Cuando una venta se registra a mano con un nombre que no calza con el inventario ("HYDRXYUT MUSCLETECH" vs "QUEMADOR HYDROXYCUT"), o es un combo escrito a mano, queda sin `costoUnit`. `calcularMargenVenta` devuelve `null` y **todas** las pantallas caen al mismo respaldo: costo cero. Esa venta aparece con 100% de margen.
+
+Alcance real medido en producción: **$9.4M de $57.9M vendidos (16%)** sin costo conocido. La plata está bien; el margen y la utilidad real se ven mejores de lo que son.
+
+- `ventasSinCosto()` las detecta; `costoSugeridoNombre` propone el costo buscando primero en inventario y luego en el catálogo de combos (sumando el costo de sus componentes).
+- `abrirVentasSinCosto()` muestra el impacto y `aplicarCostosSugeridos()` lo guarda.
+- **Excepción legítima:** las filas `GANANCIA X` son comisión pura sobre producto que Duppla nunca compró. Costo cero ahí es correcto — `esVentaComision` las excluye.
+- **No se escribe `prodId`** al arreglar (748): esas ventas nunca descontaron stock, y ponerles `prodId` haría que al borrarlas `restaurarStockVenta` subiera el inventario por mercancía que nunca volvió. Por lo mismo el importador ahora guarda `stockDescontado` y `restaurarStockVenta` lo respeta (749).
+
 ---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*
