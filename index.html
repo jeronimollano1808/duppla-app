@@ -752,7 +752,11 @@ body{
        Cada página tiene su propio div, solo uno visible a la vez
        ============================================================ -->
   <div class="main">
-    <div class="page active" id="page-dashboard"></div>
+    <!-- 661. Inicio — pantalla de arranque: lo urgente, los accesos rápidos y
+         cómo va el ciclo. El Dashboard sigue existiendo tal cual para el
+         detalle; Inicio es el resumen accionable de todos los días. -->
+    <div class="page active" id="page-inicio"></div>
+    <div class="page" id="page-dashboard"></div>
     <div class="page" id="page-ventas"></div>
     <div class="page" id="page-inventario"></div>
     <div class="page" id="page-clientes"></div>
@@ -1500,6 +1504,18 @@ body{
     </div>
     <div class="f-group"><label class="f-label">Descripción *</label><input type="text" id="g-desc" class="f-input" placeholder="Ej: Pago proveedor MuscleTech"></div>
     <div class="f-group"><label class="f-label">Valor ($) *</label><input type="number" id="g-valor" class="f-input"></div>
+    <!-- 669. Gasto fijo vs variable — alimenta el punto de equilibrio de Inicio
+         y de Metas. Fijo = se paga todos los meses pase lo que pase. -->
+    <div class="f-group">
+      <label style="display:flex;align-items:flex-start;gap:9px;cursor:pointer;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:11px 13px">
+        <input type="checkbox" id="g-es-fijo" style="margin-top:2px;width:16px;height:16px;accent-color:var(--lime);cursor:pointer">
+        <span style="font-size:13px;color:var(--ink-2);line-height:1.4">
+          <strong style="color:var(--ink)">Es un gasto fijo</strong><br>
+          Se paga todos los meses pase lo que pase (asesoría, intereses, Shopify, pauta).
+          Cuenta para el punto de equilibrio. La mercancía y los fletes <em>no</em> van aquí.
+        </span>
+      </label>
+    </div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('modal-gasto')">Cancelar</button>
       <button class="btn btn-lime" onclick="guardarGasto()">Guardar gasto</button>
@@ -1529,6 +1545,14 @@ body{
         </select>
       </div>
       <div class="f-group"><label class="f-label">Valor mensual ($) *</label><input type="number" id="gr-valor" class="f-input"></div>
+    </div>
+    <!-- 673. Las plantillas recurrentes son fijas por naturaleza, pero se puede
+         desmarcar (ej: una compra programada que sí depende de las ventas). -->
+    <div class="f-group">
+      <label style="display:flex;align-items:center;gap:9px;cursor:pointer;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 13px">
+        <input type="checkbox" id="gr-es-fijo" checked style="width:16px;height:16px;accent-color:var(--lime);cursor:pointer">
+        <span style="font-size:13px;color:var(--ink-2)"><strong style="color:var(--ink)">Es un gasto fijo</strong> — cuenta para el punto de equilibrio</span>
+      </label>
     </div>
     <div style="font-size:12px;color:var(--ink-3);margin-bottom:10px">
       💡 Se genera solo una vez por ciclo (día 4) como un gasto normal — puedes editarlo o borrarlo ese mes sin afectar la plantilla.
@@ -2051,7 +2075,7 @@ let DATA = {
   gastosRecurrentes:[],  // 597. plantillas de gastos fijos mensuales (arriendo, nómina, etc.)
   papelera:[]  // 619. registros eliminados, recuperables por 7 días
 };
-let currentPage = 'dashboard';  // Página activa
+let currentPage = 'inicio';  // 663. Página activa — arrancamos en Inicio
 let ajusteProductoId = null;    // ID del producto que se está ajustando
 
 // ============================================================
@@ -2063,7 +2087,11 @@ let ajusteProductoId = null;    // ID del producto que se está ajustando
 //     Ejemplos: 110000 → $110.000 | 1500000 → $1.500.000
 //     toLocaleString('es-CO') usa el formato colombiano: punto para miles, coma para decimales
 // ============================================================
-const fmt = n => '$' + Number(n||0).toLocaleString('es-CO');
+// 676. FIX — el peso colombiano no lleva decimales, pero fmt() no redondeaba:
+//      cualquier valor calculado (punto de equilibrio, promedios, proporciones)
+//      salía como "$5.170.673,433". Redondeamos aquí, en la fuente, en vez de
+//      acordarse de hacerlo en cada punto de llamada.
+const fmt = n => '$' + Math.round(Number(n)||0).toLocaleString('es-CO');
 
 // ============================================================
 // 385. NÚMERO A LETRAS (pesos colombianos) — para cuentas de cobro
@@ -2489,6 +2517,8 @@ const today = () => fechaLocal(new Date());
 // El grupo permite agrupar items en el sidebar
 // ============================================================
 const MENU = [
+  // 662. Inicio va de primero y es la página por defecto al entrar.
+  { id:'inicio', label:'Inicio', ico:'⚡', group:'Principal' },
   { id:'dashboard', label:'Dashboard', ico:'📊', group:'Principal' },
   { id:'ventas', label:'Ventas', ico:'🛒', group:'Negocio' },
   { id:'inventario', label:'Inventario', ico:'📦', group:'Negocio' },
@@ -2525,7 +2555,7 @@ onAuthStateChanged(auth, user => {
     document.getElementById('user-avatar').textContent = initial;
     startListeners();   // Iniciamos conexión con Firebase
     buildNav();         // Construimos el menú lateral
-    showPage('dashboard');
+    showPage('inicio'); // 664. Entramos por Inicio, no por Dashboard
     requestNotifPermission(); // Pedimos permiso de notificaciones
   } else {
     // 45. Sin usuario: mostramos pantalla de login
@@ -2660,6 +2690,7 @@ window.showPage = (id) => {
 
 function renderPage(id) {
   const renders = {
+    inicio:renderInicio,
     dashboard:renderDashboard, ventas:renderVentas,
     inventario:renderInventario, clientes:renderClientes,
     gastos:renderGastos, proveedores:renderProveedores,
@@ -3613,9 +3644,21 @@ window.abrirModalVenta = () => {
     if(vp) vp.value = '';
     document.getElementById('v-total').value = '';
     document.getElementById('prev-vtotal').textContent = '';
+    // 657. FIX CRÍTICO — el modal reutilizado dejaba "pegados" el canal, el
+    //      distribuidor, el cliente y la nota de la venta anterior. Como el
+    //      grupo de distribuidor solo se OCULTA (display:none) y guardarVenta
+    //      leía el select igual, cada venta hecha después de una de
+    //      distribuidor quedaba vinculada a ese distribuidor sin que se viera.
+    //      Mismo patrón del bug 12 (selector pegado en Gastos). Todo modal
+    //      reutilizado crear/editar debe resetear TODOS sus campos aquí.
+    document.getElementById('v-canal').value = 'directo';
+    document.getElementById('v-cliente').value = '';
+    document.getElementById('v-nota').value = '';
     // 344. Ocultamos campo distribuidor al abrir el modal
     const distGrupo = document.getElementById('v-dist-grupo');
     if(distGrupo) distGrupo.style.display = 'none';
+    const distSel = document.getElementById('v-dist-id');
+    if(distSel) distSel.value = '';
     // 362. Reset campos mixto
     const mixtoGrupo = document.getElementById('v-mixto-grupo');
     if(mixtoGrupo) mixtoGrupo.style.display = 'none';
@@ -4019,7 +4062,12 @@ window.guardarVenta = async () => {
   const estadoPago = saldo === 0 ? 'pagado' : pagado > 0 ? 'parcial' : 'pendiente';
   const metodoPago = metodoPagoVenta;
   // 343. Distribuidor vinculado — solo si el canal es distribuidor
-  const distribuidorId = document.getElementById('v-dist-id')?.value || null;
+  // 658. FIX — antes se leía el select sin mirar el canal, así que un
+  //      distribuidor "pegado" del modal anterior se guardaba en ventas
+  //      directas o web. El canal manda: si no es distribuidor, va null.
+  const distribuidorId = canal === 'distribuidor'
+    ? (document.getElementById('v-dist-id')?.value || null)
+    : null;
   // 361. Desglose mixto — solo se guarda si el método es mixto
   const mixtoEfectivo = metodoPago === 'mixto' ? Number(document.getElementById('v-mixto-efectivo').value)||0 : null;
   const mixtoTransferencia = metodoPago === 'mixto' ? Number(document.getElementById('v-mixto-transferencia').value)||0 : null;
@@ -4450,10 +4498,11 @@ window.editarVentaMultiple = (id) => {
     document.getElementById('v-cliente').value = venta.cliente || '';
     document.getElementById('v-nota').value = venta.nota || '';
     toggleDistribuidorField(venta.canal);
-    if(venta.canal === 'distribuidor' && venta.distribuidorId) {
-      const sel = document.getElementById('v-dist-id');
-      if(sel) sel.value = venta.distribuidorId;
-    }
+    // 659. FIX — si la venta que editamos NO es de distribuidor hay que
+    //      limpiar el select igual; si no, hereda el distribuidor que
+    //      quedó de la venta anterior y al guardar se le vuelve a pegar.
+    const selDist = document.getElementById('v-dist-id');
+    if(selDist) selDist.value = (venta.canal === 'distribuidor' && venta.distribuidorId) ? venta.distribuidorId : '';
 
     setMetodoPago(venta.metodoPago || 'efectivo');
     const mixtoGrupo = document.getElementById('v-mixto-grupo');
@@ -4544,9 +4593,15 @@ window.guardarEditarVenta = async () => {
   const prodVal = document.getElementById('ev-prod').value;
 
   // 297. Campos comunes a todos los tipos de venta
+  // 660. FIX — este modal permite cambiar el canal pero no tiene selector de
+  //      distribuidor, así que al pasar una venta de "distribuidor" a
+  //      "directo"/"web" el distribuidorId viejo se quedaba pegado y la venta
+  //      seguía apareciendo en el historial de ese distribuidor. El canal manda.
+  const canalEdit = document.getElementById('ev-canal').value;
   const camposBase = {
     fecha:      document.getElementById('ev-fecha').value,
-    canal:      document.getElementById('ev-canal').value,
+    canal:      canalEdit,
+    distribuidorId: canalEdit === 'distribuidor' ? (venta.distribuidorId || null) : null,
     cliente:    document.getElementById('ev-cliente').value,
     nota:       document.getElementById('ev-nota').value,
     metodoPago: metodoPagoEdit,
@@ -5796,6 +5851,9 @@ window.abrirModalGasto = () => {
   // (guardarGasto no la reseteaba), así que "+ Registrar gasto" podía abrir
   // con una categoría equivocada preseleccionada por error.
   document.getElementById('g-cat').selectedIndex = 0;
+  // 670. Mismo cuidado que con la categoría (bug 12): la casilla de gasto fijo
+  //      también se resetea al abrir en modo creación.
+  document.getElementById('g-es-fijo').checked = false;
   document.getElementById('modal-gasto-title').textContent = 'Registrar gasto';
   openModal('modal-gasto');
 };
@@ -5808,7 +5866,12 @@ window.guardarGasto = async () => {
 
   // 95. Si hay ID guardado = modo edición, si no = modo creación
   const gastoId = document.getElementById('g-id').value;
-  const datos = { fecha, cat:document.getElementById('g-cat').value, desc, valor };
+  // 671. esFijo se guarda siempre explícito (true/false), nunca undefined —
+  //      así una desmarcada manual gana sobre la deducción por descripción.
+  const datos = {
+    fecha, cat:document.getElementById('g-cat').value, desc, valor,
+    esFijo: document.getElementById('g-es-fijo').checked
+  };
 
   if(gastoId) {
     await updateDoc(doc(db,'gastos',gastoId), datos);
@@ -5832,6 +5895,9 @@ window.editarGasto = (id) => {
   document.getElementById('g-valor').value = gasto.valor;
   // Seleccionamos la categoría correcta
   document.getElementById('g-cat').value = gasto.cat;
+  // 672. Si el gasto es viejo y no trae el flag, mostramos lo que la app está
+  //      deduciendo por la descripción — así al guardar queda explícito.
+  document.getElementById('g-es-fijo').checked = esGastoFijo(gasto);
   document.getElementById('modal-gasto-title').textContent = 'Editar gasto';
   openModal('modal-gasto');
 };
@@ -5845,6 +5911,7 @@ window.abrirNuevoGastoRecurrente = () => {
   document.getElementById('gr-desc').value = '';
   document.getElementById('gr-valor').value = '';
   document.getElementById('gr-cat').selectedIndex = 0;
+  document.getElementById('gr-es-fijo').checked = true;
   document.getElementById('modal-gasto-rec-title').textContent = 'Nuevo gasto recurrente';
   openModal('modal-gasto-recurrente');
 };
@@ -5856,6 +5923,7 @@ window.editarGastoRecurrente = (id) => {
   document.getElementById('gr-desc').value = r.desc || '';
   document.getElementById('gr-valor').value = r.valor || '';
   document.getElementById('gr-cat').value = r.cat || 'otro';
+  document.getElementById('gr-es-fijo').checked = r.esFijo !== false;
   document.getElementById('modal-gasto-rec-title').textContent = 'Editar gasto recurrente';
   openModal('modal-gasto-recurrente');
 };
@@ -5867,14 +5935,15 @@ window.guardarGastoRecurrente = async () => {
   if(!desc || !valor) { alert('Completa la descripción y el valor'); return; }
 
   const id = document.getElementById('gr-id').value;
+  const esFijo = document.getElementById('gr-es-fijo').checked;
   if(id) {
-    await updateDoc(doc(db,'gastosRecurrentes',id), { desc, valor, cat });
+    await updateDoc(doc(db,'gastosRecurrentes',id), { desc, valor, cat, esFijo });
   } else {
     // 603. Al crear una plantilla nueva, generamos de una vez el gasto de
     // este ciclo — si no, tendría que esperar hasta el próximo mes para
     // ver su primer gasto, cuando lo lógico es que aplique desde ya.
     await addDoc(collection(db,'gastosRecurrentes'), {
-      desc, valor, cat, activo:true, ultimoMesGenerado:null, createdAt:serverTimestamp()
+      desc, valor, cat, esFijo, activo:true, ultimoMesGenerado:null, createdAt:serverTimestamp()
     });
   }
   closeModal('modal-gasto-recurrente');
@@ -5914,6 +5983,8 @@ async function generarGastosRecurrentesDelCiclo() {
       if(r.ultimoMesGenerado === mesActual) continue;
       await addDoc(collection(db,'gastos'), {
         fecha: today(), cat: r.cat, desc: r.desc, valor: r.valor,
+        // 674. El gasto hereda el caracter fijo/variable de su plantilla
+        esFijo: r.esFijo !== false,
         gastoRecurrenteId: r.id, createdAt: serverTimestamp()
       });
       await updateDoc(doc(db,'gastosRecurrentes',r.id), { ultimoMesGenerado: mesActual });
@@ -6633,6 +6704,268 @@ function calcularRangoMeta(mesStr, diaInicio) {
   return { inicio: fmtFecha(inicio), fin: fmtFecha(fin) };
 }
 
+// ============================================================
+// 665. GASTOS FIJOS Y PUNTO DE EQUILIBRIO
+// Un gasto es FIJO si se paga todos los meses pase lo que pase
+// (asesoría, intereses, Shopify, pauta de Meta). La mercancía, el
+// 4x1000, las bolsas y los fletes son VARIABLES: dependen de cuánto
+// se venda, así que no entran al punto de equilibrio.
+//
+// El flag manual `esFijo` manda siempre. Si un gasto no lo tiene
+// (todos los históricos, y los 14 cobros sueltos que Meta hace cada
+// mes), se deduce por la descripción — así el punto de equilibrio
+// funciona hacia atrás sin tener que re-etiquetar nada a mano.
+// ============================================================
+const RE_GASTO_FIJO_AUTO = /(facebook|meta\s*ads|shopify|inter[eé]s|juanfe|asesor[ií]a|la\s*real|arriendo|n[oó]mina|suscripci[oó]n)/i;
+
+function esGastoFijo(g) {
+  if(typeof g?.esFijo === 'boolean') return g.esFijo;  // el flag manual manda
+  return RE_GASTO_FIJO_AUTO.test(String(g?.desc || ''));
+}
+
+function calcularGastosFijosRango(inicio, fin) {
+  return DATA.gastos
+    .filter(g => g.fecha >= inicio && g.fecha <= fin && esGastoFijo(g))
+    .reduce((s,g) => s + Number(g.valor||0), 0);
+}
+
+// 677. COMPRA DE MERCANCÍA ≠ GASTO
+// Pagarle a un proveedor no es perder plata: es mover plata de la cuenta al
+// estante. La caja del ciclo queda en rojo, pero ese dinero sigue siendo de
+// Duppla, en inventario. Por eso las compras se separan del resto de gastos:
+//   - NO entran al punto de equilibrio (su costo ya está dentro del margen,
+//     contarlas otra vez sería contarlas dos veces).
+//   - NO cuentan como pérdida en el resultado del ciclo.
+// Se detectan por el vínculo con un pedido, o por la categoría "importacion".
+function esCompraMercancia(g) {
+  return !!(g?.pedidoId || g?.esAbonoPedido) || g?.cat === 'importacion';
+}
+
+// 666. Margen promedio de los últimos 90 días, contando solo las ventas con
+// costo histórico conocido. Estaba embebido en renderMetas; lo saco aparte
+// para que Inicio y Metas usen exactamente el mismo número.
+function calcularMargenPctPromedio() {
+  const corte90 = fechaLocal(new Date(Date.now() - 90*86400000));
+  let ingresos = 0, margen = 0;
+  DATA.ventas.forEach(v => {
+    if(!v.fecha || v.fecha < corte90) return;
+    const m = calcularMargenVenta(v);
+    if(m !== null) { margen += m; ingresos += Number(v.total||0); }
+  });
+  return ingresos > 0 ? (margen/ingresos) : null;
+}
+
+// 667. Ciclo de Duppla actual (o N ciclos atrás con el offset), sin depender
+// del selector de período del Dashboard. Misma convención del día 3.
+function getCicloActual(offsetMeses) {
+  const now = new Date();
+  const base = now.getDate() <= DUPPLA_DIA_INICIO_MES
+    ? new Date(now.getFullYear(), now.getMonth()-1, 1)
+    : new Date(now.getFullYear(), now.getMonth(), 1);
+  const d = new Date(base.getFullYear(), base.getMonth() - (Number(offsetMeses)||0), 1);
+  const mesStr = fechaLocal(d).slice(0,7);
+  const { inicio, fin } = calcularRangoMeta(mesStr, DUPPLA_DIA_INICIO_MES);
+  return { mesStr, inicio, fin, label: d.toLocaleDateString('es-CO',{month:'long',year:'numeric'}) };
+}
+
+// ============================================================
+// 668. PÁGINA: INICIO
+// Lo urgente arriba, los tres botones que más se usan en el medio, y
+// cómo va el ciclo abajo. Todo lo que se registra desde aquí abre el
+// mismo modal de siempre — no hay lógica de guardado duplicada.
+// ============================================================
+function renderInicio() {
+  const ciclo = getCicloActual(0);
+  const cicloAnt = getCicloActual(1);
+
+  const ventasCiclo = DATA.ventas.filter(v => v.fecha >= ciclo.inicio && v.fecha <= ciclo.fin);
+  const gastosCiclo = DATA.gastos.filter(g => g.fecha >= ciclo.inicio && g.fecha <= ciclo.fin);
+  const ventasAnt   = DATA.ventas.filter(v => v.fecha >= cicloAnt.inicio && v.fecha <= cicloAnt.fin);
+
+  const vendido    = ventasCiclo.reduce((s,v) => s + ingresoVenta(v), 0);
+  const vendidoAnt = ventasAnt.reduce((s,v) => s + ingresoVenta(v), 0);
+  const gastado    = gastosCiclo.reduce((s,g) => s + Number(g.valor||0), 0);
+  const fijos      = calcularGastosFijosRango(ciclo.inicio, ciclo.fin);
+  const porCobrar  = Math.round(DATA.ventas.reduce((s,v) => s + saldoReal(v), 0));
+
+  // 678. Compras de mercancía del ciclo, aparte del resto (ver 677)
+  const compras    = gastosCiclo.filter(esCompraMercancia).reduce((s,g) => s + Number(g.valor||0), 0);
+  const operativos = gastado - compras;
+
+  // Ganancia bruta del ciclo — solo el costo de lo YA vendido, sin gastos
+  let costoVendido = 0;
+  ventasCiclo.forEach(v => {
+    const m = calcularMargenVenta(v);
+    if(m !== null) { costoVendido += Number(v.total||0) - m; return; }
+    const prod = DATA.inventario.find(p => p.id === v.prodId);
+    if(prod?.costo) costoVendido += Number(prod.costo) * Number(v.cant||1);
+  });
+  const margenCiclo = vendido - costoVendido;
+  const margenPctCiclo = vendido > 0 ? Math.round((margenCiclo/vendido)*100) : 0;
+
+  // Variación contra el mismo punto del ciclo anterior
+  const varPct = vendidoAnt > 0 ? Math.round(((vendido - vendidoAnt)/vendidoAnt)*100) : null;
+  const varTxt = varPct === null ? 'sin ciclo anterior'
+    : (varPct >= 0 ? '▲ ' + varPct + '%' : '▼ ' + Math.abs(varPct) + '%') + ' vs ciclo anterior';
+  const varColor = varPct === null ? 'var(--ink-3)' : (varPct >= 0 ? 'var(--green)' : 'var(--red)');
+
+  // ---- Saludo y ventana del ciclo ----
+  const h = new Date().getHours();
+  const saludo = h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches';
+  const fFmt = f => { const [a,m,d] = f.split('-'); return Number(d) + ' ' + ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][Number(m)-1]; };
+  const ventasHoy = DATA.ventas.filter(v => v.fecha === today());
+  const totalHoy = ventasHoy.reduce((s,v) => s + ingresoVenta(v), 0);
+
+  // ---- Alertas: mora, stock bajo, recompras ----
+  const mora = calcularDeudores().filter(d => d.enMora);
+  const moraTotal = Math.round(mora.reduce((s,d) => s + Number(d.total||0), 0));
+  const low = DATA.inventario.filter(p => p.stock <= (p.stockMinimo||5));
+  const recompras = calcularRecompras();
+
+  const alerta = (color, bg, borde, ico, texto, pagina) => `
+    <button onclick="showPage('${pagina}')" style="display:flex;align-items:center;gap:9px;width:100%;text-align:left;
+      background:${bg};border:1px solid ${borde};border-radius:var(--radius);padding:11px 13px;cursor:pointer">
+      <span style="font-size:15px">${ico}</span>
+      <span style="font-size:13px;font-weight:600;color:${color};line-height:1.35">${texto}</span>
+      <span style="margin-left:auto;color:${color};font-size:14px">›</span>
+    </button>`;
+
+  let alertasHtml = '';
+  if(mora.length) alertasHtml += alerta('var(--red)','var(--red-bg)','#FECACA','⏰',
+    mora.length + ' deudor' + (mora.length>1?'es':'') + ' en mora · ' + fmt(moraTotal), 'deudores');
+  if(low.length) alertasHtml += alerta('#92400E','var(--amber-bg)','#FDE68A','📦',
+    low.length + ' producto' + (low.length>1?'s':'') + ' en stock bajo: ' + low.slice(0,3).map(p => p.nombre.split(' ').slice(0,2).join(' ') + ' (' + p.stock + ')').join(', ') + (low.length>3?' y '+(low.length-3)+' más':''), 'inventario');
+  if(recompras.length) alertasHtml += alerta('#1D4ED8','var(--blue-bg)','#BFDBFE','🔄',
+    recompras.length + ' cliente' + (recompras.length>1?'s':'') + ' por recomprar', 'clientes');
+  if(!alertasHtml) alertasHtml = `
+    <div style="display:flex;align-items:center;gap:9px;background:var(--green-bg);border:1px solid #BBF7D0;border-radius:var(--radius);padding:11px 13px">
+      <span style="font-size:15px">✅</span>
+      <span style="font-size:13px;font-weight:600;color:var(--green)">Todo al día — sin mora, sin stock bajo</span>
+    </div>`;
+
+  // ---- Punto de equilibrio ----
+  const margenPct = calcularMargenPctPromedio();
+  let equilibrioHtml = '';
+  if(fijos > 0 && margenPct !== null && margenPct > 0) {
+    const pe = fijos / margenPct;
+    const pct = Math.min(100, Math.round((vendido/pe)*100));
+    const cubierto = vendido >= pe;
+    const falta = Math.max(0, pe - vendido);
+    equilibrioHtml = `
+      <div class="card" style="padding:16px">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:9px">
+          <span style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:${cubierto?'var(--green)':'var(--ink-2)'}">
+            ${cubierto ? '✅ Punto de equilibrio cubierto' : '⚖️ Punto de equilibrio'}
+          </span>
+          <span style="font-size:12px;color:var(--ink-3)">${pct}%</span>
+        </div>
+        <div style="height:9px;background:var(--surface-3);border-radius:20px;overflow:hidden;margin-bottom:9px">
+          <div style="height:100%;width:${pct}%;background:${cubierto?'var(--green)':'var(--lime-accent)'};border-radius:20px;transition:width .3s"></div>
+        </div>
+        <div style="font-size:12.5px;color:var(--ink-2);line-height:1.45">
+          ${cubierto
+            ? `Ya cubriste los <strong>${fmt(fijos)}</strong> de gastos fijos del ciclo. De aquí en adelante el margen es utilidad.`
+            : `Llevas <strong>${fmt(vendido)}</strong> de los <strong>${fmt(pe)}</strong> que necesitas vender para cubrir ${fmt(fijos)} de gastos fijos. Faltan <strong>${fmt(falta)}</strong>.`}
+        </div>
+        <div style="font-size:11.5px;color:var(--ink-3);line-height:1.4;margin-top:6px">
+          Margen promedio ${Math.round(margenPct*100)}%. La mercancía no entra en esta cuenta — su costo ya está descontado dentro del margen.
+        </div>
+      </div>`;
+  } else if(fijos === 0) {
+    equilibrioHtml = `
+      <div class="card" style="padding:14px 16px">
+        <div style="font-size:12.5px;color:var(--ink-2);line-height:1.45">
+          ⚖️ Para ver el punto de equilibrio, marca tus gastos fijos con la casilla
+          <strong>"Es un gasto fijo"</strong> al registrarlos.
+          <button onclick="showPage('gastos')" style="background:none;border:none;color:var(--lime);cursor:pointer;font-weight:600;text-decoration:underline;font-size:12.5px;padding:0">Ir a Gastos →</button>
+        </div>
+      </div>`;
+  }
+
+  // ---- 679. Resultado del ciclo: utilidad real vs. caja ----
+  // La distinción que pidió Ángel: un ciclo puede cerrar con la caja en rojo
+  // sin haber perdido un peso, si el rojo viene de haber comprado mercancía.
+  // "No estamos perdiendo dinero, tenemos dinero en mercancía."
+  const utilidadReal = margenCiclo - operativos;
+  const caja = vendido - gastado;
+  const inventarioValorizado = DATA.inventario.reduce((s,p) => s + Number(p.stock||0) * Number(p.costo||0), 0);
+  const colorUtil = utilidadReal >= 0 ? 'var(--green)' : 'var(--red)';
+  const colorCaja = caja >= 0 ? 'var(--ink)' : 'var(--red)';
+
+  const explicacion = (caja < 0 && compras > 0 && utilidadReal >= 0)
+    ? `La caja está en rojo <strong>porque compraste ${fmt(compras)} de mercancía</strong> este ciclo. Esa plata no se perdió: está en el estante. El negocio sí dio utilidad.`
+    : (compras > 0
+      ? `Incluye ${fmt(compras)} de compra de mercancía, que no es pérdida sino inventario.`
+      : `Sin compras de mercancía este ciclo.`);
+
+  const resultadoHtml = `
+    <div class="card" style="padding:16px">
+      <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2);margin-bottom:11px">
+        📐 Resultado del ciclo
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding-bottom:9px;border-bottom:1px solid var(--border)">
+        <div>
+          <div style="font-size:13.5px;font-weight:700;color:var(--ink)">Utilidad real</div>
+          <div style="font-size:11.5px;color:var(--ink-3)">Margen de lo vendido − gastos de operación</div>
+        </div>
+        <span style="font-size:18px;font-weight:800;color:${colorUtil};white-space:nowrap;font-variant-numeric:tabular-nums">${utilidadReal >= 0 ? '' : '−'}${fmt(Math.abs(utilidadReal))}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
+        <div>
+          <div style="font-size:13.5px;font-weight:700;color:var(--ink)">Caja del ciclo</div>
+          <div style="font-size:11.5px;color:var(--ink-3)">Lo que entró − todo lo que salió, mercancía incluida</div>
+        </div>
+        <span style="font-size:18px;font-weight:800;color:${colorCaja};white-space:nowrap;font-variant-numeric:tabular-nums">${caja >= 0 ? '' : '−'}${fmt(Math.abs(caja))}</span>
+      </div>
+      <div style="font-size:12.5px;color:var(--ink-2);line-height:1.45;padding-top:10px">
+        ${explicacion}
+        ${inventarioValorizado > 0 ? ` Hoy tienes <strong>${fmt(inventarioValorizado)}</strong> en inventario a precio de costo.` : ''}
+      </div>
+    </div>`;
+
+  // ---- Tarjeta de número ----
+  const stat = (k, v, d, dColor) => `
+    <div class="card" style="padding:13px 15px;display:flex;flex-direction:column;gap:3px">
+      <span style="font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3)">${k}</span>
+      <span style="font-size:20px;font-weight:800;color:var(--ink);letter-spacing:-.02em;font-variant-numeric:tabular-nums">${v}</span>
+      <span style="font-size:11px;font-weight:600;color:${dColor||'var(--ink-3)'}">${d}</span>
+    </div>`;
+
+  document.getElementById('page-inicio').innerHTML = `
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+      <div>
+        <div class="page-title">${saludo}</div>
+        <div class="page-sub">Ciclo ${fFmt(ciclo.inicio)} – ${fFmt(ciclo.fin)}${totalHoy ? ' · hoy llevas ' + fmt(totalHoy) : ''}</div>
+      </div>
+      <button class="btn btn-sm" onclick="showPage('dashboard')">Ver dashboard completo →</button>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">${alertasHtml}</div>
+
+    <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:16px">
+      <button class="btn btn-lime" onclick="abrirModalVenta()"
+        style="width:100%;padding:16px;font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:9px">
+        <span style="font-size:19px">＋</span> Registrar venta
+      </button>
+      <div style="display:flex;gap:9px">
+        <button class="btn" onclick="showPage('deudores')" style="flex:1;padding:13px;font-size:14px;font-weight:600">💳 Cobrar</button>
+        <button class="btn" onclick="abrirModalGasto()" style="flex:1;padding:13px;font-size:14px;font-weight:600">💸 Gasto</button>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:9px;margin-bottom:16px">
+      ${stat('Vendido', fmt(vendido), varTxt, varColor)}
+      ${stat('Margen bruto', fmt(margenCiclo), margenPctCiclo + '% del vendido', 'var(--ink-3)')}
+      ${stat('Salió del banco', fmt(gastado), compras > 0 ? fmt(compras) + ' fue mercancía' : 'sin compras de mercancía', 'var(--ink-3)')}
+      ${stat('Por cobrar', fmt(porCobrar), mora.length ? mora.length + ' en mora' : 'nada en mora', mora.length ? 'var(--red)' : 'var(--green)')}
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:12px">
+      ${equilibrioHtml}
+      ${resultadoHtml}
+    </div>`;
+}
+
 function renderMetas() {
   const hoy = new Date();
 
@@ -6665,11 +6998,19 @@ function renderMetas() {
     const pg = m.gastoMax>0 ? Math.min(100,Math.round((tg/m.gastoMax)*100)) : 0;
 
 
-    // 413. Punto de equilibrio de este mes específico, usando su gastoMax como gasto fijo
-    //      Si no hay margen histórico conocido o no hay presupuesto de gastos, no se muestra
+    // 413. Punto de equilibrio de este ciclo.
+    // 675. FIX — antes usaba `gastoMax` (el TECHO de gasto presupuestado, que
+    //      incluye la mercancía) como si fueran gastos fijos. Con compras de
+    //      proveedor de varios millones eso inflaba el punto de equilibrio
+    //      hasta volverlo inútil. Ahora usa los gastos realmente marcados como
+    //      fijos en el ciclo (ver esGastoFijo, comentario 665), que es lo que
+    //      la fórmula pide. Si no hay ninguno marcado, cae de vuelta a gastoMax
+    //      para no dejar la tarjeta en blanco en metas viejas.
+    const fijosCiclo = calcularGastosFijosRango(rangoInicio, rangoFin);
+    const baseFija = fijosCiclo > 0 ? fijosCiclo : Number(m.gastoMax||0);
     let equilibrioHtml = '';
-    if(margenPctPromedio !== null && margenPctPromedio > 0 && Number(m.gastoMax||0) > 0) {
-      const puntoEquilibrio = m.gastoMax / margenPctPromedio;
+    if(margenPctPromedio !== null && margenPctPromedio > 0 && baseFija > 0) {
+      const puntoEquilibrio = baseFija / margenPctPromedio;
       const yaSuperoEquilibrio = tv >= puntoEquilibrio;
       equilibrioHtml = `
         <div style="background:${yaSuperoEquilibrio?'#F0FDF4':'var(--surface-2)'};border:1px solid ${yaSuperoEquilibrio?'#BBF7D0':'var(--border)'};border-radius:10px;padding:10px 12px;margin-bottom:12px">

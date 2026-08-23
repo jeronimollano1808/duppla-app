@@ -336,4 +336,52 @@ Limitaciones conocidas, no bugs, a tener presente:
 - Los pedidos a proveedor normalmente se pagan por anticipado — por eso generan gasto automático al crearse (ver sección 3/9).
 
 ---
+
+## 14. SESIÓN AGOSTO 2026 (con Ángel) — INICIO, GASTOS FIJOS Y FIX DE DISTRIBUIDORES
+
+### 14.1 Fix crítico: canal y distribuidor "pegados" entre ventas (comentarios 657–660)
+`abrirModalVenta` reseteaba fecha/producto/pagado pero **no** `v-canal`, `v-cliente`, `v-nota` ni `v-dist-id`. Como el grupo de distribuidor solo se OCULTA (`display:none`) y `guardarVenta` leía el select sin mirar el canal, **toda venta hecha después de una de distribuidor quedaba vinculada a ese distribuidor**, invisiblemente. Cuatro puntos corregidos:
+- `abrirModalVenta`: resetea canal a `directo`, limpia cliente, nota y el select de distribuidor (657).
+- `guardarVenta`: `distribuidorId` solo se lee si `canal === 'distribuidor'` (658).
+- `editarVentaMultiple`: limpia el select cuando la venta no es de distribuidor, en vez de heredarlo (659).
+- `guardarEditarVenta`: al cambiar el canal en el modal de edición se limpia el `distribuidorId` viejo (660).
+
+**Regla que sale de aquí:** en todo modal reutilizado crear/editar hay que resetear **TODOS** los campos al abrir en modo creación, incluidos los que están ocultos. Un campo oculto sigue teniendo valor y sigue siendo leído. Es el bug 12 (selector pegado en Gastos) repetido.
+
+### 14.2 Gastos fijos y punto de equilibrio (comentarios 665–667, 669–675)
+Nuevo campo **`esFijo`** (bool) en `gastos` y en `gastosRecurrentes`.
+- `esGastoFijo(g)`: si `g.esFijo` es booleano, manda. Si no (gastos históricos), se deduce con `RE_GASTO_FIJO_AUTO` sobre `desc` — facebook, meta ads, shopify, interés, juanfe, asesoría, la real, arriendo, nómina, suscripción. Así el punto de equilibrio funciona hacia atrás sin re-etiquetar nada. **Meta cobra ~14 veces al mes en montos chicos**, por eso la deducción por descripción importa.
+- `calcularGastosFijosRango(inicio, fin)`, `calcularMargenPctPromedio()` (90 días, extraído de `renderMetas` para que Inicio y Metas usen el mismo número), `getCicloActual(offset)`.
+- **Fix (675):** el punto de equilibrio de Metas usaba `m.gastoMax` (techo de gasto presupuestado, que incluye mercancía) como si fueran gastos fijos. Con compras de proveedor de varios millones eso lo inflaba hasta volverlo inútil. Ahora usa los fijos reales del ciclo, con fallback a `gastoMax` si no hay ninguno marcado.
+
+**Gastos fijos reales de Duppla (referencia, agosto 2026):** Pago Juanfe / Asesoría La Real $1.000.000 · Intereses mensuales $525.000 · Meta Ads ~$739.000 (suma de ~14 cobros) · Shopify ~$90.000. Total ≈ $2.354.000/mes. **No** son fijos: mercancía (Profitness, Integral Médica), 4x1000, bolsas, fletes.
+
+### 14.3 Página Inicio (comentarios 661–664, 668)
+Nueva página `inicio`, primera del MENU y **página por defecto al entrar** (antes era `dashboard`, que sigue existiendo igual para el detalle). Contiene: saludo por hora + ventana del ciclo, alertas accionables (mora / stock bajo / recompras) o estado "todo al día", botón grande de Registrar venta + Cobrar + Gasto, cuatro números del ciclo (vendido con variación vs ciclo anterior, margen bruto, gastos con cuánto es fijo, por cobrar) y la barra de punto de equilibrio.
+`renderInicio` **no duplica lógica de guardado** — todos sus botones abren los modales de siempre.
+
+### 14.4 Fix: `fmt()` no redondeaba (comentario 676)
+`fmt()` hacía `toLocaleString('es-CO')` sobre el número crudo, así que cualquier valor calculado (punto de equilibrio, promedios) salía como `$5.170.673,433`. El peso colombiano no lleva decimales: ahora `fmt` redondea en la fuente. Esto arregla decimales latentes en toda la app, no solo en Inicio.
+
+### 14.5 Cómo se probó (patrón reutilizable)
+No hay ambiente de staging, así que `renderInicio` se validó con un **harness en Node**: se extraen por conteo de llaves las funciones necesarias del `<script type="module">`, se stubean `document.getElementById` y `DATA` con datos parecidos a los reales, se corre la función y se revisa el HTML resultante (sin `undefined`/`NaN`, con los textos esperados) + un screenshot con Playwright usando el CSS real de la app. Recomendado repetir este patrón antes de tocar producción.
+
+### 14.6 Pendiente inmediato — decidido con Ángel, en orden
+1. **Menú a 5 cajones** (Inicio · Negocio · Stock · Plata · Ajustes) — las 13 secciones se agrupan; el código de cada página no se toca, solo cómo se llega.
+2. **Corte mensual completo** el día 3: automático, comparación contra el ciclo anterior, punto de equilibrio, top productos, top distribuidores, venta directa vs distribuidores, gastos; exportable y compartible por WhatsApp.
+3. **Push real con la app cerrada.** Hoy **no existe**: la app solo usa `Notification` del navegador desde la página abierta — no hay service worker, ni manifest PWA, ni FCM. Hay que construirlo. **Jero y Ángel usan iPhone**, así que iOS exige que la PWA esté agregada a la pantalla de inicio para que el push funcione.
+
+### 14.7 Compra de mercancía ≠ gasto (comentarios 677–679) — REGLA DE NEGOCIO
+Palabras de Ángel: *"Van a haber meses en que quedamos en números negativos porque nos tocó comprar mercancía, pero no estamos perdiendo dinero: tenemos dinero en mercancía."*
+
+`esCompraMercancia(g)` — un gasto es compra de mercancía si tiene `pedidoId`/`esAbonoPedido`, o si su categoría es `importacion`. Consecuencias:
+- **No entra al punto de equilibrio.** Su costo ya está descontado dentro del margen; contarla otra vez sería contarla dos veces (era exactamente el error del `gastoMax`, ver 14.2).
+- **No cuenta como pérdida.** Inicio muestra dos líneas separadas en "Resultado del ciclo":
+  - **Utilidad real** = margen de lo vendido − gastos de operación (todo menos mercancía). Es el número que dice si el negocio dio plata.
+  - **Caja del ciclo** = lo que entró − todo lo que salió, mercancía incluida. Puede estar en rojo sin que se haya perdido nada.
+  - Cuando la caja está en rojo pero la utilidad real es positiva, la tarjeta lo dice con todas las letras y muestra el inventario valorizado a costo.
+
+**Sobre qué es "fijo":** Ángel llama gastos fijos a asesoría (Pago Juanfe), intereses, Shopify y pauta de Meta. Que el MONTO varíe (Meta cobra ~14 veces al mes, Shopify depende del dólar) no los vuelve variables — variable, en esta app, significa *que depende de cuánto se venda*. Por eso nunca se hardcodea un valor: `calcularGastosFijosRango` suma los gastos realmente registrados en el ciclo. Fuera de los fijos quedan la mercancía, el 4x1000, las bolsas y los fletes.
+
+---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*
