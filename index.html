@@ -10977,6 +10977,49 @@ function ventasSinCosto() {
 
 let sinCostoPropuestas = [];
 
+// 760. La línea suelta que le falta el costo a una venta. Si falta más de una,
+//      devuelve null: escribir un solo número no alcanzaría para repartirlo.
+function lineaEditableSinCosto(p) {
+  if(!p.lineas) return { nombre: p.v.producto, cant: Number(p.v.cant||1), idx: null };
+  const faltan = p.lineas.map((l,i) => ({ l, i })).filter(x => x.l.costoUnit == null && !x.l.prodId);
+  if(faltan.length !== 1) return null;
+  return { nombre: faltan[0].l.nombre, cant: Number(faltan[0].l.cant||1), idx: faltan[0].i };
+}
+
+window.guardarCostosManuales = async () => {
+  const cambios = [];
+  sinCostoPropuestas.forEach((p, i) => {
+    if(p.resuelta) return;
+    const linea = lineaEditableSinCosto(p);
+    if(!linea) return;
+    const val = Number(document.getElementById('sc-costo-' + i)?.value) || 0;
+    if(val > 0) cambios.push({ p, linea, costoUnit: Math.round(val) });
+  });
+  if(!cambios.length) return toast('⚠️ No escribiste ningún costo');
+  const totalCosto = cambios.reduce((s,c) => s + c.costoUnit * c.linea.cant, 0);
+  if(!confirm('Se le va a guardar el costo a ' + cambios.length + ' venta(s): ' + fmt(totalCosto) + ' en total.\n\n'
+    + 'No se toca el inventario ni el valor de la venta.\n\n¿Seguimos?')) return;
+  let n = 0;
+  for(const c of cambios) {
+    try {
+      if(c.linea.idx === null) {
+        await updateDoc(doc(db,'ventas',c.p.v.id), { costoUnit: c.costoUnit, esManual: false });
+      } else {
+        const nuevas = c.p.lineas.map((l, i) => ({
+          prodId: l.prodId || null, nombre: l.nombre, cant: l.cant, precio: l.precio,
+          tipoPrecio: l.tipoPrecio || 'publico',
+          costoUnit: i === c.linea.idx ? c.costoUnit : (l.costoUnit ?? null),
+          esManual: l.esManual ?? false
+        }));
+        await updateDoc(doc(db,'ventas',c.p.v.id), { productosVenta: nuevas });
+      }
+      n++;
+    } catch(e) {}
+  }
+  closeModal('modal-detalle');
+  toast('✅ ' + n + ' venta(s) con su costo');
+};
+
 window.abrirVentasSinCosto = () => {
   const ing = v => ingresoVenta(v);
   sinCostoPropuestas = ventasSinCosto().map(v => {
@@ -11021,19 +11064,46 @@ window.abrirVentasSinCosto = () => {
       html += '<button class="btn btn-lime" style="width:100%;padding:12px;margin-bottom:14px;font-weight:700" '
         + 'onclick="aplicarCostosSugeridos()">Ponerle el costo a las ' + resueltas.length + ' que reconocí</button>';
     }
+    // 760. Para las que NO reconocí, una casilla para escribir el costo a mano.
+    //      Sin esto la herramienta solo sabía señalar el hueco y no había forma
+    //      de taparlo: hay ventas de encargo (un shaker, una creatina que pidió
+    //      alguien) cuyo costo solo lo sabe quien la compró.
+    const manuales = sinCostoPropuestas.filter(p => !p.resuelta && lineaEditableSinCosto(p) !== null);
+    if(manuales.length) {
+      html += '<div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);'
+        + 'padding:11px 13px;margin-bottom:12px;font-size:12.5px;color:var(--ink-2);line-height:1.45">'
+        + 'Las que no reconocí las puedes llenar a mano: escribe <strong>cuánto te costó una unidad</strong> '
+        + 'en la casilla y dale a guardar. Si fue un encargo suelto y no lo sabes, déjala en blanco.'
+        + '</div>';
+    }
     html += '<div class="table-wrap"><table class="tbl"><thead><tr>'
       + '<th>Fecha</th><th>Cliente</th><th>Producto</th><th style="text-align:right">Venta</th>'
       + '<th style="text-align:right">Costo que le pondría</th><th>De dónde</th></tr></thead><tbody>'
-      + sinCostoPropuestas.map(p => '<tr style="opacity:' + (p.resuelta?'1':'.6') + '">'
-        + '<td style="color:var(--ink-3);white-space:nowrap">' + fCorta(p.v.fecha) + '</td>'
-        + '<td style="font-weight:500">' + (p.v.cliente||'—') + '</td>'
-        + '<td style="color:var(--ink-2)">' + (p.v.producto||'') + '</td>'
-        + '<td style="text-align:right;font-weight:600">' + fmt(ingresoVenta(p.v)) + '</td>'
-        + '<td style="text-align:right;font-weight:600;color:' + (p.resuelta?'var(--ink)':'var(--ink-3)') + '">'
-          + (p.resuelta ? fmt(p.costoTotal) : 'no lo reconocí') + '</td>'
-        + '<td style="font-size:11px;color:var(--ink-3)">' + (p.via||'—') + '</td>'
-      + '</tr>').join('')
+      + sinCostoPropuestas.map((p, i) => {
+        const linea = lineaEditableSinCosto(p);
+        const celdaCosto = p.resuelta
+          ? '<td style="text-align:right;font-weight:600">' + fmt(p.costoTotal) + '</td>'
+          : (linea
+            ? '<td style="text-align:right;white-space:nowrap">'
+              + '<input type="number" id="sc-costo-' + i + '" class="f-input" placeholder="costo x1"'
+              + ' style="width:110px;padding:5px 8px;font-size:12px;text-align:right;display:inline-block">'
+              + (Number(linea.cant||1) > 1 ? '<div style="font-size:10.5px;color:var(--ink-3);margin-top:3px">× ' + linea.cant + ' unidades</div>' : '')
+              + '</td>'
+            : '<td style="text-align:right;color:var(--ink-3);font-size:11.5px">varias líneas sin costo</td>');
+        return '<tr style="opacity:' + (p.resuelta?'1':'.85') + '">'
+          + '<td style="color:var(--ink-3);white-space:nowrap">' + fCorta(p.v.fecha) + '</td>'
+          + '<td style="font-weight:500">' + (p.v.cliente||'—') + '</td>'
+          + '<td style="color:var(--ink-2)">' + (linea && p.lineas ? linea.nombre : (p.v.producto||'')) + '</td>'
+          + '<td style="text-align:right;font-weight:600">' + fmt(ingresoVenta(p.v)) + '</td>'
+          + celdaCosto
+          + '<td style="font-size:11px;color:var(--ink-3)">' + (p.via || (p.resuelta ? '' : 'escríbelo tú')) + '</td>'
+        + '</tr>';
+      }).join('')
       + '</tbody></table></div>';
+    if(manuales.length) {
+      html += '<button class="btn" style="width:100%;padding:11px;margin-top:12px;font-weight:600" '
+        + 'onclick="guardarCostosManuales()">Guardar los costos que escribí</button>';
+    }
   }
 
   document.getElementById('det-title').textContent = 'Ventas sin costo';

@@ -494,5 +494,25 @@ Precios de referencia que confirmó Ángel: Omega 3 vegano $77.000; Omega 3 Nutr
 
 **Los combos NO se costean.** Decisión de Ángel: *"El combo no lo coloques, porque son combos que tenemos en la página web y pueden valer más o menos, dependiendo de varias cosas."* Los `COMBO …` escritos a mano se quedan sin costo a propósito y aparecen listados en "Ventas sin costo" — no son un error pendiente.
 
+### 14.13 Escribir el costo a mano (comentario 760)
+
+La herramienta de "Ventas sin costo" sabía señalar el hueco pero no había forma de taparlo: si el producto no está en el catálogo, la venta se quedaba ahí para siempre. Y hay ventas cuyo costo **solo lo sabe quien la compró**: encargos sueltos que Duppla no vende (un shaker, una creatina Darkness, una L-citrulina que pidió un cliente).
+
+Ahora cada fila no reconocida trae una casilla para escribir **cuánto costó una unidad**. `lineaEditableSinCosto` decide si se puede: en una venta de varios productos solo se ofrece cuando falta **exactamente una** línea — con dos, un solo número no alcanzaría para repartirlo.
+
+**Equivalencias que confirmó Ángel (segunda tanda):**
+
+| Hoja | Producto | Nota |
+|---|---|---|
+| CRISPI BARRA PROTEINA | CRISP BAR | la unidad |
+| BARRAS DE PROTEINA CAJA | CRISP BAR CAJA. | la caja de 12 |
+| ASHWAGANDA 180 CAPS | ASHWAGANDHA | única presentación que venden |
+
+**Sin costo a propósito** (no son errores pendientes): los `COMBO …` de la página web (el precio varía), y los encargos sueltos — SHAKER, CREATINA DARKNESS 200 G, L-CITRULINA — que Duppla no vende de catálogo.
+
+**Pendiente real:** `WHEY ELITE 8LBS VAINILLA` ($404.250) se ha vendido al menos dos veces y **no existe en el inventario**. Y `STNTHA 6 - 5L` (error de dedo por SYNTHA) no se puede resolver solo porque no dice el sabor; vainilla cuesta $286.473 y chocolate $283.000.
+
+**Hallazgo de negocio:** OLIMPO GYM compró 2 SYNTHA 6 5L a $288.000 c/u el 2 de junio. Cuestan $283.000–$286.473. Eso es vender **prácticamente a costo** — entre $1.500 y $5.000 de margen por unidad. Revisar el precio de distribuidor de ese producto.
+
 ---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*
