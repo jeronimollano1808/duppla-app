@@ -1043,6 +1043,24 @@ body{
 </div>
 
 <!-- 411. MODAL: RECORDATORIO DE COBRO POR WHATSAPP -->
+<!-- 716. MODAL: UNIFICAR NOMBRES DE CLIENTE (ver comentario 715) -->
+<div class="modal-bg" id="modal-unificar">
+  <div class="modal" style="max-width:820px">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">Unificar nombres de cliente</div>
+        <div style="font-size:12px;color:var(--ink-3);margin-top:2px">Solo cambia el texto del nombre — no toca plata ni borra nada</div>
+      </div>
+      <button class="modal-close" onclick="closeModal('modal-unificar')">✕</button>
+    </div>
+    <div id="un-contenido" style="max-height:60vh;overflow:auto"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-unificar')">Cerrar</button>
+      <button class="btn btn-lime" id="un-btn" onclick="unificarNombresClientes()">Unificar</button>
+    </div>
+  </div>
+</div>
+
 <!-- 706. MODAL: IMPORTAR VENTAS DESDE LA HOJA (ver comentario 703) -->
 <div class="modal-bg" id="modal-importar">
   <div class="modal" style="max-width:900px">
@@ -5820,6 +5838,9 @@ function renderClientes() {
   document.getElementById('page-clientes').innerHTML = `
     <div class="page-header">
       <div><div class="page-title">Clientes</div><div class="page-sub">${clientes.length} clientes registrados</div></div>
+      ${gruposNombresRepetidos().length
+        ? `<button class="btn btn-sm" style="color:var(--amber);border-color:#FDE68A" onclick="abrirUnificarNombres()">🧹 Unificar nombres (${gruposNombresRepetidos().length})</button>`
+        : ''}
     </div>
     ${recomprasHtml}
     <div class="card">
@@ -5843,6 +5864,102 @@ const CATS = {
   //      Antes estos gastos caían en "Otro" y se perdían de vista, aunque
   //      los intereses son uno de los gastos fijos más grandes de Duppla.
   finanzas:'Finanzas', operativo:'Operativo', otro:'Otro'
+};
+
+// ============================================================
+// 715. UNIFICAR NOMBRES DE CLIENTE
+// El mismo cliente está escrito de varias formas y por eso aparece
+// partido en Clientes, en Deudores y en Distribuidores:
+//   "EDWARD RENDON" / "EDWAR RENDON"
+//   "SEBAS BEDOYA"  / "SEBASTIAN BEDOYA"
+//   "RAICES SALUDABLES" / "RAICES MERCADO SALUDABLE"
+// Usa clientesSimilares() (ver 709) — la misma regla de tokens que evita
+// que la importación duplique. El nombre que gana es el que más ventas
+// tiene; si empatan, el más largo (suele ser el completo).
+// ============================================================
+function gruposNombresRepetidos() {
+  const cuenta = {};
+  DATA.ventas.forEach(v => {
+    const n = String(v.cliente||'').trim();
+    if(!n) return;
+    cuenta[n] = cuenta[n] || { nombre:n, ventas:0, total:0 };
+    cuenta[n].ventas++;
+    cuenta[n].total += ingresoVenta(v);
+  });
+  const nombres = Object.values(cuenta);
+  const usados = new Set();
+  const grupos = [];
+  nombres.forEach(a => {
+    if(usados.has(a.nombre)) return;
+    const iguales = nombres.filter(b => !usados.has(b.nombre) && clientesSimilares(a.nombre, b.nombre));
+    if(iguales.length < 2) return;
+    iguales.forEach(x => usados.add(x.nombre));
+    const bueno = [...iguales].sort((x,y) => y.ventas - x.ventas || y.nombre.length - x.nombre.length)[0];
+    grupos.push({ bueno: bueno.nombre, variantes: iguales.sort((x,y) => y.ventas - x.ventas) });
+  });
+  return grupos;
+}
+
+window.abrirUnificarNombres = () => {
+  const grupos = gruposNombresRepetidos();
+  const cont = document.getElementById('un-contenido');
+  if(!grupos.length) {
+    cont.innerHTML = '<div class="empty-state"><div class="empty-state-icon">✅</div><div class="empty-state-text">Ningún nombre repetido</div></div>';
+    document.getElementById('un-btn').style.display = 'none';
+    openModal('modal-unificar');
+    return;
+  }
+  const aCambiar = grupos.reduce((s,g) => s + g.variantes.filter(v => v.nombre !== g.bueno).reduce((t,v) => t + v.ventas, 0), 0);
+  let html = '<div style="background:var(--amber-bg);border:1px solid #FDE68A;border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;font-size:13px;color:#92400E;line-height:1.45">'
+    + '<strong>' + grupos.length + ' cliente' + (grupos.length>1?'s están':' está') + ' escrito de varias formas.</strong> '
+    + 'Por eso aparece partido en Clientes, en Deudores y en el ranking de distribuidores. '
+    + 'Unificar solo cambia el <strong>texto del nombre</strong> en ' + aCambiar + ' venta(s): no toca montos, ni fechas, ni saldos, ni borra nada.'
+    + '</div><div class="table-wrap"><table class="tbl"><thead><tr>'
+    + '<th>Se queda como</th><th>Se juntan</th><th style="text-align:right">Ventas</th><th style="text-align:right">Total</th></tr></thead><tbody>';
+  grupos.forEach((g, i) => {
+    html += '<tr>'
+      + '<td style="font-weight:700;color:var(--green)">' + g.bueno + '</td>'
+      + '<td style="font-size:11.5px;color:var(--ink-2)">' + g.variantes.filter(v => v.nombre !== g.bueno).map(v => '↳ ' + v.nombre + ' <span style="color:var(--ink-3)">(' + v.ventas + ')</span>').join('<br>') + '</td>'
+      + '<td style="text-align:right">' + g.variantes.reduce((s,v)=>s+v.ventas,0) + '</td>'
+      + '<td style="text-align:right;font-weight:600;white-space:nowrap">' + fmt(g.variantes.reduce((s,v)=>s+v.total,0)) + '</td>'
+    + '</tr>';
+  });
+  html += '</tbody></table></div>';
+  cont.innerHTML = html;
+  const btn = document.getElementById('un-btn');
+  btn.style.display = 'inline-flex';
+  btn.textContent = 'Unificar ' + grupos.length + ' cliente' + (grupos.length>1?'s':'');
+  openModal('modal-unificar');
+};
+
+window.unificarNombresClientes = async () => {
+  const grupos = gruposNombresRepetidos();
+  if(!grupos.length) return;
+  const aCambiar = [];
+  grupos.forEach(g => {
+    DATA.ventas.forEach(v => {
+      const n = String(v.cliente||'').trim();
+      if(n && n !== g.bueno && g.variantes.some(x => x.nombre === n)) aCambiar.push({ id: v.id, bueno: g.bueno });
+    });
+  });
+  if(!confirm('Se va a corregir el nombre en ' + aCambiar.length + ' venta(s).\n\n'
+    + 'Solo cambia el texto del nombre. No toca montos, fechas, saldos ni productos, y no borra nada.\n\n¿Seguimos?')) return;
+
+  const btn = document.getElementById('un-btn');
+  btn.disabled = true;
+  let hechas = 0;
+  for(const c of aCambiar) {
+    try {
+      await updateDoc(doc(db,'ventas',c.id), { cliente: c.bueno });
+      const v = DATA.ventas.find(x => x.id === c.id);
+      if(v) v.cliente = c.bueno;
+      hechas++;
+      btn.textContent = 'Corrigiendo ' + hechas + ' de ' + aCambiar.length + '…';
+    } catch(e) {}
+  }
+  btn.disabled = false;
+  closeModal('modal-unificar');
+  toast('✅ ' + hechas + ' nombre(s) unificado(s)');
 };
 
 // 712. Gastos también va mes a mes, como Inicio y Distribuidores. Era la
