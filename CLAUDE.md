@@ -514,5 +514,21 @@ Ahora cada fila no reconocida trae una casilla para escribir **cuánto costó un
 
 **Hallazgo de negocio:** OLIMPO GYM compró 2 SYNTHA 6 5L a $288.000 c/u el 2 de junio. Cuestan $283.000–$286.473. Eso es vender **prácticamente a costo** — entre $1.500 y $5.000 de margen por unidad. Revisar el precio de distribuidor de ese producto.
 
+### 14.14 Cierre de las ventas sin costo (comentario 761)
+
+Costos que dio Ángel para los encargos sueltos: **L-citrulina $55.000**, **Creatina Darkness $95.000**, **shaker $0** (era un obsequio, se revendió a $20.000). **SYNTHA 6 5L: $286.473** — es el que resuelve el `STNTHA 6 - 5L` mal escrito de OLIMPO.
+
+**761.** El costo manual ahora distingue el texto vacío del cero escrito: `''` y `'0'` dan el mismo número pero significan cosas distintas. Vacío es *"no lo sé"*; un 0 escrito a propósito es *"esto no me costó nada"* — un obsequio, una comisión. Sin esa distinción no había forma de cerrar una venta de costo cero y quedaba marcada como pendiente para siempre.
+
+**WHEY ELITE 8 LBS:** presentación **descontinuada** por el proveedor. Se vendió solo a JOHAN ARANGO GO UP durante unos meses, a $404.250. Hoy la reemplaza la de 5 L. No está en inventario porque ya no se compra — falta su costo histórico para cerrar esas ventas.
+
+### 14.15 REGLA DE NEGOCIO: el SYNTHA a OLIMPO es un gancho, no un error
+
+La app detectó que a OLIMPO GYM se le vende SYNTHA 6 5L a **$288.000** cuando cuesta **$286.473** — margen de $1.527 por unidad, prácticamente a costo. **Es deliberado.** Palabras de Ángel:
+
+> *"Ese producto lo estoy vendiendo a costo, pero solamente a ellos. Es como si fuera un gancho, ya que a ellos les vendo muchos más productos, entonces les dejo ese más económico para que me compren las creatinas, que sí me dejan más margen."*
+
+**No es un precio para corregir.** Cualquier alerta futura de "margen bajo" o "vendido por debajo de costo" tiene que poder excluir este caso, o al menos no tratarlo como error. Antes de señalar un precio bajo como problema, mirar si ese cliente compra volumen en otras referencias.
+
 ---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*

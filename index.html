@@ -10992,8 +10992,15 @@ window.guardarCostosManuales = async () => {
     if(p.resuelta) return;
     const linea = lineaEditableSinCosto(p);
     if(!linea) return;
-    const val = Number(document.getElementById('sc-costo-' + i)?.value) || 0;
-    if(val > 0) cambios.push({ p, linea, costoUnit: Math.round(val) });
+    // 761. Se mira el texto, no el número: '' y '0' dan cero los dos, pero
+    //      significan cosas distintas. Vacío es "no lo sé"; un 0 escrito a
+    //      propósito es "esto no me costó nada" — un obsequio, una comisión.
+    //      Sin distinguirlos no había forma de cerrar una venta de costo cero.
+    const crudo = String(document.getElementById('sc-costo-' + i)?.value ?? '').trim();
+    if(crudo === '') return;
+    const val = Number(crudo);
+    if(!Number.isFinite(val) || val < 0) return;
+    cambios.push({ p, linea, costoUnit: Math.round(val) });
   });
   if(!cambios.length) return toast('⚠️ No escribiste ningún costo');
   const totalCosto = cambios.reduce((s,c) => s + c.costoUnit * c.linea.cant, 0);
@@ -11073,7 +11080,8 @@ window.abrirVentasSinCosto = () => {
       html += '<div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);'
         + 'padding:11px 13px;margin-bottom:12px;font-size:12.5px;color:var(--ink-2);line-height:1.45">'
         + 'Las que no reconocí las puedes llenar a mano: escribe <strong>cuánto te costó una unidad</strong> '
-        + 'en la casilla y dale a guardar. Si fue un encargo suelto y no lo sabes, déjala en blanco.'
+        + 'en la casilla y dale a guardar. Si no te costó nada (un obsequio, una comisión) escribe <strong>0</strong>. '
+        + 'Si no lo sabes, déjala en blanco.'
         + '</div>';
     }
     html += '<div class="table-wrap"><table class="tbl"><thead><tr>'
