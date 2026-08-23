@@ -2605,7 +2605,12 @@ function startListeners() {
     onSnapshot(q, snap => {
       DATA[col] = snap.docs.map(d => ({id:d.id, ...d.data()}));
       // Solo redibujamos si estamos en la página relevante o el dashboard
-      if(currentPage === col || currentPage === 'dashboard') renderPage(currentPage);
+      // 680. FIX — Inicio lee de casi todas las colecciones pero no se llama
+      //      como ninguna, así que nunca entraba en esta condición: al entrar
+      //      a la app se pintaba con DATA vacío y se quedaba mostrando $0 en
+      //      todo hasta que navegaras a otra página y volvieras. Cualquier
+      //      página futura que resuma varias colecciones debe sumarse aquí.
+      if(currentPage === col || currentPage === 'dashboard' || currentPage === 'inicio') renderPage(currentPage);
       if(currentPage === 'clientes' && (col === 'ventas' || col === 'inventario')) renderPage('clientes');
       if(currentPage === 'deudores' && (col === 'ventas' || col === 'consumos')) renderPage('deudores');
       if(currentPage === 'distribuidores' && (col === 'ventas' || col === 'distribuidores')) renderPage('distribuidores');
@@ -6780,7 +6785,21 @@ function renderInicio() {
 
   const ventasCiclo = DATA.ventas.filter(v => v.fecha >= ciclo.inicio && v.fecha <= ciclo.fin);
   const gastosCiclo = DATA.gastos.filter(g => g.fecha >= ciclo.inicio && g.fecha <= ciclo.fin);
-  const ventasAnt   = DATA.ventas.filter(v => v.fecha >= cicloAnt.inicio && v.fecha <= cicloAnt.fin);
+
+  // 681. Comparación justa contra el ciclo anterior. Comparar un ciclo a
+  //      medias contra uno completo siempre da "vamos abajo" aunque vayamos
+  //      mejor: el día 10 de agosto se estaría midiendo contra los 31 días de
+  //      julio. Se recorta el ciclo anterior a los MISMOS días corridos.
+  const sumarDias = (f, n) => { const [a,m,d] = f.split('-').map(Number); return fechaLocal(new Date(a, m-1, d + n)); };
+  const diasEntre = (f1, f2) => {
+    const [a1,m1,d1] = f1.split('-').map(Number);
+    const [a2,m2,d2] = f2.split('-').map(Number);
+    return Math.round((new Date(a2,m2-1,d2) - new Date(a1,m1-1,d1)) / 86400000);
+  };
+  const diasCorridos = Math.max(0, diasEntre(ciclo.inicio, today()));
+  const finComparable = sumarDias(cicloAnt.inicio, diasCorridos);
+  const finAnt = finComparable < cicloAnt.fin ? finComparable : cicloAnt.fin;
+  const ventasAnt   = DATA.ventas.filter(v => v.fecha >= cicloAnt.inicio && v.fecha <= finAnt);
 
   const vendido    = ventasCiclo.reduce((s,v) => s + ingresoVenta(v), 0);
   const vendidoAnt = ventasAnt.reduce((s,v) => s + ingresoVenta(v), 0);
@@ -6806,7 +6825,7 @@ function renderInicio() {
   // Variación contra el mismo punto del ciclo anterior
   const varPct = vendidoAnt > 0 ? Math.round(((vendido - vendidoAnt)/vendidoAnt)*100) : null;
   const varTxt = varPct === null ? 'sin ciclo anterior'
-    : (varPct >= 0 ? '▲ ' + varPct + '%' : '▼ ' + Math.abs(varPct) + '%') + ' vs ciclo anterior';
+    : (varPct >= 0 ? '▲ ' + varPct + '%' : '▼ ' + Math.abs(varPct) + '%') + ' vs mismos ' + (diasCorridos+1) + ' días del ciclo anterior';
   const varColor = varPct === null ? 'var(--ink-3)' : (varPct >= 0 ? 'var(--green)' : 'var(--red)');
 
   // ---- Saludo y ventana del ciclo ----
@@ -6834,7 +6853,13 @@ function renderInicio() {
   if(mora.length) alertasHtml += alerta('var(--red)','var(--red-bg)','#FECACA','⏰',
     mora.length + ' deudor' + (mora.length>1?'es':'') + ' en mora · ' + fmt(moraTotal), 'deudores');
   if(low.length) alertasHtml += alerta('#92400E','var(--amber-bg)','#FDE68A','📦',
-    low.length + ' producto' + (low.length>1?'s':'') + ' en stock bajo: ' + low.slice(0,3).map(p => p.nombre.split(' ').slice(0,2).join(' ') + ' (' + p.stock + ')').join(', ') + (low.length>3?' y '+(low.length-3)+' más':''), 'inventario');
+    // 682. Antes recortaba el nombre a 2 palabras y el aviso quedaba inútil:
+    //      "WHEY 100% (1), WHEY 100% (1), WHEY 100% (1)". Se prioriza lo que
+    //      está en cero y se deja el nombre casi completo para distinguirlos.
+    low.length + ' producto' + (low.length>1?'s':'') + ' en stock bajo: '
+      + [...low].sort((a,b) => Number(a.stock||0) - Number(b.stock||0)).slice(0,2)
+          .map(p => (p.nombre.length > 34 ? p.nombre.slice(0,32) + '…' : p.nombre) + ' (' + p.stock + ')').join(' · ')
+      + (low.length>2 ? ' y ' + (low.length-2) + ' más' : ''), 'inventario');
   if(recompras.length) alertasHtml += alerta('#1D4ED8','var(--blue-bg)','#BFDBFE','🔄',
     recompras.length + ' cliente' + (recompras.length>1?'s':'') + ' por recomprar', 'clientes');
   if(!alertasHtml) alertasHtml = `
