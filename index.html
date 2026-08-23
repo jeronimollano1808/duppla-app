@@ -5845,14 +5845,68 @@ const CATS = {
   finanzas:'Finanzas', operativo:'Operativo', otro:'Otro'
 };
 
+// 712. Gastos también va mes a mes, como Inicio y Distribuidores. Era la
+//      última página que mostraba todo revuelto desde el principio de los
+//      tiempos, así que el total de arriba no le servía a nadie.
+let gastosCicloOffset = 0;
+
+window.verCicloGastos = (offset) => {
+  gastosCicloOffset = Number(offset);
+  renderGastos();
+};
+
 function renderGastos() {
+  const verTodoG = gastosCicloOffset === -1;
+  const cicloG = verTodoG ? null : getCicloActual(gastosCicloOffset);
+  const gastosVentana = verTodoG
+    ? DATA.gastos
+    : DATA.gastos.filter(g => g.fecha >= cicloG.inicio && g.fecha <= cicloG.fin);
+
   const totPorCat = Object.entries(CATS).map(([k,l]) => ({
-    k, l, t:DATA.gastos.filter(g=>g.cat===k).reduce((s,g)=>s+Number(g.valor||0),0)
+    k, l, t:gastosVentana.filter(g=>g.cat===k).reduce((s,g)=>s+Number(g.valor||0),0)
   })).filter(c=>c.t>0);
-  const total = DATA.gastos.reduce((s,g)=>s+Number(g.valor||0),0);
+  const total = gastosVentana.reduce((s,g)=>s+Number(g.valor||0),0);
+
+  // 713. Los tres números que de verdad importan del ciclo: qué fue mercancía
+  //      (no es gasto, es inventario), qué es fijo y qué es variable.
+  const compras   = gastosVentana.filter(esCompraMercancia).reduce((s,g)=>s+Number(g.valor||0),0);
+  const fijos     = gastosVentana.filter(g => !esCompraMercancia(g) && esGastoFijo(g)).reduce((s,g)=>s+Number(g.valor||0),0);
+  const variables = total - compras - fijos;
+
+  // 714. Selector de ciclo — mismo patrón que Inicio y Distribuidores.
+  const nCiclosG = ciclosDisponibles();
+  let chipsG = '';
+  for(let i = 0; i <= nCiclosG; i++) {
+    const c = getCicloActual(i);
+    const act = !verTodoG && i === gastosCicloOffset;
+    const mes = c.label.charAt(0).toUpperCase() + c.label.slice(1).replace(' de ', ' ');
+    chipsG += '<button onclick="verCicloGastos(' + i + ')" style="padding:6px 13px;border-radius:20px;white-space:nowrap;cursor:pointer;font-size:12.5px;'
+      + 'border:1.5px solid ' + (act?'var(--ink)':'var(--border)') + ';background:' + (act?'var(--ink)':'var(--surface)') + ';'
+      + 'color:' + (act?'#fff':'var(--ink-2)') + ';font-weight:' + (act?'600':'400') + '">' + (i===0?'Este ciclo':mes) + '</button>';
+  }
+  chipsG += '<button onclick="verCicloGastos(-1)" style="padding:6px 13px;border-radius:20px;white-space:nowrap;cursor:pointer;font-size:12.5px;'
+    + 'border:1.5px solid ' + (verTodoG?'var(--ink)':'var(--border)') + ';background:' + (verTodoG?'var(--ink)':'var(--surface)') + ';'
+    + 'color:' + (verTodoG?'#fff':'var(--ink-2)') + ';font-weight:' + (verTodoG?'600':'400') + '">Todo</button>';
+  const selectorGastosHtml = '<div style="display:flex;gap:7px;overflow-x:auto;padding-bottom:4px;margin-bottom:14px">' + chipsG + '</div>';
+
+  const resumenTiposHtml =
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:9px;margin-bottom:16px">'
+    + '<div class="card" style="padding:12px 14px"><div style="font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)">Gastos fijos</div>'
+      + '<div style="font-size:18px;font-weight:800;color:var(--blue)">' + fmt(fijos) + '</div>'
+      + '<div style="font-size:11px;color:var(--ink-3)">se pagan igual vendas o no</div></div>'
+    + '<div class="card" style="padding:12px 14px"><div style="font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)">Gastos variables</div>'
+      + '<div style="font-size:18px;font-weight:800;color:var(--amber)">' + fmt(variables) + '</div>'
+      + '<div style="font-size:11px;color:var(--ink-3)">suben con el movimiento</div></div>'
+    + '<div class="card" style="padding:12px 14px"><div style="font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)">Compra de mercancía</div>'
+      + '<div style="font-size:18px;font-weight:800;color:var(--ink-2)">' + fmt(compras) + '</div>'
+      + '<div style="font-size:11px;color:var(--ink-3)">no es gasto, es inventario</div></div>'
+    + '<div class="card" style="padding:12px 14px"><div style="font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)">Salió del banco</div>'
+      + '<div style="font-size:18px;font-weight:800;color:var(--red)">' + fmt(total) + '</div>'
+      + '<div style="font-size:11px;color:var(--ink-3)">' + gastosVentana.length + ' registro' + (gastosVentana.length!==1?'s':'') + '</div></div>'
+    + '</div>';
 
   // 159. Ordenamos gastos por fecha descendente igual que ventas
-  const gastosOrdenados = [...DATA.gastos].sort((a,b) => {
+  const gastosOrdenados = [...gastosVentana].sort((a,b) => {
     if(b.fecha !== a.fecha) return b.fecha > a.fecha ? 1 : -1;
     return (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0);
   });
@@ -5867,6 +5921,7 @@ function renderGastos() {
       <td style="color:var(--ink-3)">${g.fecha||''}</td>
       <td><span class="badge b-warning">${CATS[g.cat]||g.cat}</span></td>
       <td style="font-weight:500">${g.desc||''}</td>
+      <td style="font-size:11px;color:${esCompraMercancia(g)?'var(--ink-3)':esGastoFijo(g)?'var(--blue)':'var(--amber)'}">${esCompraMercancia(g)?'Mercancía':esGastoFijo(g)?'Fijo':'Variable'}</td>
       <td style="font-weight:600;color:var(--red)">${fmt(g.valor)}</td>
       <td>
         <div style="display:flex;gap:5px">
@@ -5902,18 +5957,20 @@ function renderGastos() {
 
   document.getElementById('page-gastos').innerHTML = `
     <div class="page-header">
-      <div><div class="page-title">Gastos</div><div class="page-sub">${DATA.gastos.length} registros</div></div>
+      <div><div class="page-title">Gastos</div><div class="page-sub">${gastosVentana.length} de ${DATA.gastos.length} registros${verTodoG ? '' : ' · ciclo ' + fCorta(cicloG.inicio) + ' – ' + fCorta(cicloG.fin)}</div></div>
       <button class="btn btn-lime btn-sm" onclick="abrirModalGasto()">+ Registrar gasto</button>
     </div>
+    ${selectorGastosHtml}
     ${recurrentesHtml}
+    ${resumenTiposHtml}
     <div class="metrics-grid" style="margin-bottom:16px">${catHtml}</div>
     <div class="card">
-      ${DATA.gastos.length ?
+      ${gastosVentana.length ?
         `<div class="table-wrap"><table class="tbl">
-          <thead><tr><th>Fecha</th><th>Categoría</th><th>Descripción</th><th>Valor</th><th></th></tr></thead>
+          <thead><tr><th>Fecha</th><th>Categoría</th><th>Descripción</th><th>Tipo</th><th>Valor</th><th></th></tr></thead>
           <tbody>${rows}</tbody>
         </table></div>`
-        : `<div class="empty-state"><div class="empty-state-icon">💸</div><div class="empty-state-text">Sin gastos registrados</div></div>`}
+        : `<div class="empty-state"><div class="empty-state-icon">💸</div><div class="empty-state-text">${DATA.gastos.length ? 'Sin gastos en este ciclo' : 'Sin gastos registrados'}</div></div>`}
     </div>`;
 }
 
