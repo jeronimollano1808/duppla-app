@@ -6816,9 +6816,35 @@ function getCicloActual(offsetMeses) {
 // cómo va el ciclo abajo. Todo lo que se registra desde aquí abre el
 // mismo modal de siempre — no hay lógica de guardado duplicada.
 // ============================================================
+// 691. Ciclo que se está mirando en Inicio. 0 = el actual, 1 = el anterior,
+//      y así hacia atrás. Los ciclos cerrados NUNCA se borran: se archivan y
+//      se consultan desde aquí, completos, con su mismo detalle desplegable.
+let inicioCicloOffset = 0;
+
+window.verCicloInicio = (offset) => {
+  inicioCicloOffset = Number(offset) || 0;
+  renderInicio();
+};
+
+// 692. Cuántos ciclos hacia atrás hay datos. Se calcula del registro más
+//      viejo (venta o gasto) para no ofrecer ciclos vacíos ni quedarse corto.
+function ciclosDisponibles() {
+  const fechas = [
+    ...DATA.ventas.map(v => v.fecha),
+    ...DATA.gastos.map(g => g.fecha)
+  ].filter(Boolean).sort();
+  if(!fechas.length) return 0;
+  const masVieja = fechas[0];
+  for(let i = 1; i <= 60; i++) {
+    if(getCicloActual(i).inicio <= masVieja) return i;
+  }
+  return 24;
+}
+
 function renderInicio() {
-  const ciclo = getCicloActual(0);
-  const cicloAnt = getCicloActual(1);
+  const ciclo = getCicloActual(inicioCicloOffset);
+  const cicloAnt = getCicloActual(inicioCicloOffset + 1);
+  const esCicloActual = inicioCicloOffset === 0;
 
   const ventasCiclo = DATA.ventas.filter(v => v.fecha >= ciclo.inicio && v.fecha <= ciclo.fin);
   const gastosCiclo = DATA.gastos.filter(g => g.fecha >= ciclo.inicio && g.fecha <= ciclo.fin);
@@ -6833,7 +6859,12 @@ function renderInicio() {
     const [a2,m2,d2] = f2.split('-').map(Number);
     return Math.round((new Date(a2,m2-1,d2) - new Date(a1,m1-1,d1)) / 86400000);
   };
-  const diasCorridos = Math.max(0, diasEntre(ciclo.inicio, today()));
+  // 693. En un ciclo ya cerrado el ciclo corrió completo, así que se compara
+  //      entero contra entero. Solo el ciclo en curso se recorta a los días
+  //      que llevamos.
+  const diasCorridos = esCicloActual
+    ? Math.max(0, diasEntre(ciclo.inicio, today()))
+    : diasEntre(ciclo.inicio, ciclo.fin);
   const finComparable = sumarDias(cicloAnt.inicio, diasCorridos);
   const finAnt = finComparable < cicloAnt.fin ? finComparable : cicloAnt.fin;
   const ventasAnt   = DATA.ventas.filter(v => v.fecha >= cicloAnt.inicio && v.fecha <= finAnt);
@@ -6842,7 +6873,11 @@ function renderInicio() {
   const vendidoAnt = ventasAnt.reduce((s,v) => s + ingresoVenta(v), 0);
   const gastado    = gastosCiclo.reduce((s,g) => s + Number(g.valor||0), 0);
   const fijos      = calcularGastosFijosRango(ciclo.inicio, ciclo.fin);
-  const porCobrar  = Math.round(DATA.ventas.reduce((s,v) => s + saldoReal(v), 0));
+  // 694. En el ciclo en curso interesa TODA la cartera viva (incluida la de
+  //      meses viejos, que es la que hay que salir a cobrar). En un ciclo ya
+  //      cerrado interesa solo lo que quedó debiendo ESE ciclo.
+  const porCobrar = Math.round(
+    (esCicloActual ? DATA.ventas : ventasCiclo).reduce((s,v) => s + saldoReal(v), 0));
 
   // 678. Compras de mercancía del ciclo, aparte del resto (ver 677)
   const compras    = gastosCiclo.filter(esCompraMercancia).reduce((s,g) => s + Number(g.valor||0), 0);
@@ -6862,7 +6897,8 @@ function renderInicio() {
   // Variación contra el mismo punto del ciclo anterior
   const varPct = vendidoAnt > 0 ? Math.round(((vendido - vendidoAnt)/vendidoAnt)*100) : null;
   const varTxt = varPct === null ? 'sin ciclo anterior'
-    : (varPct >= 0 ? '▲ ' + varPct + '%' : '▼ ' + Math.abs(varPct) + '%') + ' vs mismos ' + (diasCorridos+1) + ' días del ciclo anterior';
+    : (varPct >= 0 ? '▲ ' + varPct + '%' : '▼ ' + Math.abs(varPct) + '%')
+      + (esCicloActual ? ' vs mismos ' + (diasCorridos+1) + ' días del ciclo anterior' : ' vs el ciclo anterior');
   const varColor = varPct === null ? 'var(--ink-3)' : (varPct >= 0 ? 'var(--green)' : 'var(--red)');
 
   // ---- Saludo y ventana del ciclo ----
@@ -6985,6 +7021,29 @@ function renderInicio() {
       </div>
     </div>`;
 
+  // ---- 695. Selector de ciclos ----
+  // Un chip por cada ciclo con datos, del más nuevo al más viejo. Es el
+  // "acceso fácil" al archivo: el ciclo cerrado se ve completo, con sus
+  // mismos números y su mismo detalle desplegable.
+  const nCiclos = ciclosDisponibles();
+  let chipsCiclos = '';
+  for(let i = 0; i <= nCiclos; i++) {
+    const c = getCicloActual(i);
+    const activo = i === inicioCicloOffset;
+    const mes = c.label.charAt(0).toUpperCase() + c.label.slice(1).replace(' de ', ' ');
+    chipsCiclos += '<button onclick="verCicloInicio(' + i + ')" style="'
+      + 'padding:6px 13px;border-radius:20px;white-space:nowrap;cursor:pointer;font-size:12.5px;'
+      + 'border:1.5px solid ' + (activo ? 'var(--ink)' : 'var(--border)') + ';'
+      + 'background:' + (activo ? 'var(--ink)' : 'var(--surface)') + ';'
+      + 'color:' + (activo ? '#fff' : 'var(--ink-2)') + ';'
+      + 'font-weight:' + (activo ? '600' : '400') + '">'
+      + (i === 0 ? 'Este ciclo' : mes)
+    + '</button>';
+  }
+  const selectorCiclosHtml = nCiclos > 0
+    ? '<div style="display:flex;gap:7px;overflow-x:auto;padding-bottom:4px;margin-bottom:14px">' + chipsCiclos + '</div>'
+    : '';
+
   // ---- Tarjeta de número ----
   // 689. Cada tarjeta abre el detalle de dónde salió ese número (ver 688).
   const stat = (k, v, d, dColor, tipo) => `
@@ -7001,12 +7060,15 @@ function renderInicio() {
   document.getElementById('page-inicio').innerHTML = `
     <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px">
       <div>
-        <div class="page-title">${saludo}</div>
-        <div class="page-sub">Ciclo ${fFmt(ciclo.inicio)} – ${fFmt(ciclo.fin)}${totalHoy ? ' · hoy llevas ' + fmt(totalHoy) : ''}</div>
+        <div class="page-title">${esCicloActual ? saludo : 'Ciclo cerrado'}</div>
+        <div class="page-sub">Ciclo ${fFmt(ciclo.inicio)} – ${fFmt(ciclo.fin)}${esCicloActual && totalHoy ? ' · hoy llevas ' + fmt(totalHoy) : ''}</div>
       </div>
       <button class="btn btn-sm" onclick="showPage('dashboard')">Ver dashboard completo →</button>
     </div>
 
+    ${selectorCiclosHtml}
+
+    ${esCicloActual ? `
     <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">${alertasHtml}</div>
 
     <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:16px">
@@ -7018,13 +7080,24 @@ function renderInicio() {
         <button class="btn" onclick="showPage('deudores')" style="flex:1;padding:13px;font-size:14px;font-weight:600">💳 Cobrar</button>
         <button class="btn" onclick="abrirModalGasto()" style="flex:1;padding:13px;font-size:14px;font-weight:600">💸 Gasto</button>
       </div>
-    </div>
+    </div>` : `
+    <div style="display:flex;align-items:center;gap:10px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:16px">
+      <span style="font-size:15px">🗂️</span>
+      <span style="font-size:13px;color:var(--ink-2);line-height:1.4">Estás viendo un ciclo que ya cerró. Los números no cambian — puedes abrir cada uno para ver el detalle completo.</span>
+      <button class="btn btn-sm" style="margin-left:auto;white-space:nowrap" onclick="verCicloInicio(0)">Volver al actual</button>
+    </div>`}
 
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:9px;margin-bottom:16px">
       ${stat('Vendido', fmt(vendido), varTxt, varColor, 'vendido')}
       ${stat('Margen bruto', fmt(margenCiclo), margenPctCiclo + '% del vendido', 'var(--ink-3)', 'margen')}
       ${stat('Salió del banco', fmt(gastado), compras > 0 ? fmt(compras) + ' fue mercancía' : 'sin compras de mercancía', 'var(--ink-3)', 'gastos')}
-      ${stat('Por cobrar', fmt(porCobrar), mora.length ? mora.length + ' en mora' : 'nada en mora', mora.length ? 'var(--red)' : 'var(--green)', 'cobrar')}
+      ${stat('Por cobrar', fmt(porCobrar),
+          esCicloActual
+            ? (mora.length ? mora.length + ' en mora' : 'nada en mora')
+            : (porCobrar > 0 ? 'quedó sin pagar de este ciclo' : 'todo cobrado'),
+          esCicloActual
+            ? (mora.length ? 'var(--red)' : 'var(--green)')
+            : (porCobrar > 0 ? 'var(--red)' : 'var(--green)'), 'cobrar')}
     </div>
 
     <div style="display:flex;flex-direction:column;gap:12px">
@@ -7059,7 +7132,9 @@ function bloqueGrupo(titulo, total, sub) {
 const fCorta = f => { const [a,m,d] = String(f||'').split('-'); return d ? Number(d) + ' ' + ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][Number(m)-1] : ''; };
 
 window.abrirDetalleInicio = (tipo) => {
-  const ciclo = getCicloActual(0);
+  // 696. Usa el MISMO ciclo que se está mirando en Inicio (ver 691), para que
+  //      el detalle de un ciclo cerrado sea el de ese ciclo y no el de hoy.
+  const ciclo = getCicloActual(inicioCicloOffset);
   const ventasCiclo = DATA.ventas.filter(v => v.fecha >= ciclo.inicio && v.fecha <= ciclo.fin);
   const gastosCiclo = DATA.gastos.filter(g => g.fecha >= ciclo.inicio && g.fecha <= ciclo.fin);
   let titulo = '', html = '';
@@ -7145,7 +7220,21 @@ window.abrirDetalleInicio = (tipo) => {
 
   } else if(tipo === 'cobrar') {
     titulo = 'Lo que te deben';
-    const deudores = calcularDeudores().sort((a,b) => (b.diasMora||0) - (a.diasMora||0));
+    // 697. En el ciclo en curso, toda la cartera viva. En un ciclo cerrado,
+    //      solo lo que quedó debiendo ese ciclo (mismo criterio que la tarjeta).
+    let deudores;
+    if(inicioCicloOffset === 0) {
+      deudores = calcularDeudores();
+    } else {
+      const porCliente = {};
+      ventasCiclo.filter(v => saldoReal(v) > 0).forEach(v => {
+        const k = (v.cliente||'(sin nombre)').trim();
+        porCliente[k] = porCliente[k] || { cliente:k, total:0, diasMora:0, enMora:false };
+        porCliente[k].total += saldoReal(v);
+      });
+      deudores = Object.values(porCliente);
+    }
+    deudores = deudores.sort((a,b) => (b.diasMora||0) - (a.diasMora||0) || b.total - a.total);
     const total = deudores.reduce((s,d) => s + Number(d.total||0), 0);
     html += bloqueGrupo('Total por cobrar', fmt(total), deudores.length + ' cliente' + (deudores.length>1?'s':''));
     html += tablaDetalle(
