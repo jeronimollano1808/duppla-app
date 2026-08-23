@@ -10554,6 +10554,17 @@ function parsearFilasHoja(texto) {
     const total = num(cel[4]);
     if(!total) { errores.push('Línea ' + (i+1) + ': sin valor total'); return; }
     const producto = cel[1].replace(/\.$/,'').trim();
+    // 764. El precio unitario de la hoja NO se cree si no cuadra con el total.
+    //      Cuando la cantidad era 2 o más, varias filas traían el total de la
+    //      línea escrito en la casilla del unitario. El total es el que cuadra
+    //      con la contabilidad, así que manda él: si unitario × cantidad no da
+    //      el total, el unitario se recalcula. Con el dato malo salían márgenes
+    //      del 114% y del 140% — imposibles, y nadie los veía.
+    const cantF = Number(cel[2]) || 1;
+    const unitHoja = num(cel[3]);
+    const unit = (unitHoja > 0 && Math.abs(unitHoja * cantF - total) <= 2)
+      ? unitHoja
+      : Math.round(total / cantF);
     filas.push({
       fecha: m[3] + '-' + String(m[2]).padStart(2,'0') + '-' + String(m[1]).padStart(2,'0'),
       producto,
@@ -10563,8 +10574,8 @@ function parsearFilasHoja(texto) {
       //      (ver 727). Se marcan aquí y el importador los manda al bloque
       //      de cobros, nunca al de ventas.
       esFilaCobro: pareceCobro(producto),
-      cant: Number(cel[2]) || 1,
-      unit: num(cel[3]),
+      cant: cantF,
+      unit,
       total,
       pago: cel[5],
       vendedor: cel[6],

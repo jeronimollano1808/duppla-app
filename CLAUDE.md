@@ -566,5 +566,26 @@ Respuestas una por una, para no volver a preguntarlas:
 
 **Lección:** corregir el costo sin corregir el producto deja el dinero bien y la información mal. Cuando una línea de venta apunta al producto equivocado hay que arreglar las dos cosas, y `stockDescontado` es lo que dice si es seguro hacerlo.
 
+### 14.18 Márgenes del 114% y del 140% (comentario 764)
+
+Encontrado al verificar el sondeo, no al hacerlo: mayo saltó de 38% a 42% de margen sin razón. En vez de aceptar el número, se listaron las ventas de mayo con margen sobre 55% y aparecieron **dos con margen mayor al 100%** — aritméticamente imposible:
+
+| Venta | Ingreso | Margen que calculaba | % |
+|---|---|---|---|
+| SEBASTIAN BEDOYA · 11 may | $260.000 | $297.000 | 114% |
+| NAGATOMO · 2 jun | $182.000 | $254.800 | 140% |
+
+**Causa:** en 8 ventas el campo `precio` (unitario) traía el **total de la línea**. Cuando la cantidad era 2 o más, la hoja tenía escrito el total en la casilla del valor unitario. `ingresoVenta` usa `v.total`, así que **lo vendido siempre estuvo bien**; pero `calcularMargenVenta` hace `(precio − costo) × cant`, y con el unitario inflado el margen se multiplicaba.
+
+Estuvo ahí desde la importación. No se veía porque esas mismas ventas tenían el costo de otro producto o eran manuales sin costo; al arreglar los costos (14.11 y 14.17) el error afloró.
+
+**Arreglo de datos:** 7 ventas corregidas. El criterio fue que **el total manda** — es lo que se cobró y lo que cuadra con la hoja. Para las de varias líneas se probaron las combinaciones de líneas a dividir hasta que la suma diera el total exacto. Queda una sola descuadrada, OLIMPO 19 ago, por $999 — irrelevante.
+
+**764. Blindaje en el importador:** `parsearFilasHoja` ya no se cree el unitario de la hoja. Si `unitario × cantidad` no da el total, lo recalcula como `total / cantidad`. 15 pruebas con los casos reales.
+
+**Regla que sale de aquí:** cuando la hoja trae un dato redundante (unitario, cantidad y total: cualquiera de los tres se deduce de los otros dos), no se importan los tres a ciegas. Se importa el que cuadra con la contabilidad —el total— y los demás se validan contra él.
+
+**Y la lección de método:** el número que sube sin explicación es una alarma, no un regalo. Si una corrección debía bajar el margen y lo subió, hay que perseguir la diferencia hasta entenderla. Aquí la verificación encontró más que la auditoría.
+
 ---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*
