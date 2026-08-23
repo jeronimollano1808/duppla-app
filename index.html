@@ -3057,6 +3057,8 @@ const DUPPLA_DIA_INICIO_MES = 3;
 //      - Desde julio-2026: el ciclo cierra el día 3 y el siguiente arranca el 4.
 //      Junio-2026 es el puente entre ambas: va del 3 de junio al 3 de julio
 //      (31 días), para no perder las ventas del 3 de junio al cambiar de regla.
+// 726. Ya no se usa: la convención de ciclo es una sola (ver 725). Se deja
+//      declarada por si algún dato viejo la referencia.
 const DUPPLA_MES_TRANSICION = '2026-06';
 
 function getPeriodoFechas() {
@@ -6972,16 +6974,17 @@ function calcularRangoMeta(mesStr, diaInicio) {
   const [anio, mes] = mesStr.split('-').map(Number);
   const fmtFecha = fechaLocal;
   let inicio, fin;
-  if (mesStr === DUPPLA_MES_TRANSICION) {
-    inicio = new Date(anio, mes-1, diaInicio);       // día 3 del mes (incluido)
-    fin    = new Date(anio, mes,   diaInicio);       // día 3 del mes siguiente (incluido)
-  } else if (mesStr < DUPPLA_MES_TRANSICION) {
-    inicio = new Date(anio, mes-1, diaInicio);       // día 3 (convención vieja)
-    fin    = new Date(anio, mes,   diaInicio - 1);   // día 2 del mes siguiente
-  } else {
-    inicio = new Date(anio, mes-1, diaInicio + 1);   // día 4 (convención nueva)
-    fin    = new Date(anio, mes,   diaInicio);       // día 3 del mes siguiente (incluido)
-  }
+  // 725. CONVENCIÓN ÚNICA: del día 4 al día 3 del mes siguiente, siempre.
+  //      Antes había tres regímenes (día 3 al 2 para los meses viejos, un mes
+  //      puente en junio, día 4 al 3 de ahí en adelante). Eso hacía que mayo y
+  //      junio dieran distinto a los estados de resultados de Juanfe: los
+  //      registros del día 3 caían en un ciclo en la app y en otro en su hoja
+  //      ($1.624.000 de ventas y $3.744.308 de gastos bailando entre los dos).
+  //      Julio en adelante ya coincidía. Ángel pidió empatarlo.
+  //      Ningún día se pierde ni se cuenta dos veces: cada fecha pertenece a
+  //      exactamente un ciclo, igual que antes.
+  inicio = new Date(anio, mes-1, diaInicio + 1);   // día 4
+  fin    = new Date(anio, mes,   diaInicio);       // día 3 del mes siguiente (incluido)
   return { inicio: fmtFecha(inicio), fin: fmtFecha(fin) };
 }
 
