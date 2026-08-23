@@ -383,5 +383,14 @@ Palabras de Ángel: *"Van a haber meses en que quedamos en números negativos po
 
 **Sobre qué es "fijo":** Ángel llama gastos fijos a asesoría (Pago Juanfe), intereses, Shopify y pauta de Meta. Que el MONTO varíe (Meta cobra ~14 veces al mes, Shopify depende del dólar) no los vuelve variables — variable, en esta app, significa *que depende de cuánto se venda*. Por eso nunca se hardcodea un valor: `calcularGastosFijosRango` suma los gastos realmente registrados en el ciclo. Fuera de los fijos quedan la mercancía, el 4x1000, las bolsas y los fletes.
 
+### 14.8 Tres bugs de Inicio encontrados verificando EN PRODUCCIÓN (680–682)
+El harness en Node validó la lógica, pero estos tres solo aparecieron abriendo la app real con los datos reales. Lección: el harness no reemplaza mirar la app desplegada.
+
+1. **(680) Inicio se quedaba en $0 al entrar.** El listener de `onSnapshot` solo redibujaba con `if(currentPage === col || currentPage === 'dashboard')`. Como Inicio lee de casi todas las colecciones pero no se llama como ninguna, nunca entraba en la condición: se pintaba con `DATA` vacío al hacer login y ahí se quedaba hasta que navegabas a otra página y volvías. **Cualquier página futura que resuma varias colecciones hay que sumarla a esa condición a mano.**
+2. **(681) La comparación vs ciclo anterior siempre daba negativo.** Comparaba el ciclo actual a medias contra el anterior COMPLETO (el día 19 de agosto contra los 31 días de julio). Marcaba −54% cuando en realidad iba −16%. Ahora recorta el ciclo anterior a los mismos días corridos y lo dice en la etiqueta ("vs mismos 19 días del ciclo anterior").
+3. **(682) El aviso de stock bajo era ilegible.** Recortaba los nombres a dos palabras y con el catálogo real quedaba "WHEY 100% (1), WHEY 100% (1), WHEY 100% (1)". Ahora ordena por stock más bajo primero y muestra el nombre casi completo.
+
+**Nota de flujo de trabajo (agosto 2026):** Jero le dio acceso de escritura a la cuenta `certuche99`. Los cambios ahora se suben desde el navegador con la extensión Claude in Chrome (subir archivos a `main` desde la web de GitHub → Vercel despliega solo). La carpeta local del escritorio de Ángel es una copia de trabajo, **no** la fuente de verdad: antes de editar, verificar con `git log -1` que coincide con lo que hay en GitHub (ver trampa 8).
+
 ---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*
