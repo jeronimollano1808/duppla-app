@@ -10105,7 +10105,15 @@ function clientesSimilares(a, b) {
     if(tb.some(y => x === y || (x.length >= 4 && y.startsWith(x)) || (y.length >= 4 && x.startsWith(y)))) calces++;
   });
   if(calces >= 2) return true;
-  return calces >= 1 && Math.min(ta.length, tb.length) === 1;
+  if(calces >= 1 && Math.min(ta.length, tb.length) === 1) return true;
+  // 724. "Pedido a PRO FITNESS" vs "PROFITNESS.": el mismo proveedor escrito
+  //      con y sin espacio. Por tokens no calzan (PRO y FITNESS sueltos no se
+  //      parecen a PROFITNESS), asi que tambien se comparan sin espacios.
+  //      Se exige 8+ caracteres para que un pedazo corto no empareje con todo.
+  const ja = ta.join(''), jb = tb.join('');
+  if(ja.length >= 8 && jb.includes(ja)) return true;
+  if(jb.length >= 8 && ja.includes(jb)) return true;
+  return false;
 }
 
 function diasEntreFechasISO(f1, f2) {
@@ -10209,7 +10217,23 @@ function agruparGastosImport(filas) {
       Number(g.valor||0) === f.valor &&
       Math.abs(diasEntreFechasISO(g.fecha, f.fecha)) <= 3 &&
       clientesSimilares(g.desc, f.desc));
-    return { ...f, estado: ya ? 'ya' : 'falta', yaId: ya ? ya.id : null };
+    if(ya) return { ...f, estado:'ya', yaId: ya.id, choque:null };
+
+    // 723. Caso real encontrado en produccion: la app tenia
+    //      "Pedido a PRO FITNESS $4.613.000" el 10/07 y la hoja de Juanfe
+    //      "PROFITNESS. $4.917.500" el 9/07. Es la MISMA compra con montos
+    //      distintos, y como el valor no calza exacto se habria importado
+    //      encima, duplicando $4,6 millones de mercancia. Cuando hay un gasto
+    //      del mismo proveedor a pocos dias pero por otro valor, no se sube:
+    //      se marca para que Angel decida cual de los dos numeros es el bueno.
+    const choque = DATA.gastos.find(g =>
+      Math.abs(diasEntreFechasISO(g.fecha, f.fecha)) <= 3 &&
+      clientesSimilares(g.desc, f.desc) &&
+      Number(g.valor||0) !== f.valor);
+    if(choque) return { ...f, estado:'choque', yaId:null,
+      choque: { fecha: choque.fecha, desc: choque.desc, valor: Number(choque.valor||0) } };
+
+    return { ...f, estado:'falta', yaId:null, choque:null };
   }).sort((a,b) => a.fecha > b.fecha ? 1 : -1);
 }
 
@@ -10258,6 +10282,14 @@ window.previsualizarGastosImport = () => {
       + '<div style="font-size:18px;font-weight:800;color:var(--ink-3)">' + ya.length + '</div><div style="font-size:11px;color:var(--ink-3)">se omiten</div></div>'
     + '</div>';
 
+  const choques = gastosImportGrupos.filter(g => g.estado === 'choque');
+  if(choques.length) {
+    html += '<div style="background:var(--amber-bg);border:1px solid #FDE68A;border-radius:var(--radius);padding:11px 13px;margin-bottom:12px;font-size:12.5px;color:#92400E;line-height:1.45">'
+      + '<strong>' + choques.length + ' no cuadran con lo que ya tienes.</strong> '
+      + 'Mismo proveedor, a pocos días, pero por otro valor — casi seguro es la misma compra registrada con cifras distintas. '
+      + 'No las subo: primero decide cuál número es el bueno, si no te quedan las dos y la mercancía se cuenta doble.</div>';
+  }
+
   if(sinFecha.length) {
     html += '<div style="background:var(--amber-bg);border:1px solid #FDE68A;border-radius:var(--radius);padding:11px 13px;margin-bottom:12px;font-size:12.5px;color:#92400E;line-height:1.45">'
       + '<strong>' + sinFecha.length + ' fila(s) traen la fecha ilegible</strong> ('
@@ -10271,6 +10303,8 @@ window.previsualizarGastosImport = () => {
   gastosImportGrupos.forEach(g => {
     const b = g.estado === 'falta'
       ? '<span style="padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;background:#F0FDF4;color:var(--green)">Se sube</span>'
+      : g.estado === 'choque'
+      ? '<span style="padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;background:var(--amber-bg);color:var(--amber)">No cuadra</span>'
       : '<span style="padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;background:var(--surface-3);color:var(--ink-3)">Ya está</span>';
     const tipo = g.cat === 'importacion' ? 'Mercancía' : (g.esFijo ? 'Fijo' : 'Variable');
     const tipoColor = g.cat === 'importacion' ? 'var(--ink-3)' : (g.esFijo ? 'var(--blue)' : 'var(--amber)');
@@ -10279,7 +10313,8 @@ window.previsualizarGastosImport = () => {
       + '<td style="font-weight:500">' + g.desc + '</td>'
       + '<td style="font-size:11.5px;color:var(--ink-2)">' + (CATS[g.cat]||g.cat) + '</td>'
       + '<td style="font-size:11px;color:' + tipoColor + '">' + tipo + '</td>'
-      + '<td style="text-align:right;font-weight:600;white-space:nowrap">' + fmt(g.valor) + '</td>'
+      + '<td style="text-align:right;font-weight:600;white-space:nowrap">' + fmt(g.valor)
+        + (g.choque ? '<div style="font-size:10px;color:var(--amber);font-weight:400">la app tiene ' + fmt(g.choque.valor) + '</div>' : '') + '</td>'
       + '<td>' + b + '</td>'
     + '</tr>';
   });
