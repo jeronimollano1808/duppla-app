@@ -1591,6 +1591,15 @@ body{
               Si está vacío = modo creación, si tiene valor = modo edición -->
     <input type="hidden" id="p-id" value="">
     <div class="f-group"><label class="f-label">Nombre del producto *</label><input type="text" id="p-nombre" class="f-input" placeholder="Ej: Omega 3 Integral Médica"></div>
+    <!-- 756. Otros nombres: cómo se escribe este mismo producto en la hoja -->
+    <div class="f-group">
+      <label class="f-label">Otros nombres <span style="font-weight:400;color:var(--ink-3)">(opcional)</span></label>
+      <input type="text" id="p-alias" class="f-input" placeholder="Ej: GEL NORMAL INTEGRAL MEDICA, GEL VO2">
+      <div style="font-size:11.5px;color:var(--ink-3);margin-top:4px;line-height:1.4">
+        Separados por coma. Sirve para que al importar de la hoja se reconozca este producto
+        aunque allá esté escrito distinto, y no quede una venta sin costo.
+      </div>
+    </div>
     <div class="f-row">
       <!-- 346. Marca: select con marcas comunes + opción para escribir una personalizada -->
       <div class="f-group"><label class="f-label">Marca</label>
@@ -5795,6 +5804,8 @@ window.corregirPrecios = async () => {
 window.abrirNuevoProducto = () => {
   document.getElementById('p-id').value = '';
   document.getElementById('p-nombre').value = '';
+  const elAliasNuevo = document.getElementById('p-alias');
+  if(elAliasNuevo) elAliasNuevo.value = '';   // 756. otros nombres
   document.getElementById('p-stock').value = '0';
   document.getElementById('p-costo').value = '0';
   document.getElementById('p-pventa').value = '0';
@@ -5862,6 +5873,7 @@ window.guardarProducto = async () => {
   const stockTotal = Number(document.getElementById('p-stock').value)||0;
   const datos = {
     nombre,
+    alias: document.getElementById('p-alias')?.value.trim() || '',  // 756. otros nombres
     marca: document.getElementById('p-marca').value,
     stock: stockTotal,
     costo: Number(document.getElementById('p-costo').value)||0,
@@ -5914,6 +5926,8 @@ window.guardarProducto = async () => {
   // 87. Limpiamos el formulario y reseteamos a modo creación
   document.getElementById('p-id').value = '';
   document.getElementById('p-nombre').value = '';
+  const elAliasReset = document.getElementById('p-alias');
+  if(elAliasReset) elAliasReset.value = '';   // 756. otros nombres
   document.getElementById('p-stock').value = '0';
   document.getElementById('p-costo').value = '0';
   document.getElementById('p-pventa').value = '0';
@@ -5934,6 +5948,8 @@ window.editarProducto = (id) => {
   setTimeout(() => {
     document.getElementById('p-id').value = id;
     document.getElementById('p-nombre').value = prod.nombre || '';
+    const elAlias = document.getElementById('p-alias');
+    if(elAlias) elAlias.value = prod.alias || '';   // 756. otros nombres
     document.getElementById('p-stock').value = prod.stock || 0;
     document.getElementById('p-costo').value = prod.costo || 0;
     document.getElementById('p-pventa').value = prod.pventa || 0;
@@ -10591,17 +10607,47 @@ function productosSimilares(catalogo, consulta) {
 //      VAINILLA" y "WHEY 100% 4L CHOCOLATE". Sin costo la venta queda marcada
 //      y visible en "Ventas sin costo" (745); con el costo equivocado no la ve
 //      nadie nunca.
-function buscarProductoInventario(nombre) {
-  const exacto = DATA.inventario.find(p => normalizarNombreHoja(p.nombre) === normalizarNombreHoja(nombre));
+// 756. OTROS NOMBRES (alias). La hoja y el catálogo le dicen distinto a la
+//      misma cosa y no siempre se parecen lo suficiente como para adivinarlo:
+//      "GEL NORMAL INTEGRAL MEDICA" es el GEL VO2, "HYDRXYUT MUSCLETECH" es el
+//      QUEMADOR HYDROXYCUT. Eso no se puede deducir de las letras — hay que
+//      saberlo. Por eso cada producto guarda los otros nombres con que se
+//      escribe, en su propia ficha, y se mantiene desde Inventario. Así el
+//      conocimiento vive en los datos y no hardcodeado en el código.
+function nombresDeProducto(p) {
+  const alias = String(p?.alias || '').split(/[,;\n]/).map(s => s.trim()).filter(Boolean);
+  return [p?.nombre, ...alias].filter(Boolean);
+}
+
+// 757. Desempate por precio. Cuando quedan varios candidatos igual de buenos
+//      —"OMEGA 3 INTEGRAL MEDICA" puede ser el de 30 o el de 60 servicios— el
+//      precio al que se vendió lo resuelve solo: el de 30 vale $97.000 y el de
+//      60 vale $143.500. Solo desempata; nunca convierte un "no sé" en un "sí".
+function precioCalza(p, precio) {
+  if(!precio) return false;
+  return [p.pventa, p.pdist, p.pesp].some(v => Number(v) > 0 && Math.abs(Number(v) - precio) <= Math.max(1000, precio * 0.03));
+}
+
+function buscarProductoInventario(nombre, precioUnit) {
+  const norm = normalizarNombreHoja(nombre);
+  const exacto = DATA.inventario.find(p => nombresDeProducto(p).some(n => normalizarNombreHoja(n) === norm));
   if(exacto) return exacto;
   const cands = DATA.inventario
-    .map(p => ({ p, sueltas: calcePalabras(p.nombre, nombre) }))
-    .filter(c => c.sueltas !== null);
+    .map(p => ({ p, sueltas: Math.min(...nombresDeProducto(p).map(n => {
+      const c = calcePalabras(n, nombre);
+      return c === null ? Infinity : c;
+    })) }))
+    .filter(c => Number.isFinite(c.sueltas));
   // Cobertura perfecta le gana a cobertura parcial ("CAJA CRISP BAR" es
   // "CRISP BAR CAJA", no "CRISP BAR").
   const perfectos = cands.filter(c => c.sueltas === 0);
   const elegibles = perfectos.length ? perfectos : cands;
-  return elegibles.length === 1 ? elegibles[0].p : null;
+  if(elegibles.length === 1) return elegibles[0].p;
+  if(elegibles.length > 1 && precioUnit) {
+    const porPrecio = elegibles.filter(c => precioCalza(c.p, precioUnit));
+    if(porPrecio.length === 1) return porPrecio[0].p;
+  }
+  return null;
 }
 
 // ============================================================
@@ -10889,11 +10935,16 @@ window.convertirVentasEnCobros = async () => {
 // Las filas "GANANCIA X" son la excepción legítima: ahí Duppla solo recibe su
 // comisión de un producto que nunca compró, así que costo cero es correcto.
 // ============================================================
+// 758. En una venta de varios productos hace falta que TODAS las líneas tengan
+//      costo, no solo una. Con "alguna" bastaba y las líneas sin costo salían
+//      del cálculo: calcularMargenVenta las salta enteras, así que su venta
+//      terminaba contada como si no hubiera dejado un peso de margen. Al revés
+//      del caso de un solo producto, pero igual de falso.
 function costoConocidoVenta(v) {
   if(v.esMultiple && v.productosVenta?.length)
-    return v.productosVenta.some(p => p.costoUnit != null || p.prodId);
+    return v.productosVenta.every(p => p.costoUnit != null || p.prodId);
   if(v.esCombo && v.productosCombo?.length)
-    return v.productosCombo.some(p => p.costoUnit != null || p.prodId);
+    return v.productosCombo.every(p => p.costoUnit != null || p.prodId);
   return v.costoUnit != null || (!v.esManual && !!v.prodId);
 }
 
@@ -10904,8 +10955,8 @@ function esVentaComision(v) {
 
 // 747. Costo unitario sugerido para un nombre suelto: primero el catálogo de
 //      productos, luego el de combos (sumando el costo de sus componentes).
-function costoSugeridoNombre(nombre) {
-  const prod = buscarProductoInventario(nombre);
+function costoSugeridoNombre(nombre, precioUnit) {
+  const prod = buscarProductoInventario(nombre, precioUnit);
   if(prod && Number(prod.costo) > 0) return { costo: Number(prod.costo), via: prod.nombre };
   const combo = (DATA.combos||[]).find(c => productosSimilares(c.nombre, nombre));
   if(combo && combo.productos?.length) {
@@ -10930,11 +10981,19 @@ window.abrirVentasSinCosto = () => {
   const ing = v => ingresoVenta(v);
   sinCostoPropuestas = ventasSinCosto().map(v => {
     if(v.esMultiple && v.productosVenta?.length) {
-      const lineas = v.productosVenta.map(p => ({ ...p, sug: costoSugeridoNombre(p.nombre) }));
+      // 759. Las líneas que YA tienen costo se dejan como están; solo se
+      //      resuelven las que faltan (ver 758).
+      const lineas = v.productosVenta.map(p => ({
+        ...p,
+        sug: (p.costoUnit != null || p.prodId) ? null : costoSugeridoNombre(p.nombre, Number(p.precio)||0)
+      }));
       const costoTotal = lineas.reduce((s,l) => s + (l.sug ? l.sug.costo * Number(l.cant||1) : 0), 0);
-      return { v, lineas, costoTotal, resuelta: lineas.every(l => l.sug), via: lineas.map(l => l.sug?.via || '?').join(' + ') };
+      const faltantes = lineas.filter(l => l.costoUnit == null && !l.prodId);
+      return { v, lineas, costoTotal,
+        resuelta: faltantes.length > 0 && faltantes.every(l => l.sug),
+        via: faltantes.map(l => l.sug?.via || '?').join(' + ') };
     }
-    const sug = costoSugeridoNombre(v.producto);
+    const sug = costoSugeridoNombre(v.producto, Number(v.precio) || Math.round(Number(v.total||0)/Number(v.cant||1)));
     return { v, lineas: null, costoTotal: sug ? sug.costo * Number(v.cant||1) : 0, resuelta: !!sug, via: sug?.via || '' };
   }).sort((a,b) => ing(b.v) - ing(a.v));
 
@@ -11187,7 +11246,7 @@ window.ejecutarImportacion = async () => {
       const productosVenta = g.lineas.map(l => {
         // 720. Antes comparaba el nombre exacto y 6 ventas quedaron sin costo
         //      ("GLICINATO DE MAGNESIO" vs "GLICINATO DE MAGNESIO NUTRICOST").
-        const prod = buscarProductoInventario(l.producto);
+        const prod = buscarProductoInventario(l.producto, l.unit || Math.round(l.total / (l.cant||1)));
         return {
           prodId: prod ? prod.id : null, nombre: l.producto, cant: l.cant,
           precio: l.unit || Math.round(l.total / (l.cant||1)),

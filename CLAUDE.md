@@ -473,5 +473,26 @@ Un costo equivocado es peor que ninguno: no se ve en ninguna pantalla, se disuel
 
 **Regla general que sale de aquí:** cuando un emparejamiento produce un NÚMERO (un costo, un precio), el umbral tiene que ser mucho más alto que cuando produce una ETIQUETA (vincular un cliente). Un nombre mal vinculado se ve; un costo mal puesto no lo ve nadie.
 
+### 14.12 Otros nombres y desempate por precio (comentarios 756–759)
+
+Después de arreglar el emparejador quedaron 23 ventas sin costo. Ángel identificó una por una las que el algoritmo no podía adivinar — y no podía porque **no se deducen de las letras, hay que saberlo**:
+
+| Como lo escribe la hoja | Qué es de verdad |
+|---|---|
+| GEL NORMAL INTEGRAL MEDICA | GEL VO2 SIN CAFEÍNA |
+| GEL CAFEINA INTEGRAL MEDICA | GEL C30 CAFEÍNA |
+| HYDRXYUT MUSCLETECH | QUEMADOR HYDROXYCUT |
+| COLLAGENO SPORT INTEGRAL MEDICA | COLLAGEN SPORT |
+
+**756. Campo `alias` en cada producto** ("Otros nombres", separados por coma, en la ficha de Inventario). `buscarProductoInventario` compara contra el nombre y contra todos los alias. El conocimiento vive en los datos, no hardcodeado en el código: cuando aparezca otro nombre raro, se agrega desde la app sin tocar nada.
+
+**757. Desempate por precio.** El Omega 3 Integral Médica viene en dos presentaciones y la hoja escribe las dos igual. El precio las separa solo: 30 servicios (60 cápsulas) vale $97.000 / $81.000 distribuidor; 60 servicios (120 cápsulas) vale $143.500 / $116.100. `buscarProductoInventario(nombre, precioUnit)` usa el precio **solo para desempatar** entre candidatos igual de buenos — nunca para convertir un "no sé" en un "sí". Sin precio, "OMEGA 3 INTEGRAL MEDICA" sigue devolviendo null, que es lo correcto: es ambiguo.
+
+Precios de referencia que confirmó Ángel: Omega 3 vegano $77.000; Omega 3 Nutrify (60 servicios) $137.000.
+
+**758. `costoConocidoVenta` ahora exige que TODAS las líneas tengan costo**, no que alguna lo tenga. Antes, en una venta de varios productos, una línea sin costo se saltaba entera en `calcularMargenVenta` — su ingreso salía del margen y terminaba contada como si no hubiera dejado un peso. Es el error opuesto al de una venta de un solo producto (que se contaba con 100% de margen), pero igual de falso.
+
+**Los combos NO se costean.** Decisión de Ángel: *"El combo no lo coloques, porque son combos que tenemos en la página web y pueden valer más o menos, dependiendo de varias cosas."* Los `COMBO …` escritos a mano se quedan sin costo a propósito y aparecen listados en "Ventas sin costo" — no son un error pendiente.
+
 ---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*
