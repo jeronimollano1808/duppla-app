@@ -2905,7 +2905,10 @@ function startListeners() {
       if(col === 'inventario') checkStockAlerts();
       // 579. El badge de deudores en mora del menú depende de ventas — lo
       //      refrescamos aunque no estés parado en Deudores ni en Dashboard.
-      if(col === 'ventas') { buildNav(); chequearAlertaMoraDiaria(); chequearCierreDeCiclo(); }
+      if(col === 'ventas') { buildNav(); chequearAlertaMoraDiaria(); }
+      // 768. Se intenta desde cualquiera de las tres colecciones que necesita;
+      //      la propia función se encarga de no avisar dos veces ni a medias.
+      if(col === 'ventas' || col === 'gastos' || col === 'inventario') chequearCierreDeCiclo();
       // 642. El badge de recompras también depende de duracionDias en Inventario.
       if(col === 'inventario') buildNav();
       // 598. Generamos los gastos recurrentes del ciclo actual apenas
@@ -3067,6 +3070,14 @@ function chequearCierreDeCiclo() {
   const ant = getCicloActual(1);
   const ventasAnt = DATA.ventas.filter(v => v.fecha >= ant.inicio && v.fecha <= ant.fin);
   if(!ventasAnt.length) return;   // sin datos del ciclo anterior no hay nada que contar
+  // 768. OJO: los oyentes de Firestore llegan por separado y en cualquier
+  //      orden. La primera versión se disparaba con el snapshot de ventas y
+  //      DATA.gastos todavía vacío, así que los gastos de operación daban 0 y
+  //      la notificación decía que la utilidad era igual al margen — para
+  //      julio, $4.093.434 en vez de $1.642.031. Se espera a tener las dos
+  //      colecciones; si aún no llegan, no avisa y lo reintenta en el
+  //      siguiente snapshot.
+  if(!DATA.gastos.length || !DATA.inventario.length) return;
   localStorage.setItem('duppla_cierre_avisado', ciclo.inicio);
 
   const vendido = ventasAnt.reduce((s,v) => s + ingresoVenta(v), 0);

@@ -601,5 +601,9 @@ Pedido de Ángel:
 
 **El criterio, para lo que venga:** una notificación se gana el derecho a interrumpir solo si pide una acción que no puede esperar a que la persona se siente a mirar. Cobrar una mora sí. Revisar el mes que cerró sí. El stock bajo no — eso se mira cuando uno abre la app, y para eso está el aviso de Inicio. Antes de agregar una notificación nueva, la pregunta es *"¿esto exige que suelte lo que está haciendo?"*, no *"¿esto es información útil?"*.
 
+**768. Trampa del aviso de cierre, encontrada al probarlo en producción.** La primera versión se disparaba con el snapshot de `ventas` y `DATA.gastos` todavía vacío. Los oyentes de Firestore llegan por separado y en cualquier orden, así que los gastos de operación daban 0 y la notificación decía que la utilidad era igual al margen: para julio anunció **$4.093.434** cuando la utilidad real es **$1.642.031**. Ahora espera a tener ventas, gastos e inventario, y se intenta desde los tres oyentes — la propia función evita avisar dos veces.
+
+**Patrón general, ya visto dos veces en esta app** (aquí y en el bug 680 de Inicio): *cualquier cosa que resuma varias colecciones no puede confiar en el oyente de una sola.* O verifica que todas estén cargadas antes de calcular, o se ejecuta desde todas.
+
 ---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*
