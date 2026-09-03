@@ -3114,18 +3114,15 @@ function renderDashboard() {
       </div>
     </div>`;
 
-  // Gráfico de barras por canal
+  // 656. Ventas por canal — antes eran DOS tarjetas separadas (un gráfico de
+  //      barras solo con ingreso, y una tabla con ingreso+margen) mostrando
+  //      básicamente la misma info. Fusionadas en una: la tabla de
+  //      rentabilidad con una barrita de proporción de ingreso por fila.
   const canales = { web:0, directo:0, distribuidor:0 };
   pv.forEach(v => { if(canales[v.canal]!==undefined) canales[v.canal]+=ingresoVenta(v); });
   const maxC = Math.max(...Object.values(canales), 1);
   const cNames = { web:'Web', directo:'Directo', distribuidor:'Dist.' };
   const cColors = { web:'#BFDBFE', directo:'var(--lime-accent)', distribuidor:'#FDE68A' };
-  const barHtml = Object.entries(canales).map(([k,v]) => `
-    <div class="bar-col">
-      <div class="bar-val">${fmt(v)}</div>
-      <div class="bar-rect" style="height:${Math.max(4,(v/maxC)*75)}px;background:${cColors[k]}"></div>
-      <div class="bar-lbl">${cNames[k]}</div>
-    </div>`).join('');
 
   // 414. RENTABILIDAD POR CANAL — margen real (no solo volumen) de Web/Directo/Distribuidor
   //      Responde: ¿cuál canal deja más plata realmente, no solo cuál mueve más dinero?
@@ -3140,14 +3137,20 @@ function renderDashboard() {
     if(ingreso === 0) return '';
     const margenK = canalesMargen[k];
     const pctMargenK = ingreso > 0 ? Math.round((margenK/ingreso)*100) : 0;
+    const pctBarra = Math.round((ingreso/maxC)*100);
     return `
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)">
-      <span style="font-size:12px;font-weight:500;color:var(--ink)">${cNames[k]}</span>
-      <div style="text-align:right">
-        <span style="font-size:12px;color:var(--ink-3)">${fmt(ingreso)} ingreso</span>
-        <span style="font-size:12px;font-weight:700;color:${margenK>=0?'var(--green)':'var(--red)'};margin-left:8px">
-          ${canalesConCosto[k] ? fmt(margenK) + ' margen (' + pctMargenK + '%)' : 'margen N/D'}
-        </span>
+    <div style="padding:7px 0;border-bottom:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+        <span style="font-size:12px;font-weight:500;color:var(--ink)">${cNames[k]}</span>
+        <div style="text-align:right">
+          <span style="font-size:12px;color:var(--ink-3)">${fmt(ingreso)} ingreso</span>
+          <span style="font-size:12px;font-weight:700;color:${margenK>=0?'var(--green)':'var(--red)'};margin-left:8px">
+            ${canalesConCosto[k] ? fmt(margenK) + ' margen (' + pctMargenK + '%)' : 'margen N/D'}
+          </span>
+        </div>
+      </div>
+      <div style="height:5px;border-radius:3px;background:var(--surface-2);overflow:hidden">
+        <div style="height:100%;width:${pctBarra}%;background:${cColors[k]}"></div>
       </div>
     </div>`;
   }).join('') || '<div style="padding:10px;color:var(--ink-3);font-size:12px;text-align:center">Sin ventas en este período</div>';
@@ -3252,26 +3255,6 @@ function renderDashboard() {
       <div class="prog"><div class="prog-fill prog-lime" style="width:${Math.min(100,Math.round((tvMesActual/metaActual.ventasMeta)*100))}%"></div></div>
     </div>` : '';
 
-  // Últimas ventas del período
-  const lastV = pv.slice(0,8);
-  const tblHtml = lastV.length ? `
-    <div class="table-wrap">
-      <table class="tbl">
-        <thead><tr><th>Fecha</th><th>Cliente</th><th>Producto</th><th>Método</th><th>Total</th></tr></thead>
-        <tbody>${lastV.map(v=>{
-          const mpIco = { efectivo:'💵', transferencia:'📲', mixto:'🔀' };
-          return `<tr>
-            <td style="color:var(--ink-3)">${v.fecha||''}</td>
-            <td style="font-weight:500">${v.cliente||'—'}</td>
-            <td>${v.producto||''}</td>
-            <td style="font-size:12px">${mpIco[v.metodoPago||'efectivo']||'💵'} ${v.metodoPago||'Efectivo'}</td>
-            <td style="font-weight:600;color:var(--lime)">${fmt(ingresoVenta(v))}</td>
-          </tr>`;
-        }).join('')}
-        </tbody>
-      </table>
-    </div>` : '<div class="empty-state"><div class="empty-state-icon">🛒</div><div class="empty-state-text">Sin ventas en este período</div></div>';
-
   document.getElementById('page-dashboard').innerHTML = `
     <div class="page-header">
       <div>
@@ -3320,16 +3303,12 @@ function renderDashboard() {
     ${metaHtml}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px" class="dash-grid">
       <div class="card">
-        <div class="card-title">Ventas por canal</div>
-        <div class="bar-chart">${barHtml}</div>
+        <div class="card-title">Ventas por canal — ${label}</div>
+        ${canalRentabilidadHtml}
       </div>
       <div class="card">
         <div class="card-title">Flujo de caja — ${label}</div>
         ${cajaHtml}
-      </div>
-      <div class="card">
-        <div class="card-title">Rentabilidad por canal — ${label}</div>
-        ${canalRentabilidadHtml}
       </div>
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
@@ -3344,13 +3323,6 @@ function renderDashboard() {
         </div>
         <div id="dash-top-productos">${topHtml}</div>
       </div>
-    </div>
-    <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-        <div class="card-title" style="margin:0">Ventas del período</div>
-        <button class="btn btn-sm" onclick="showPage('ventas')">Ver todas →</button>
-      </div>
-      ${tblHtml}
     </div>`;
 }
 // ============================================================
