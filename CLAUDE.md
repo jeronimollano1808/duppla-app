@@ -336,4 +336,390 @@ Limitaciones conocidas, no bugs, a tener presente:
 - Los pedidos a proveedor normalmente se pagan por anticipado — por eso generan gasto automático al crearse (ver sección 3/9).
 
 ---
+
+## 14. SESIÓN AGOSTO 2026 (con Ángel) — INICIO, GASTOS FIJOS Y FIX DE DISTRIBUIDORES
+
+### 14.1 Fix crítico: canal y distribuidor "pegados" entre ventas (comentarios 657–660)
+`abrirModalVenta` reseteaba fecha/producto/pagado pero **no** `v-canal`, `v-cliente`, `v-nota` ni `v-dist-id`. Como el grupo de distribuidor solo se OCULTA (`display:none`) y `guardarVenta` leía el select sin mirar el canal, **toda venta hecha después de una de distribuidor quedaba vinculada a ese distribuidor**, invisiblemente. Cuatro puntos corregidos:
+- `abrirModalVenta`: resetea canal a `directo`, limpia cliente, nota y el select de distribuidor (657).
+- `guardarVenta`: `distribuidorId` solo se lee si `canal === 'distribuidor'` (658).
+- `editarVentaMultiple`: limpia el select cuando la venta no es de distribuidor, en vez de heredarlo (659).
+- `guardarEditarVenta`: al cambiar el canal en el modal de edición se limpia el `distribuidorId` viejo (660).
+
+**Regla que sale de aquí:** en todo modal reutilizado crear/editar hay que resetear **TODOS** los campos al abrir en modo creación, incluidos los que están ocultos. Un campo oculto sigue teniendo valor y sigue siendo leído. Es el bug 12 (selector pegado en Gastos) repetido.
+
+### 14.2 Gastos fijos y punto de equilibrio (comentarios 665–667, 669–675)
+Nuevo campo **`esFijo`** (bool) en `gastos` y en `gastosRecurrentes`.
+- `esGastoFijo(g)`: si `g.esFijo` es booleano, manda. Si no (gastos históricos), se deduce con `RE_GASTO_FIJO_AUTO` sobre `desc` — facebook, meta ads, shopify, interés, juanfe, asesoría, la real, arriendo, nómina, suscripción. Así el punto de equilibrio funciona hacia atrás sin re-etiquetar nada. **Meta cobra ~14 veces al mes en montos chicos**, por eso la deducción por descripción importa.
+- `calcularGastosFijosRango(inicio, fin)`, `calcularMargenPctPromedio()` (90 días, extraído de `renderMetas` para que Inicio y Metas usen el mismo número), `getCicloActual(offset)`.
+- **Fix (675):** el punto de equilibrio de Metas usaba `m.gastoMax` (techo de gasto presupuestado, que incluye mercancía) como si fueran gastos fijos. Con compras de proveedor de varios millones eso lo inflaba hasta volverlo inútil. Ahora usa los fijos reales del ciclo, con fallback a `gastoMax` si no hay ninguno marcado.
+
+**Gastos fijos reales de Duppla (referencia, agosto 2026):** Pago Juanfe / Asesoría La Real $1.000.000 · Intereses mensuales $525.000 · Meta Ads ~$739.000 (suma de ~14 cobros) · Shopify ~$90.000. Total ≈ $2.354.000/mes. **No** son fijos: mercancía (Profitness, Integral Médica), 4x1000, bolsas, fletes.
+
+### 14.3 Página Inicio (comentarios 661–664, 668)
+Nueva página `inicio`, primera del MENU y **página por defecto al entrar** (antes era `dashboard`, que sigue existiendo igual para el detalle). Contiene: saludo por hora + ventana del ciclo, alertas accionables (mora / stock bajo / recompras) o estado "todo al día", botón grande de Registrar venta + Cobrar + Gasto, cuatro números del ciclo (vendido con variación vs ciclo anterior, margen bruto, gastos con cuánto es fijo, por cobrar) y la barra de punto de equilibrio.
+`renderInicio` **no duplica lógica de guardado** — todos sus botones abren los modales de siempre.
+
+### 14.4 Fix: `fmt()` no redondeaba (comentario 676)
+`fmt()` hacía `toLocaleString('es-CO')` sobre el número crudo, así que cualquier valor calculado (punto de equilibrio, promedios) salía como `$5.170.673,433`. El peso colombiano no lleva decimales: ahora `fmt` redondea en la fuente. Esto arregla decimales latentes en toda la app, no solo en Inicio.
+
+### 14.5 Cómo se probó (patrón reutilizable)
+No hay ambiente de staging, así que `renderInicio` se validó con un **harness en Node**: se extraen por conteo de llaves las funciones necesarias del `<script type="module">`, se stubean `document.getElementById` y `DATA` con datos parecidos a los reales, se corre la función y se revisa el HTML resultante (sin `undefined`/`NaN`, con los textos esperados) + un screenshot con Playwright usando el CSS real de la app. Recomendado repetir este patrón antes de tocar producción.
+
+### 14.6 Pendiente inmediato — decidido con Ángel, en orden
+1. **Menú a 5 cajones** (Inicio · Negocio · Stock · Plata · Ajustes) — las 13 secciones se agrupan; el código de cada página no se toca, solo cómo se llega.
+2. **Corte mensual completo** el día 3: automático, comparación contra el ciclo anterior, punto de equilibrio, top productos, top distribuidores, venta directa vs distribuidores, gastos; exportable y compartible por WhatsApp.
+3. **Push real con la app cerrada.** Hoy **no existe**: la app solo usa `Notification` del navegador desde la página abierta — no hay service worker, ni manifest PWA, ni FCM. Hay que construirlo. **Jero y Ángel usan iPhone**, así que iOS exige que la PWA esté agregada a la pantalla de inicio para que el push funcione.
+
+### 14.7 Compra de mercancía ≠ gasto (comentarios 677–679) — REGLA DE NEGOCIO
+Palabras de Ángel: *"Van a haber meses en que quedamos en números negativos porque nos tocó comprar mercancía, pero no estamos perdiendo dinero: tenemos dinero en mercancía."*
+
+`esCompraMercancia(g)` — un gasto es compra de mercancía si tiene `pedidoId`/`esAbonoPedido`, o si su categoría es `importacion`. Consecuencias:
+- **No entra al punto de equilibrio.** Su costo ya está descontado dentro del margen; contarla otra vez sería contarla dos veces (era exactamente el error del `gastoMax`, ver 14.2).
+- **No cuenta como pérdida.** Inicio muestra dos líneas separadas en "Resultado del ciclo":
+  - **Utilidad real** = margen de lo vendido − gastos de operación (todo menos mercancía). Es el número que dice si el negocio dio plata.
+  - **Caja del ciclo** = lo que entró − todo lo que salió, mercancía incluida. Puede estar en rojo sin que se haya perdido nada.
+  - Cuando la caja está en rojo pero la utilidad real es positiva, la tarjeta lo dice con todas las letras y muestra el inventario valorizado a costo.
+
+**Sobre qué es "fijo":** Ángel llama gastos fijos a asesoría (Pago Juanfe), intereses, Shopify y pauta de Meta. Que el MONTO varíe (Meta cobra ~14 veces al mes, Shopify depende del dólar) no los vuelve variables — variable, en esta app, significa *que depende de cuánto se venda*. Por eso nunca se hardcodea un valor: `calcularGastosFijosRango` suma los gastos realmente registrados en el ciclo. Fuera de los fijos quedan la mercancía, el 4x1000, las bolsas y los fletes.
+
+### 14.8 Tres bugs de Inicio encontrados verificando EN PRODUCCIÓN (680–682)
+El harness en Node validó la lógica, pero estos tres solo aparecieron abriendo la app real con los datos reales. Lección: el harness no reemplaza mirar la app desplegada.
+
+1. **(680) Inicio se quedaba en $0 al entrar.** El listener de `onSnapshot` solo redibujaba con `if(currentPage === col || currentPage === 'dashboard')`. Como Inicio lee de casi todas las colecciones pero no se llama como ninguna, nunca entraba en la condición: se pintaba con `DATA` vacío al hacer login y ahí se quedaba hasta que navegabas a otra página y volvías. **Cualquier página futura que resuma varias colecciones hay que sumarla a esa condición a mano.**
+2. **(681) La comparación vs ciclo anterior siempre daba negativo.** Comparaba el ciclo actual a medias contra el anterior COMPLETO (el día 19 de agosto contra los 31 días de julio). Marcaba −54% cuando en realidad iba −16%. Ahora recorta el ciclo anterior a los mismos días corridos y lo dice en la etiqueta ("vs mismos 19 días del ciclo anterior").
+3. **(682) El aviso de stock bajo era ilegible.** Recortaba los nombres a dos palabras y con el catálogo real quedaba "WHEY 100% (1), WHEY 100% (1), WHEY 100% (1)". Ahora ordena por stock más bajo primero y muestra el nombre casi completo.
+
+**Nota de flujo de trabajo (agosto 2026):** Jero le dio acceso de escritura a la cuenta `certuche99`. Los cambios ahora se suben desde el navegador con la extensión Claude in Chrome (subir archivos a `main` desde la web de GitHub → Vercel despliega solo). La carpeta local del escritorio de Ángel es una copia de trabajo, **no** la fuente de verdad: antes de editar, verificar con `git log -1` que coincide con lo que hay en GitHub (ver trampa 8).
+
+### 14.9 REGLA CONTABLE: venta ≠ cobro (comentarios 727–744) — LA MÁS IMPORTANTE DE ESTA SESIÓN
+
+**El problema.** Una venta se cuenta UNA vez, el día que sale la mercancía, por su valor total (`ingresoVenta`, 566). Si el cliente no paga todo ese día queda `saldo`, pero el ingreso ya se reconoció. Cuando después paga, eso NO es ingreso nuevo: es caja contra un saldo que ya existía.
+
+En la hoja de Google no había dónde poner un pago suelto, así que se anotaba como una fila de venta más. Siete movimientos por **$3.216.000** estaban contados dos veces (o a punto de estarlo):
+
+| Fecha | Concepto | Valor | Qué era |
+|---|---|---|---|
+| 20/05 | ABONO SANTA | $500.000 | Santa paga mercancía de marzo/abril |
+| 27/05 | ABONO ANGEL | $400.000 | socio repone consumo propio |
+| 03/06 | ABONO SANTA | $1.400.000 | ídem Santa |
+| 03/06 | ABONO JERONIMO | $100.000 | socio repone consumo propio |
+| 22/06 | ABONO SANTAMARIA | $250.000 | ídem Santa |
+| 01/07 | ABONO ANGEL CERTUCHE | $350.000 | socio repone consumo propio |
+| 08/07 | RESTANTE WHEY ELITE 5L | $216.000 | saldo de producto ya entregado |
+
+Evidencia: Santa (Daniel Santamaría) recibió $2.338.000 de mercancía en marzo–abril (19/03 $278.000 · 31/03 $1.060.000 · 09/04 $1.000.000), ya contados como venta en su mes. Ángel y Jerónimo sacan producto a costo para consumo propio (hoja "consumo socios": $970.665 y $393.295) y cuando reponen la plata es reembolso, no venta.
+
+**La solución.** Campo `tipoMov` en la colección `ventas`:
+- ausente o `'venta'` → venta de producto (comportamiento de siempre)
+- `'abono'` → cobro de la cuenta de un cliente
+- `'reembolso'` → socio repone su consumo
+
+`esCobro(v)` es la fuente única de verdad. **La separación ocurre en UN solo punto**: el listener de `onSnapshot` (730) parte la colección en `DATA.ventas` y `DATA.cobros`. Se hizo así a propósito: hay 56 lugares distintos leyendo `DATA.ventas` y confiar en que cada uno filtre es garantizar que algún día uno se olvide. Los cobros suman en **caja** (Inicio 731, flujo de caja del dashboard 733) y nunca en vendido, margen, metas, top de productos ni ranking de distribuidores.
+
+**Dónde se registra un cobro ahora:** modal `modal-cobro` (735/736), botón en Deudores y en Ventas. Si la venta SÍ está en la app, lo correcto sigue siendo `Cobrar → + Abono`, que además baja el saldo del cliente — el modal lo avisa y hasta detecta el caso (738).
+
+**Defensas para que no vuelva a pasar:**
+- El importador (739–742) reconoce `ABONO|RESTANTE|SALDO|PAGO DE CUENTA|REEMBOLSO` al principio del producto, los saca del bloque de ventas y los sube como cobro, con el tipo ya sugerido.
+- Detector permanente (743): cada vez que se abre Ventas se revisa si se coló un cobro registrado como venta y se ofrece arreglarlo en un clic.
+- `tipoCobroSugerido` marca reembolso si el nombre es de un socio.
+
+**Trampa que casi se cuela (744):** `eliminarDoc('ventas', id)` buscaba el snapshot solo en `DATA.ventas`. Como los cobros ya no viven ahí, el snapshot salía `null` y el registro se borraba **sin pasar por la papelera** — irrecuperable. Cualquier separación futura de una colección en memoria tiene que revisar quién busca por id en ella.
+
+**Verificación (agosto 2026).** Tras separar cobros y cargar mayo, hoja vs app por ciclo, comparando solo ventas reales:
+
+| Ciclo | Hoja | App | Diferencia |
+|---|---|---|---|
+| 4 may – 3 jun | $16.260.600 | $16.145.600 | −$115.000 (MAIDE INPEC quedó fechada 5 jun) |
+| 4 jun – 3 jul | $15.879.350 | $15.867.354 | −$11.996 |
+| 4 jul – 3 ago | $14.097.410 | $14.097.406 | −$4 |
+| 4 ago – 3 sep | $11.790.392 | $11.791.384 | +$992 |
+
+Y contra Juanfe: su mayo ($17.160.600) menos los dos abonos que él sí sumó ($900.000) da $16.260.600 — **exactamente** lo mismo que la hoja de ventas sin abonos. Los $1.400.000 que no cuadraban eran una sola fila: el ABONO SANTA del 3/06, que la hoja de ventas cobra y la de Juanfe deja en blanco.
+
+### 14.10 El margen estaba inflado (comentarios 745–749)
+
+Cuando una venta se registra a mano con un nombre que no calza con el inventario ("HYDRXYUT MUSCLETECH" vs "QUEMADOR HYDROXYCUT"), o es un combo escrito a mano, queda sin `costoUnit`. `calcularMargenVenta` devuelve `null` y **todas** las pantallas caen al mismo respaldo: costo cero. Esa venta aparece con 100% de margen.
+
+Alcance real medido en producción: **$9.4M de $57.9M vendidos (16%)** sin costo conocido. La plata está bien; el margen y la utilidad real se ven mejores de lo que son.
+
+- `ventasSinCosto()` las detecta; `costoSugeridoNombre` propone el costo buscando primero en inventario y luego en el catálogo de combos (sumando el costo de sus componentes).
+- `abrirVentasSinCosto()` muestra el impacto y `aplicarCostosSugeridos()` lo guarda.
+- **Excepción legítima:** las filas `GANANCIA X` son comisión pura sobre producto que Duppla nunca compró. Costo cero ahí es correcto — `esVentaComision` las excluye.
+- **No se escribe `prodId`** al arreglar (748): esas ventas nunca descontaron stock, y ponerles `prodId` haría que al borrarlas `restaurarStockVenta` subiera el inventario por mercancía que nunca volvió. Por lo mismo el importador ahora guarda `stockDescontado` y `restaurarStockVenta` lo respeta (749).
+
+### 14.11 El emparejador de productos emparejaba productos distintos (comentarios 750–754)
+
+Encontrado al revisar las sugerencias de 14.10 **antes** de aplicarlas: propuso ponerle a una venta de `CREATINA PLATINUM MUSCLETECH` el costo de `CAFEINA PLATINUM MUSCLETECH` ($50.000). El producto correcto sí existe (`CREATINA PLATINUM MUSCLETECH 450g`) pero la regla vieja de números lo descartaba —uno trae 450 y el otro no— y caía en la cafeína.
+
+La versión anterior de `productosSimilares` aceptaba con `calces >= mínimo − 1`: permitía que UNA palabra cualquiera no calzara. Con el catálogo real (66 productos) eso emparejaba **30 pares**. La mayoría son sabores del mismo producto y cuestan igual, pero no todos:
+
+| | |
+|---|---|
+| `CRISP BAR` ($6.175) | `CRISP BAR CAJA.` ($74.100) |
+| `OMEGA 3 (NUTRIFY 120 CÁPS)` ($89.050) | `OMEGA 3 (120 CAPSULAS VEGANO)` ($55.000) |
+| `CREATINA PLATINUM MUSCLETECH` | `CAFEINA PLATINUM MUSCLETECH` |
+
+Un costo equivocado es peor que ninguno: no se ve en ninguna pantalla, se disuelve dentro del margen. Sin costo, la venta aparece en "Ventas sin costo" y se puede arreglar.
+
+**Reescritura (750–754):**
+1. **Asimétrica.** `productosSimilares(catalogo, consulta)`. Todas las palabras de la consulta tienen que calzar; al catálogo se le permiten palabras de más (marca, presentación).
+2. **Una palabra suelta, y solo al final.** Ahí es donde la hoja pega la marca (`GLICINATO DE MAGNESIO NUTRICOST` vs `GLICINATO DE MAGNESIO (180 CAPS)`). En el medio o al principio es la que dice qué es la cosa — perdonarla fue lo que unió CREATINA con CAFEINA, y `WHEY ELITE 2L VAINILLA` con `WHEY 100% 2L POTE VAINILLA`.
+3. **Números como subconjunto, no como igualdad.** Los de la consulta tienen que estar en el catálogo. Así `CREATINA PLATINUM MUSCLETECH` (sin cifras) sí puede ser la de 450g, pero `WHEY ELITE 2L` nunca es la de 5L.
+4. **Los gramos no son tamaño** (`numerosTamano`, 753). La hoja escribe `CREATINA IRON NUTRITION 500G` y el inventario solo `CREATINA IRON NUTRITION`. Litros y libras SÍ cuentan: ahí está la diferencia entre el tarro de 2L y el de 5L.
+5. **Ante dos candidatos igual de buenos, ninguno** (`buscarProductoInventario`, 752). Antes devolvía el primero de la lista — escoger al azar entre `WHEY 100% 4L VAINILLA` y `WHEY 100% 4L CHOCOLATE`. Cobertura perfecta le gana a parcial, para que `CAJA CRISP BAR` sí encuentre `CRISP BAR CAJA.`.
+
+**Propiedades verificadas contra el catálogo real (66 productos):** los 66 se encuentran a sí mismos, **cero** cruces de sabor, y los pares peligrosos de arriba ya no se emparejan. El test vive en el patrón de harness de 14.5.
+
+**Regla general que sale de aquí:** cuando un emparejamiento produce un NÚMERO (un costo, un precio), el umbral tiene que ser mucho más alto que cuando produce una ETIQUETA (vincular un cliente). Un nombre mal vinculado se ve; un costo mal puesto no lo ve nadie.
+
+### 14.12 Otros nombres y desempate por precio (comentarios 756–759)
+
+Después de arreglar el emparejador quedaron 23 ventas sin costo. Ángel identificó una por una las que el algoritmo no podía adivinar — y no podía porque **no se deducen de las letras, hay que saberlo**:
+
+| Como lo escribe la hoja | Qué es de verdad |
+|---|---|
+| GEL NORMAL INTEGRAL MEDICA | GEL VO2 SIN CAFEÍNA |
+| GEL CAFEINA INTEGRAL MEDICA | GEL C30 CAFEÍNA |
+| HYDRXYUT MUSCLETECH | QUEMADOR HYDROXYCUT |
+| COLLAGENO SPORT INTEGRAL MEDICA | COLLAGEN SPORT |
+
+**756. Campo `alias` en cada producto** ("Otros nombres", separados por coma, en la ficha de Inventario). `buscarProductoInventario` compara contra el nombre y contra todos los alias. El conocimiento vive en los datos, no hardcodeado en el código: cuando aparezca otro nombre raro, se agrega desde la app sin tocar nada.
+
+**757. Desempate por precio.** El Omega 3 Integral Médica viene en dos presentaciones y la hoja escribe las dos igual. El precio las separa solo: 30 servicios (60 cápsulas) vale $97.000 / $81.000 distribuidor; 60 servicios (120 cápsulas) vale $143.500 / $116.100. `buscarProductoInventario(nombre, precioUnit)` usa el precio **solo para desempatar** entre candidatos igual de buenos — nunca para convertir un "no sé" en un "sí". Sin precio, "OMEGA 3 INTEGRAL MEDICA" sigue devolviendo null, que es lo correcto: es ambiguo.
+
+Precios de referencia que confirmó Ángel: Omega 3 vegano $77.000; Omega 3 Nutrify (60 servicios) $137.000.
+
+**758. `costoConocidoVenta` ahora exige que TODAS las líneas tengan costo**, no que alguna lo tenga. Antes, en una venta de varios productos, una línea sin costo se saltaba entera en `calcularMargenVenta` — su ingreso salía del margen y terminaba contada como si no hubiera dejado un peso. Es el error opuesto al de una venta de un solo producto (que se contaba con 100% de margen), pero igual de falso.
+
+**Los combos NO se costean.** Decisión de Ángel: *"El combo no lo coloques, porque son combos que tenemos en la página web y pueden valer más o menos, dependiendo de varias cosas."* Los `COMBO …` escritos a mano se quedan sin costo a propósito y aparecen listados en "Ventas sin costo" — no son un error pendiente.
+
+### 14.13 Escribir el costo a mano (comentario 760)
+
+La herramienta de "Ventas sin costo" sabía señalar el hueco pero no había forma de taparlo: si el producto no está en el catálogo, la venta se quedaba ahí para siempre. Y hay ventas cuyo costo **solo lo sabe quien la compró**: encargos sueltos que Duppla no vende (un shaker, una creatina Darkness, una L-citrulina que pidió un cliente).
+
+Ahora cada fila no reconocida trae una casilla para escribir **cuánto costó una unidad**. `lineaEditableSinCosto` decide si se puede: en una venta de varios productos solo se ofrece cuando falta **exactamente una** línea — con dos, un solo número no alcanzaría para repartirlo.
+
+**Equivalencias que confirmó Ángel (segunda tanda):**
+
+| Hoja | Producto | Nota |
+|---|---|---|
+| CRISPI BARRA PROTEINA | CRISP BAR | la unidad |
+| BARRAS DE PROTEINA CAJA | CRISP BAR CAJA. | la caja de 12 |
+| ASHWAGANDA 180 CAPS | ASHWAGANDHA | única presentación que venden |
+
+**Sin costo a propósito** (no son errores pendientes): los `COMBO …` de la página web (el precio varía), y los encargos sueltos — SHAKER, CREATINA DARKNESS 200 G, L-CITRULINA — que Duppla no vende de catálogo.
+
+**Pendiente real:** `WHEY ELITE 8LBS VAINILLA` ($404.250) se ha vendido al menos dos veces y **no existe en el inventario**. Y `STNTHA 6 - 5L` (error de dedo por SYNTHA) no se puede resolver solo porque no dice el sabor; vainilla cuesta $286.473 y chocolate $283.000.
+
+**Hallazgo de negocio:** OLIMPO GYM compró 2 SYNTHA 6 5L a $288.000 c/u el 2 de junio. Cuestan $283.000–$286.473. Eso es vender **prácticamente a costo** — entre $1.500 y $5.000 de margen por unidad. Revisar el precio de distribuidor de ese producto.
+
+### 14.14 Cierre de las ventas sin costo (comentario 761)
+
+Costos que dio Ángel para los encargos sueltos: **L-citrulina $55.000**, **Creatina Darkness $95.000**, **shaker $0** (era un obsequio, se revendió a $20.000). **SYNTHA 6 5L: $286.473** — es el que resuelve el `STNTHA 6 - 5L` mal escrito de OLIMPO.
+
+**761.** El costo manual ahora distingue el texto vacío del cero escrito: `''` y `'0'` dan el mismo número pero significan cosas distintas. Vacío es *"no lo sé"*; un 0 escrito a propósito es *"esto no me costó nada"* — un obsequio, una comisión. Sin esa distinción no había forma de cerrar una venta de costo cero y quedaba marcada como pendiente para siempre.
+
+**WHEY ELITE 8 LBS:** presentación **descontinuada** por el proveedor. Se vendió solo a JOHAN ARANGO GO UP durante unos meses, a $404.250. Hoy la reemplaza la de 5 L. No está en inventario porque ya no se compra — falta su costo histórico para cerrar esas ventas.
+
+### 14.15 REGLA DE NEGOCIO: el SYNTHA a OLIMPO es un gancho, no un error
+
+La app detectó que a OLIMPO GYM se le vende SYNTHA 6 5L a **$288.000** cuando cuesta **$286.473** — margen de $1.527 por unidad, prácticamente a costo. **Es deliberado.** Palabras de Ángel:
+
+> *"Ese producto lo estoy vendiendo a costo, pero solamente a ellos. Es como si fuera un gancho, ya que a ellos les vendo muchos más productos, entonces les dejo ese más económico para que me compren las creatinas, que sí me dejan más margen."*
+
+**No es un precio para corregir.** Cualquier alerta futura de "margen bajo" o "vendido por debajo de costo" tiene que poder excluir este caso, o al menos no tratarlo como error. Antes de señalar un precio bajo como problema, mirar si ese cliente compra volumen en otras referencias.
+
+### 14.16 El distribuidor se escoge de una lista, y va primero (comentarios 762–763)
+
+Pedido de Ángel, y la raíz de dos problemas que salieron en el sondeo:
+
+> *"Cuando se vaya a hacer la compra de un distribuidor, primero se selecciona eso, y que aparezca un selector con los nombres ya registrados para no registrarlo de una manera diferente y crear más confusión."*
+
+**Cómo estaba:** el selector de distribuidor vivía **al final** del formulario, debajo del bloque de pago, con la etiqueta *"Opcional — para llevar historial por distribuidor"*. El nombre del cliente se escribía aparte, a mano, en un campo libre. Resultado medido en producción: **19 ventas por $5.683.304** con canal distribuidor y sin vincular a nadie, y distribuidores duplicados por escribir el nombre distinto (`SEBAS BEDOYA` / `SEBASTIAN BEDOYA`, `GREEN ROOTS` / `SERGIO GREEN ROOTS`).
+
+**762.** El selector sube justo debajo del canal, deja de ser opcional y `guardarVenta` bloquea el guardado si el canal es distribuidor y no se escogió ninguno. Al escoger, `elegirDistribuidorVenta` **llena el nombre del cliente y lo bloquea** — el nombre de la venta y el del distribuidor ya no se pueden separar. La lista va ordenada alfabéticamente. Y hay un *"Créalo aquí"* que abre el modal de distribuidor y **vuelve a la venta** con el nuevo ya seleccionado, sin perder lo que se llevaba escrito (`volverAVentaTrasDistribuidor`).
+
+**763.** Para venta directa el campo sigue siendo libre —siempre entra gente nueva— pero ahora trae `<datalist>` con todos los clientes y distribuidores ya registrados, y `revisarClienteParecido` avisa mientras se escribe si el nombre se parece a uno que ya existe, con un botón para usar el existente. Reutiliza `clientesSimilares` (709). Es la misma defensa que el importador, pero en el registro a mano.
+
+**Regla que sale de aquí:** cuando dos campos tienen que decir lo mismo (el nombre del cliente y el del distribuidor), no se piden dos veces — se pide uno y el otro se deriva. Pedirlos por separado garantiza que algún día no coincidan.
+
+### 14.17 Decisiones de Ángel en el sondeo de cierre (23 ago 2026)
+
+Respuestas una por una, para no volver a preguntarlas:
+
+| Tema | Decisión |
+|---|---|
+| 6 pagos descuadrados | Los seis pagaron completo. $779.659 recuperados en caja. |
+| Ventas de distribuidor sin vincular | Creados MATEO CARDENAS, ALEJANDRO PEREA y STIVEN GALLEGO (este último, otro profesor con gimnasio propio). `CAMILO ENTRENADOR` = Camilo Gallego → renombrado a **CAMILO GALLEGO ENTRENADOR**. `J ENTRENADOR` = Juan Gabriel Entrenador. `NAGA` = Nagatomo. |
+| Jerónimo Arroyave, venta del 5 may | Fue venta real hecha por el socio, la plata entró. Pasada a **canal directo** para no meter al socio en el ranking de distribuidores. |
+| Pre Entreno Electrón | Costaba **$87.137**, no $103.000. Eran 5 ventas con el costo del Intenze pegado. |
+| Distribuidores duplicados | Misma persona. Quedan **SEBASTIAN BEDOYA** y **GREEN ROOTS**. |
+| Whey Elite 8 lbs | Costaba **$346.500**. Presentación descontinuada, solo se le vendía a Go Up. |
+| Precios por distribuidor | **No** se implementan. Ángel lo maneja a ojo al facturar. |
+| Amino X | Estaba con precio de distribuidor = costo. Real: costo **$91.000**, distribuidor **$98.000**, público **$130.000**. |
+| Creatina MuscleTech | `CREATINA PLATINUM MUSCLETECH 450g` y `CREATINA 90 SERVICIOS MUSCLETECH NUEVO` son **la misma referencia**. Fusionadas: 14 unidades a **$97.000** (precio del último pedido, no promedio ponderado). |
+| Alerta de producto estancado | **No** la quiere. |
+| David Inpec / Inpec / Maide Inpec | **Tres personas distintas** del mismo lugar. No unificar. |
+
+**Trampa encontrada al fusionar:** 10 ventas de Creatina Platinum seguían con `prodId` apuntando a **CAFEINA PLATINUM MUSCLETECH**. El arreglo de costos (14.11) corrigió `costoUnit` pero a propósito no tocó `prodId` (748). Consecuencia: el top de productos y las alertas de stock atribuían las creatinas a la cafeína, y por eso el inventario parecía tener $1.164.000 de creatina quieta que en realidad sí se había vendido. Se repuntaron las 10 — seguro porque todas tenían `stockDescontado: false` (749), así que mover el `prodId` no movió inventario.
+
+**Lección:** corregir el costo sin corregir el producto deja el dinero bien y la información mal. Cuando una línea de venta apunta al producto equivocado hay que arreglar las dos cosas, y `stockDescontado` es lo que dice si es seguro hacerlo.
+
+### 14.18 Márgenes del 114% y del 140% (comentario 764)
+
+Encontrado al verificar el sondeo, no al hacerlo: mayo saltó de 38% a 42% de margen sin razón. En vez de aceptar el número, se listaron las ventas de mayo con margen sobre 55% y aparecieron **dos con margen mayor al 100%** — aritméticamente imposible:
+
+| Venta | Ingreso | Margen que calculaba | % |
+|---|---|---|---|
+| SEBASTIAN BEDOYA · 11 may | $260.000 | $297.000 | 114% |
+| NAGATOMO · 2 jun | $182.000 | $254.800 | 140% |
+
+**Causa:** en 8 ventas el campo `precio` (unitario) traía el **total de la línea**. Cuando la cantidad era 2 o más, la hoja tenía escrito el total en la casilla del valor unitario. `ingresoVenta` usa `v.total`, así que **lo vendido siempre estuvo bien**; pero `calcularMargenVenta` hace `(precio − costo) × cant`, y con el unitario inflado el margen se multiplicaba.
+
+Estuvo ahí desde la importación. No se veía porque esas mismas ventas tenían el costo de otro producto o eran manuales sin costo; al arreglar los costos (14.11 y 14.17) el error afloró.
+
+**Arreglo de datos:** 7 ventas corregidas. El criterio fue que **el total manda** — es lo que se cobró y lo que cuadra con la hoja. Para las de varias líneas se probaron las combinaciones de líneas a dividir hasta que la suma diera el total exacto. Queda una sola descuadrada, OLIMPO 19 ago, por $999 — irrelevante.
+
+**764. Blindaje en el importador:** `parsearFilasHoja` ya no se cree el unitario de la hoja. Si `unitario × cantidad` no da el total, lo recalcula como `total / cantidad`. 15 pruebas con los casos reales.
+
+**Regla que sale de aquí:** cuando la hoja trae un dato redundante (unitario, cantidad y total: cualquiera de los tres se deduce de los otros dos), no se importan los tres a ciegas. Se importa el que cuadra con la contabilidad —el total— y los demás se validan contra él.
+
+**Y la lección de método:** el número que sube sin explicación es una alarma, no un regalo. Si una corrección debía bajar el margen y lo subió, hay que perseguir la diferencia hasta entenderla. Aquí la verificación encontró más que la auditoría.
+
+### 14.19 Qué merece notificar (comentarios 765–767)
+
+Pedido de Ángel:
+
+> *"No quiero que cuando lo abra me lleguen todas esas notificaciones de inventario bajo. Bórralas, no quiero que me vuelva a llegar eso, porque eso lo veo yo cuando abra la sesión nada más. De pronto me puedes hacer las notificaciones acerca de los deudores, acerca de cosas relevantes o de cuando cierra el mes, pero no del stock."*
+
+**765. El stock deja de notificar.** Eran 4 puntos: la revisión diaria al cargar inventario y tres avisos que salían al vender (venta múltiple, venta simple y combo). `checkStockAlerts()` queda vacía a propósito, con el comentario explicando por qué — se deja la función para no romper la llamada del listener y para que quede claro que es una decisión, no un olvido. **El aviso de stock bajo sigue vivo en Inicio**, que es donde Ángel dijo que lo mira.
+
+**766. La mora sí queda en la campana.** Antes `chequearAlertaMoraDiaria` solo mostraba un toast y una notificación del navegador — las dos se van solas. Si no estabas mirando la pantalla en ese momento, la mora no existía. Ahora además hace `pushNotif` tipo `'mora'`, así que sobrevive a cerrar la app.
+
+**767. Aviso de cierre de ciclo.** Nuevo. La primera vez que se abre la app dentro de un ciclo nuevo, avisa que el anterior cerró con su resumen: vendido, % de margen y utilidad real. Usa `getCicloActual`, `ingresoVenta`, `calcularMargenVenta` y `esCompraMercancia` — las mismas fuentes de verdad de Inicio, sin recalcular nada aparte. Se marca en `localStorage` con la fecha de inicio del ciclo, así avisa una sola vez por ciclo y por dispositivo.
+
+**El criterio, para lo que venga:** una notificación se gana el derecho a interrumpir solo si pide una acción que no puede esperar a que la persona se siente a mirar. Cobrar una mora sí. Revisar el mes que cerró sí. El stock bajo no — eso se mira cuando uno abre la app, y para eso está el aviso de Inicio. Antes de agregar una notificación nueva, la pregunta es *"¿esto exige que suelte lo que está haciendo?"*, no *"¿esto es información útil?"*.
+
+**768. Trampa del aviso de cierre, encontrada al probarlo en producción.** La primera versión se disparaba con el snapshot de `ventas` y `DATA.gastos` todavía vacío. Los oyentes de Firestore llegan por separado y en cualquier orden, así que los gastos de operación daban 0 y la notificación decía que la utilidad era igual al margen: para julio anunció **$4.093.434** cuando la utilidad real es **$1.642.031**. Ahora espera a tener ventas, gastos e inventario, y se intenta desde los tres oyentes — la propia función evita avisar dos veces.
+
+**Patrón general, ya visto dos veces en esta app** (aquí y en el bug 680 de Inicio): *cualquier cosa que resuma varias colecciones no puede confiar en el oyente de una sola.* O verifica que todas estén cargadas antes de calcular, o se ejecuta desde todas.
+
+### 14.20 El resultado del ciclo, con la cuenta completa (comentarios 769–771)
+
+Ángel, sobre la tarjeta anterior:
+
+> *"Ese ítem es muy inconcluso. Que quede el vendido, la margen, por cobrar. Quiero que eso de 'salió del banco' mejor diga gastos o algo más humanizado, y en el resultado del ciclo, los mismos ítems que te digo."*
+
+Tenía razón en las dos cosas.
+
+**El problema de fondo.** La tarjeta mostraba dos totales sueltos —utilidad real y caja— sin enseñar de dónde salían. Un número sin su cuenta obliga a creerle a la app; y en una app de contabilidad, creer es exactamente lo que no se debe pedir.
+
+**769-a. "Salió del banco" → "Gastos".** El nombre viejo mostraba *todo* lo que salió, mercancía incluida, lo cual contradice de frente la regla de la app: **la mercancía no es gasto, es inventario** (`esCompraMercancia`). Ahora el número grande son los gastos de operación de verdad y la mercancía va de subtítulo — visible, pero sin mezclarse en el mismo total.
+
+**771.** Por coherencia, el detalle que abre esa tarjeta ya no se titula "Lo que salió del banco" sino **"Gastos del ciclo"**. Adentro sigue apareciendo la mercancía en su propio bloque, con el renglón que aclara que no es gasto.
+
+**769-b. Dos cuentas, no dos totales.** El resultado se parte en dos tarjetas, porque son dos preguntas distintas y mezclarlas es la fuente de casi toda la confusión contable de un negocio pequeño:
+
+| 📐 Lo que ganó el negocio | 🏦 Lo que pasó en el banco |
+|---|---|
+| Vendido | Te pagaron |
+| − Costo de lo que vendiste | + Cobros de cuentas viejas |
+| **= Margen bruto (%)** | − Compra de mercancía |
+| − Gastos de operación | − Gastos de operación |
+| **= Utilidad real** | **= Movimiento del banco** |
+
+Los renglones usan las mismas palabras de las tarjetas de arriba —vendido, margen, gastos, por cobrar— para que la vista completa se lea como una sola cuenta y no como cuatro medidas independientes. El helper `renglon(etiqueta, valor, signo, esTotal, color)` es lo único que se agregó de estructura.
+
+La mercancía aparece en la cuenta del banco y **no** en la del negocio: en la del negocio su costo ya está descontado dentro del margen (solo el de lo que *se vendió*), y contarla otra vez sería el mismo doble conteo del comentario 727 con otro disfraz.
+
+**770. La caja contaba plata que no había llegado.** Bug real, no cosmético. `caja` restaba los gastos de **todo lo vendido en el ciclo**, hubiera pagado el cliente o no. Ahora suma solo lo que de verdad entró:
+
+```js
+const pagadoEnCiclo = ventasCiclo.reduce((s,v) => s + Number(v.pagado||0), 0);
+let abonosEnCiclo = 0;
+DATA.ventas.forEach(v => (v.abonos||[]).forEach(a => {
+  if(a.fecha >= ciclo.inicio && a.fecha <= ciclo.fin) abonosEnCiclo += Number(a.valor||0);
+}));
+const entroAlBanco = pagadoEnCiclo + abonosEnCiclo + cobrado;
+const quedoFiado   = Math.max(0, vendido - pagadoEnCiclo);
+const caja = entroAlBanco - gastado;
+```
+
+Los abonos se suman **por su fecha**, no por la de la venta: un abono de agosto a una venta de julio es plata que entró en agosto. Es la misma lógica de caja del comentario 727, aplicada al ciclo.
+
+Lo fiado no desaparece: se muestra aparte, con el texto de que esa plata todavía no ha llegado. Agosto pasa de $10.266.384 a ~$9.756.134 por los $510.250 que quedaron a crédito.
+
+**772. Trampa del propio arreglo, encontrada al verificarlo en producción.** La primera versión de 770 sumaba `v.pagado` de las ventas del ciclo **más** los abonos fechados en el ciclo. Pero `guardarAbono` hace `nuevoPagado = (venta.pagado||0) + valor`: **cada abono ya está dentro de `pagado`**. Todo abono hecho en el mismo ciclo de su venta se contaba dos veces. Agosto mostraba **$13.333.476 recibidos contra $11.791.384 vendidos** — imposible sin cuentas viejas de por medio, que es justo lo que delató el error.
+
+La descomposición correcta separa las dos entradas **por la fecha en que la plata llegó**:
+
+| Entrada | Cómo se calcula | Cuándo entra |
+|---|---|---|
+| Pago inicial | `pagado − Σ abonos` | el día de la venta |
+| Cada abono | `a.valor` | el día del abono |
+
+Así ningún peso se cuenta dos veces y cada uno queda fechado en el ciclo real. Y lo fiado dejó de ser una resta (`vendido − recibido`, que mezclaba abonos de ventas viejas) para ser lo que siempre debió ser: **el saldo vivo de las ventas de ese ciclo**, `Σ saldoReal(v)`.
+
+Verificado contra Firestore, ciclo por ciclo. Ningún ciclo recibe de sus propias ventas más de lo que vendió:
+
+| Ciclo | Vendido | De contado | Abonos | Cuentas viejas | Gastado | Movimiento del banco | Fiado |
+|---|---|---|---|---|---|---|---|
+| Mayo | 16.145.600 | 16.145.600 | 0 | 2.400.000 | 16.839.516 | 1.706.084 | 0 |
+| Junio | 15.867.354 | 11.859.104 | 1.029.000 | 600.000 | 17.956.958 | −4.468.854 | 0 |
+| Julio | 14.097.406 | 9.901.064 | 6.163.450 | 216.000 | 8.877.003 | 7.403.511 | 510.992 |
+| Agosto | 11.791.384 | 9.729.942 | 2.052.342 | 0 | 1.525.000 | 10.257.284 | 510.250 |
+
+Por eso "Te pagaron" se partió en dos renglones: **"Te pagaron de contado"** y **"Abonos que entraron"**. No es cosmético — es lo que hace visible que la plata de un ciclo puede llegar en otro.
+
+**Regla que sale de aquí, y aplica a cualquier tarjeta futura:** *lo devengado y lo cobrado son dos cuentas y se muestran separadas, cada una con sus renglones a la vista.* Un total que no se puede reconstruir mirándolo es un total que nadie va a poder defender frente a la hoja.
+
+**Y la regla de datos, que vale para toda la app:** *`v.pagado` es acumulado, no es el pago del día de la venta.* Antes de sumar `pagado` junto a los abonos en cualquier cálculo nuevo, restarle sus abonos. Es la misma familia de error del comentario 727 (contar la venta y su cobro) con otro disfraz — y esta vez el disfraz era mío.
+
+
+### 14.21 La pestaña de Gastos: una cuenta y un desglose (comentario 773)
+
+Ángel, sobre la pantalla vieja:
+
+> *"Acá aparecen los gastos fijos y 'salió del banco' de lo mismo, información repetida. Y luego abajo desglosa el gasto de marketing, el de los intereses y el total de gastos. Necesito que organicemos estas pestañas... que aparezca todo organizado y no doble. Y que el desglose no aparezca abajo por allá, sino que yo le dé clic a cada cosita y se desglose toda la info."*
+
+**Lo que estaba pasando.** El ciclo de agosto tenía **dos** gastos, $1.525.000 en total. La página los mostraba así:
+
+| Dónde | Qué decía |
+|---|---|
+| Tarjeta "Gastos fijos" | $1.525.000 |
+| Tarjeta "Salió del banco" | $1.525.000 |
+| Tarjeta "Marketing" | $1.000.000 |
+| Tarjeta "Finanzas" | $525.000 |
+| Tarjeta "Total gastos" | $1.525.000 |
+| Tabla del fondo | las dos filas otra vez |
+
+Seis apariciones de la misma plata. Y no era un caso raro: **siempre que no hay gastos variables ni mercancía, "gastos fijos" y "salió del banco" son el mismo número por definición** — dos tarjetas del mismo tamaño diciendo lo mismo, que es exactamente lo que hace desconfiar de un tablero.
+
+**Ahora hay dos bloques y nada más:**
+
+**1. 🧾 La cuenta del ciclo** — resumen, no se toca. Usa el mismo `renglon` que el resultado de Inicio (769), para que las dos pantallas se lean igual:
+
+```
+Gastos fijos              $1.525.000   se pagan igual vendas o no
+Gastos variables                  $0   suben con el movimiento
+──────────────────────────────────────
+Total de gastos           $1.525.000
+Compra de mercancía               $0   no es gasto: es plata que se vuelve inventario
+──────────────────────────────────────
+En total salió del banco  $1.525.000
+```
+
+Dos totales a propósito: el de **gastos** (el que manda en el punto de equilibrio) y el de **lo que salió del banco** (que suma la mercancía). Que coincidan deja de ser sospechoso porque se ven los ceros que lo explican.
+
+**2. 📂 En qué se fue** — un renglón plegado por categoría, ordenado por monto. Se toca y ahí mismo se abren **sus** registros, con editar y borrar. La tabla suelta del fondo desapareció: los registros viven dentro de su categoría, que es donde uno los va a buscar.
+
+La mercancía es su propio grupo al final, así **todo registro cae en algún grupo y la suma de los grupos da exactamente lo que salió del banco** — auditable de un vistazo, sin cuadrar nada a mano.
+
+Detalles que importan: los registros van en filas flexibles y no en tabla, porque esta página se mira desde el celular y una tabla de seis columnas ahí no se lee. El estado abierto/cerrado vive en un `Set` de módulo (`gastosGruposAbiertos`), así sobrevive al re-render que dispara cada `onSnapshot`.
+
+**Regla de diseño que sale de aquí, y aplica a toda pestaña que se reorganice después:** *un número puede aparecer dos veces solo si los dos sitios responden preguntas distintas, y el segundo sitio tiene que explicarse solo.* Cuatro tarjetas del mismo tamaño con la misma plata no son cuatro datos: son un dato y tres ruidos. Cuando un corte es útil (por categoría, por tipo), va **como desglose de un total ya mostrado** — no como una fila de tarjetas paralela compitiendo con él.
+
+
+---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*
