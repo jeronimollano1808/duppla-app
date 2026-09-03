@@ -485,6 +485,18 @@ body{
 .modal-close:hover{background:var(--border);color:var(--ink)}
 .modal-footer{display:flex;gap:8px;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)}
 
+/* 657. Piloto "minimalista" — más compacto y con menos texto de apoyo.
+   Escopado solo a #modal-venta a propósito: si el resultado convence, se
+   replica el mismo criterio en el resto de modales (Pedidos, Gastos,
+   Consignación, Combos...); si no, el ajuste queda contenido acá. */
+#modal-venta .modal{padding:18px}
+#modal-venta .modal-header{margin-bottom:14px}
+#modal-venta .f-group{margin-bottom:9px}
+#modal-venta .f-label{margin-bottom:3px}
+#modal-venta .f-input{padding:7px 10px}
+#modal-venta .f-row{gap:8px}
+#modal-venta .modal-footer{margin-top:14px;padding-top:12px}
+
 /* ============================================================
    20. ALERTAS Y BANNERS
    Banners de advertencia, éxito, error para stock bajo, etc.
@@ -1230,12 +1242,11 @@ body{
          la lista se llena el nombre solo y no hay forma de inventarse una variante.
     -->
     <div class="f-group" id="v-dist-grupo" style="display:none">
-      <label class="f-label">¿Cuál distribuidor? *</label>
+      <label class="f-label">Distribuidor *</label>
       <select id="v-dist-id" class="f-input" onchange="elegirDistribuidorVenta(this.value)">
         <option value="">— Escoge uno de la lista —</option>
       </select>
-      <div style="font-size:11px;color:var(--ink-3);margin-top:4px;line-height:1.4">
-        Escógelo de la lista para que la venta le quede en su historial.
+      <div style="font-size:11px;color:var(--ink-3);margin-top:3px">
         ¿Es nuevo? <button type="button" onclick="abrirNuevoDistribuidorDesdeVenta()"
           style="background:none;border:none;padding:0;color:var(--lime);font-weight:600;cursor:pointer;text-decoration:underline;font-size:11px">Créalo aquí</button>
       </div>
@@ -1302,10 +1313,9 @@ body{
     </div>
 
     <!-- Pago -->
-    <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:14px">
-      <div style="font-size:11px;font-weight:600;color:var(--ink-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px">Pago</div>
+    <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:10px;margin-bottom:10px">
+      <div style="font-size:11px;font-weight:600;color:var(--ink-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Pago</div>
       <div class="f-group">
-        <label class="f-label">Método de pago</label>
         <div style="display:flex;gap:8px">
           <button type="button" id="mp-efectivo" onclick="setMetodoPago('efectivo')"
             style="flex:1;padding:8px;border-radius:var(--radius);border:2px solid var(--ink);background:var(--ink);color:#fff;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">
@@ -1334,19 +1344,19 @@ body{
       </div>
       <div class="f-row">
         <div class="f-group" style="margin-bottom:0">
-          <label class="f-label">Pagó en este momento ($)</label>
-          <input type="number" id="v-pagado" class="f-input" placeholder="0 si queda todo pendiente" oninput="calcSaldo()">
+          <label class="f-label">Pagó ahora ($)</label>
+          <input type="number" id="v-pagado" class="f-input" placeholder="0" oninput="calcSaldo()">
         </div>
         <div class="f-group" style="margin-bottom:0">
           <label class="f-label">Saldo pendiente ($)</label>
           <input type="number" id="v-saldo" class="f-input" readonly style="opacity:.6;cursor:not-allowed;background:var(--amber-bg)">
         </div>
       </div>
-      <div id="v-estado-pago" style="margin-top:10px;font-size:12px;color:var(--ink-3)">
-        Completa el total para ver el estado de pago
+      <div id="v-estado-pago" style="margin-top:8px;font-size:12px;color:var(--ink-3)">
+        Completa el total
       </div>
     </div>
-    <div class="f-group"><label class="f-label">Nota (opcional)</label><input type="text" id="v-nota" class="f-input" placeholder="Referencia adicional"></div>
+    <div class="f-group"><label class="f-label">Nota</label><input type="text" id="v-nota" class="f-input" placeholder="Referencia adicional"></div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('modal-venta')">Cancelar</button>
       <button class="btn btn-lime" id="btn-guardar-venta" onclick="guardarVenta()">Registrar venta</button>
@@ -4197,7 +4207,7 @@ function contenidoLineaVenta(i) {
       const subtotalManual = fmt((l.cant||1)*(l.precio||0));
       const nombreVal = (l.nombre||'').replace(/"/g, '&quot;');
       contenido = '<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--amber-bg);border-radius:8px;margin-bottom:8px">'
-        + '<span style="font-size:12px;font-weight:600;color:#92400E;flex:1">✏️ Producto manual (fuera de catálogo)</span>'
+        + '<span style="font-size:12px;font-weight:600;color:#92400E;flex:1">✏️ Producto manual</span>'
         + '<button type="button" onclick="desactivarManualLinea(' + i + ')" style="background:none;border:none;color:var(--ink-3);cursor:pointer;font-size:11px;text-decoration:underline">Buscar en catálogo</button>'
       + '</div>'
       + '<input type="text" class="f-input" placeholder="Nombre del producto" value="' + nombreVal + '" '
@@ -4226,7 +4236,7 @@ function contenidoLineaVenta(i) {
         });
       }
       contenido = '<div style="max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--surface);margin-bottom:8px">' + resultados + '</div>'
-        + '<button type="button" onclick="activarManualLinea(' + i + ')" style="background:none;border:none;color:var(--blue);cursor:pointer;font-size:11px;text-decoration:underline">📝 No está en el catálogo — agregarlo manual</button>';
+        + '<button type="button" onclick="activarManualLinea(' + i + ')" style="background:none;border:none;color:var(--blue);cursor:pointer;font-size:11px;text-decoration:underline">📝 Agregar producto manual</button>';
     } else {
       // Producto seleccionado — botones de tipo de precio
       let tiposBtns = '';
@@ -4288,23 +4298,27 @@ function contenidoLineaVenta(i) {
 
 function renderLineasVenta() {
   // 278. Renderiza líneas de productos con buscador — usando template literals seguros
+  // 657. Con una sola línea (el caso más común) nos saltamos el encabezado
+  //      "PRODUCTO 1" — no hay nada que numerar todavía. Con 2+ sí aparece,
+  //      para distinguir cada línea y poder quitarlas.
+  const varias = ventaLineas.length > 1;
   let html = '';
   ventaLineas.forEach(function(l, i) {
-    const quitarBtn = ventaLineas.length > 1
-      ? '<button type="button" onclick="quitarLineaVenta(' + i + ')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px">✕</button>'
+    const encabezado = varias
+      ? '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
+          + '<span style="font-size:11px;font-weight:600;color:var(--ink-3);text-transform:uppercase">Producto ' + (i+1) + '</span>'
+          + '<button type="button" onclick="quitarLineaVenta(' + i + ')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px">✕</button>'
+        + '</div>'
       : '';
 
     const busqVal = (l.busqueda||'').replace(/"/g, '&quot;');
     // 584. Ocultamos el buscador de catálogo cuando la línea está en modo manual
     const buscadorHtml = l.esManual ? '' : (
       '<input type="text" class="f-input" placeholder="🔍 Buscar producto..." value="' + busqVal + '" '
-        + 'data-idx="' + i + '" oninput="actualizarBusquedaLinea(this)" style="font-size:13px;margin-bottom:8px">'
+        + 'data-idx="' + i + '" oninput="actualizarBusquedaLinea(this)" style="font-size:13px;margin-bottom:6px">'
     );
-    html += '<div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:10px;margin-bottom:8px">'
-      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
-        + '<span style="font-size:11px;font-weight:600;color:var(--ink-3);text-transform:uppercase">Producto ' + (i+1) + '</span>'
-        + quitarBtn
-      + '</div>'
+    html += '<div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:8px;margin-bottom:6px">'
+      + encabezado
       + buscadorHtml
       + '<div id="vl-contenido-' + i + '">' + contenidoLineaVenta(i) + '</div>'
       + '</div>';
@@ -4438,17 +4452,19 @@ window.calcSaldo = () => {
   document.getElementById('v-saldo').value = saldo > 0 ? saldo : '';
   const estadoEl = document.getElementById('v-estado-pago');
   if(!estadoEl) return;
+  // 657. Mensajes recortados — el monto ya se ve en "Saldo pendiente" justo
+  //      arriba, no hace falta repetirlo en el texto de estado.
   if(total === 0) {
-    estadoEl.textContent = 'Completa el total para ver el estado de pago';
+    estadoEl.textContent = 'Completa el total';
     estadoEl.style.color = 'var(--ink-3)';
   } else if(saldo === 0) {
-    estadoEl.innerHTML = '✅ <strong>Pagado completo</strong> — no queda saldo pendiente';
+    estadoEl.innerHTML = '✅ <strong>Pagado completo</strong>';
     estadoEl.style.color = 'var(--green)';
   } else if(pagado > 0) {
-    estadoEl.innerHTML = '⚡ <strong>Abono parcial</strong> — queda pendiente ' + fmt(saldo);
+    estadoEl.innerHTML = '⚡ <strong>Abono parcial</strong>';
     estadoEl.style.color = 'var(--amber)';
   } else {
-    estadoEl.innerHTML = '⚠️ <strong>Pendiente total</strong> — ' + fmt(total) + ' por cobrar';
+    estadoEl.innerHTML = '⚠️ <strong>Pendiente total</strong>';
     estadoEl.style.color = 'var(--red)';
   }
 };
