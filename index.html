@@ -497,6 +497,29 @@ body{
 #modal-venta .f-row{gap:8px}
 #modal-venta .modal-footer{margin-top:14px;padding-top:12px}
 
+/* 658. Mismo criterio aplicado a Pedidos, tras aprobar el piloto de Ventas (657). */
+#modal-pedido .modal,
+#modal-abono-pedido .modal,
+#modal-producto-rapido .modal{padding:18px}
+#modal-pedido .modal-header,
+#modal-abono-pedido .modal-header,
+#modal-producto-rapido .modal-header{margin-bottom:14px}
+#modal-pedido .f-group,
+#modal-abono-pedido .f-group,
+#modal-producto-rapido .f-group{margin-bottom:9px}
+#modal-pedido .f-label,
+#modal-abono-pedido .f-label,
+#modal-producto-rapido .f-label{margin-bottom:3px}
+#modal-pedido .f-input,
+#modal-abono-pedido .f-input,
+#modal-producto-rapido .f-input{padding:7px 10px}
+#modal-pedido .f-row,
+#modal-abono-pedido .f-row,
+#modal-producto-rapido .f-row{gap:8px}
+#modal-pedido .modal-footer,
+#modal-abono-pedido .modal-footer,
+#modal-producto-rapido .modal-footer{margin-top:14px;padding-top:12px}
+
 /* ============================================================
    20. ALERTAS Y BANNERS
    Banners de advertencia, éxito, error para stock bajo, etc.
@@ -1817,7 +1840,7 @@ body{
     </div>
     <input type="hidden" id="pe-id" value="">
     <div id="pe-edit-warning" style="display:none;background:var(--amber-bg);border:1px solid #FDE68A;border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:12px;color:#92400E">
-      ⚠️ Este pedido ya fue recibido — editar aquí corrige el registro, pero NO actualiza los lotes/stock que ya ingresaron al inventario.
+      ⚠️ Ya fue recibido — este cambio no actualiza los lotes/stock ya ingresados.
     </div>
     <div class="f-row">
       <!-- 267. Proveedor: select si hay proveedores, campo de texto si no hay ninguno -->
@@ -1828,32 +1851,32 @@ body{
         <label class="f-label">Nombre del proveedor *</label>
         <input type="text" id="pe-prov-manual" class="f-input" placeholder="Ej: NutritionFirst USA">
         <div style="font-size:11px;color:var(--ink-3);margin-top:4px">
-          💡 <a href="#" onclick="showPage('proveedores');closeModal('modal-pedido')" style="color:var(--blue)">Crear proveedor</a> para tenerlo en el catálogo
+          💡 <a href="#" onclick="showPage('proveedores');closeModal('modal-pedido')" style="color:var(--blue)">Crear proveedor</a>
         </div>
       </div>
       <div class="f-group"><label class="f-label">Fecha</label><input type="date" id="pe-fecha" class="f-input"></div>
     </div>
     <!-- 473. Líneas de producto estructuradas — cada una con buscador, cantidad y costo -->
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <label class="f-label" style="margin:0">Productos del pedido *</label>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <label class="f-label" style="margin:0">Productos *</label>
       <div style="display:flex;gap:6px">
         <button type="button" class="btn btn-sm" onclick="agregarLineaPedido()">+ Producto</button>
         <button type="button" class="btn btn-sm" style="color:var(--blue);border-color:#BFDBFE" onclick="abrirNuevoProductoDesdePedido()">+ Producto nuevo</button>
       </div>
     </div>
     <div id="pe-lineas-container"></div>
-    <div class="f-group"><label class="f-label">Notas adicionales (opcional)</label><input type="text" id="pe-prods" class="f-input" placeholder="Observaciones sobre el pedido completo"></div>
+    <div class="f-group"><label class="f-label">Notas adicionales</label><input type="text" id="pe-prods" class="f-input" placeholder="Observaciones sobre el pedido completo"></div>
     <div class="f-row">
-      <div class="f-group"><label class="f-label">Total del pedido ($)</label><input type="number" id="pe-total" class="f-input" readonly style="opacity:.7">
+      <div class="f-group"><label class="f-label">Total ($)</label><input type="number" id="pe-total" class="f-input" readonly style="opacity:.7">
         <div id="prev-pe-total" style="font-size:11px;margin-top:4px;font-weight:600"></div>
       </div>
-      <div class="f-group"><label class="f-label">Costo de flete ($)</label><input type="number" id="pe-flete" class="f-input" value="0" oninput="recalcularTotalPedido()"></div>
+      <div class="f-group"><label class="f-label">Flete ($)</label><input type="number" id="pe-flete" class="f-input" value="0" oninput="recalcularTotalPedido()"></div>
     </div>
     <!-- 606. ¿Cuánto pagaste al proveedor? — antes se asumía SIEMPRE pago
          completo, así que no había forma de dejar un pedido a crédito o
          con abono parcial (cuentas por pagar). -->
     <div class="f-group">
-      <label class="f-label">¿Cuánto le pagaste al proveedor?</label>
+      <label class="f-label">Pago al proveedor</label>
       <div style="display:flex;gap:6px">
         <button type="button" id="pe-pago-completo" onclick="setEstadoPagoPedido('completo')"
           style="flex:1;padding:8px 4px;border-radius:var(--radius);border:2px solid var(--ink);background:var(--ink);color:#fff;font-size:12px;font-weight:600;cursor:pointer">
@@ -1870,7 +1893,7 @@ body{
       </div>
     </div>
     <div class="f-group" id="pe-abono-grupo" style="display:none">
-      <label class="f-label">¿Cuánto pagaste ahora? ($)</label>
+      <label class="f-label">Pagó ahora ($)</label>
       <input type="number" id="pe-pagado" class="f-input" oninput="calcSaldoPedido()">
       <div id="pe-saldo-preview" style="font-size:11px;margin-top:3px;font-weight:600"></div>
     </div>
@@ -1891,7 +1914,7 @@ body{
     </div>
     <input type="hidden" id="ap-pedido-id" value="">
     <div id="ap-info" style="background:var(--surface-2);border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:13px;color:var(--ink-2)"></div>
-    <div class="f-group"><label class="f-label">¿Cuánto vas a abonar? ($)</label><input type="number" id="ap-valor" class="f-input"></div>
+    <div class="f-group"><label class="f-label">Abono ($)</label><input type="number" id="ap-valor" class="f-input"></div>
     <div class="f-group"><label class="f-label">Fecha</label><input type="date" id="ap-fecha" class="f-input"></div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('modal-abono-pedido')">Cancelar</button>
@@ -1908,7 +1931,7 @@ body{
       <button class="modal-close" onclick="closeModal('modal-producto-rapido')">✕</button>
     </div>
     <div style="background:var(--surface-2);border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:var(--ink-2)">
-      💡 Se crea con stock 0 — el stock y el costo de este pedido se agregan automáticamente cuando marques el pedido como "Recibido".
+      💡 Se crea con stock 0 — se completa al marcar el pedido como "Recibido".
     </div>
     <div class="f-group">
       <label class="f-label">Nombre *</label>
@@ -7084,6 +7107,9 @@ function resultadosLineaPedido(i) {
 }
 
 function renderLineasPedido() {
+  // 658. Igual que en Ventas (657): con una sola línea nos saltamos el
+  //      encabezado "PRODUCTO 1" — no hay nada que numerar todavía.
+  const varias = peLineas.length > 1;
   let html = '';
   peLineas.forEach((l, i) => {
     const prod = DATA.inventario.find(p => p.id === l.prodId);
@@ -7094,29 +7120,29 @@ function renderLineasPedido() {
         + 'data-idx="' + i + '" oninput="actualizarBusquedaPedido(this)" style="font-size:13px;margin-bottom:6px">'
         + '<div id="pe-resultados-' + i + '">' + resultadosLineaPedido(i) + '</div>';
     } else {
-      contenido = '<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--lime-bg);border-radius:8px;margin-bottom:8px">'
+      contenido = '<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--lime-bg);border-radius:8px;margin-bottom:6px">'
         + '<span style="font-size:12px;font-weight:600;color:var(--lime);flex:1">' + prod.nombre + '</span>'
         + '<button type="button" onclick="cambiarProductoPedido(' + i + ')" style="background:none;border:none;color:var(--ink-3);cursor:pointer;font-size:11px;text-decoration:underline">Cambiar</button>'
         + '</div>'
         + '<div style="display:grid;grid-template-columns:70px 1fr 1fr;gap:8px">'
           + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Cant.</label>'
             + '<input type="number" class="f-input" value="' + (l.cant||1) + '" min="1" data-idx="' + i + '" data-tipo="cant" oninput="actualizarDatosPedido(this)" style="font-size:13px;text-align:center;padding:7px 6px"></div>'
-          + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Costo unit. ($)</label>'
+          + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Costo ($)</label>'
             + '<input type="number" class="f-input" value="' + (l.costo||0) + '" data-idx="' + i + '" data-tipo="costo" oninput="actualizarDatosPedido(this)" style="font-size:13px;padding:7px 8px"></div>'
           + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Subtotal</label>'
             + '<div style="font-size:13px;font-weight:700;color:var(--lime);padding:7px 0">' + fmt((l.cant||1)*(l.costo||0)) + '</div></div>'
         + '</div>';
     }
 
-    const quitarBtn = peLineas.length > 1
-      ? '<button type="button" onclick="quitarLineaPedido(' + i + ')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px">✕</button>'
+    const encabezado = varias
+      ? '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
+          + '<span style="font-size:11px;font-weight:600;color:var(--ink-3);text-transform:uppercase">Producto ' + (i+1) + '</span>'
+          + '<button type="button" onclick="quitarLineaPedido(' + i + ')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px">✕</button>'
+        + '</div>'
       : '';
 
-    html += '<div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:10px;margin-bottom:8px">'
-      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
-        + '<span style="font-size:11px;font-weight:600;color:var(--ink-3);text-transform:uppercase">Producto ' + (i+1) + '</span>'
-        + quitarBtn
-      + '</div>'
+    html += '<div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:8px;margin-bottom:6px">'
+      + encabezado
       + contenido
     + '</div>';
   });
