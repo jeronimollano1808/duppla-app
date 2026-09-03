@@ -3732,19 +3732,23 @@ window.setTipoProducto = (tipo) => {
 };
 
 // 278. Renderiza líneas de productos con buscador
-function renderLineasVenta() {
-  // 278. Renderiza líneas de productos con buscador — usando template literals seguros
-  let html = '';
-  ventaLineas.forEach(function(l, i) {
-    const busq = (l.busqueda||'').toLowerCase();
-    const prods = busq
-      ? DATA.inventario.filter(function(p){ return p.nombre.toLowerCase().includes(busq) || (p.marca||'').toLowerCase().includes(busq); })
-      : DATA.inventario;
-    const prod = DATA.inventario.find(function(p){ return p.id === l.prodId; });
+// 655. contenidoLineaVenta — parte de la línea de venta que cambia con la
+//      búsqueda (resultados / producto seleccionado / manual). Separada de
+//      renderLineasVenta para poder refrescarla SIN recrear el <input> de
+//      búsqueda en cada tecla (ver actualizarBusquedaLinea) — evita el bug
+//      de "las letras saltan" al escribir (foco perdido por reconstruir el
+//      DOM completo de la línea en cada oninput).
+function contenidoLineaVenta(i) {
+  const l = ventaLineas[i];
+  const busq = (l.busqueda||'').toLowerCase();
+  const prods = busq
+    ? DATA.inventario.filter(function(p){ return p.nombre.toLowerCase().includes(busq) || (p.marca||'').toLowerCase().includes(busq); })
+    : DATA.inventario;
+  const prod = DATA.inventario.find(function(p){ return p.id === l.prodId; });
 
-    let contenido = '';
+  let contenido = '';
 
-    if(l.esManual) {
+  if(l.esManual) {
       // 583. Línea manual DENTRO de una venta de inventario — permite mezclar
       //      productos de catálogo con productos fuera de catálogo en la
       //      MISMA venta (antes tenías que elegir todo-catálogo o todo-manual).
@@ -3835,8 +3839,15 @@ function renderLineasVenta() {
           + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Subtotal</label>'
             + '<div style="font-size:13px;font-weight:700;color:var(--lime);padding:7px 0">' + subtotal + '</div></div>'
         + '</div>';
-    }
+  }
 
+  return contenido;
+}
+
+function renderLineasVenta() {
+  // 278. Renderiza líneas de productos con buscador — usando template literals seguros
+  let html = '';
+  ventaLineas.forEach(function(l, i) {
     const quitarBtn = ventaLineas.length > 1
       ? '<button type="button" onclick="quitarLineaVenta(' + i + ')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px">✕</button>'
       : '';
@@ -3853,7 +3864,7 @@ function renderLineasVenta() {
         + quitarBtn
       + '</div>'
       + buscadorHtml
-      + contenido
+      + '<div id="vl-contenido-' + i + '">' + contenidoLineaVenta(i) + '</div>'
       + '</div>';
   });
   const container = document.getElementById('v-lineas-container');
@@ -3872,15 +3883,14 @@ window.quitarLineaVenta = (i) => {
 };
 
 window.actualizarBusquedaLinea = (el) => {
+  // 655. Ya no reconstruimos toda la línea (ni el <input> donde se está
+  //      escribiendo) — solo el bloque de resultados. El input nunca se
+  //      destruye, así que el cursor/foco nunca salta.
   const i = Number(el.dataset.idx);
   ventaLineas[i].busqueda = el.value;
   ventaLineas[i].prodId = '';
-  renderLineasVenta();
-  // 472. FIX: buscar por data-idx, no por posición (mismo fix aplicado en Combos)
-  setTimeout(() => {
-    const input = document.querySelector('#v-lineas-container input[type="text"][data-idx="' + i + '"]');
-    if(input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
-  }, 10);
+  const cont = document.getElementById('vl-contenido-' + i);
+  if(cont) cont.innerHTML = contenidoLineaVenta(i);
 };
 
 window.seleccionarProductoLinea = (i, prodId) => {
@@ -6232,28 +6242,35 @@ window.editarPedido = (id) => {
 // 476. LÍNEAS DE PEDIDO — buscador de producto + cantidad + costo unitario
 // Mismo patrón visual que Ventas y Combos, agrupado por marca.
 // ============================================================
+// 655. resultadosLineaPedido — solo el dropdown de resultados, para poder
+//      refrescarlo sin recrear el <input> de búsqueda (evita el bug de
+//      "las letras saltan" — ver contenidoLineaVenta/actualizarBusquedaLinea).
+function resultadosLineaPedido(i) {
+  const l = peLineas[i];
+  const busq = (l.busqueda||'').toLowerCase();
+  if(!busq) return '';
+  const candidatos = DATA.inventario.filter(p => p.nombre.toLowerCase().includes(busq) || (p.marca||'').toLowerCase().includes(busq));
+  const resultados = candidatos.length === 0
+    ? '<div style="padding:10px;color:var(--ink-3);font-size:12px;text-align:center">Sin resultados</div>'
+    : agruparProductosPorMarca(candidatos.slice(0,20), function(p) {
+        return '<div onclick="seleccionarProductoPedido(' + i + ',\'' + p.id + '\')" style="padding:7px 10px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px" onmouseover="this.style.background=\'var(--surface-2)\'" onmouseout="this.style.background=\'var(--surface)\'">'
+          + '<div style="font-weight:500">' + p.nombre + '</div>'
+          + '<div style="color:var(--ink-3);font-size:11px">Stock actual: ' + (p.stock||0) + '</div>'
+        + '</div>';
+      });
+  return '<div style="max-height:150px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--surface)">' + resultados + '</div>';
+}
+
 function renderLineasPedido() {
   let html = '';
   peLineas.forEach((l, i) => {
     const prod = DATA.inventario.find(p => p.id === l.prodId);
-    const busq = (l.busqueda||'').toLowerCase();
-    const candidatos = busq
-      ? DATA.inventario.filter(p => p.nombre.toLowerCase().includes(busq) || (p.marca||'').toLowerCase().includes(busq))
-      : DATA.inventario;
 
     let contenido;
     if(!l.prodId) {
-      const resultados = candidatos.length === 0
-        ? '<div style="padding:10px;color:var(--ink-3);font-size:12px;text-align:center">Sin resultados</div>'
-        : agruparProductosPorMarca(candidatos.slice(0,20), function(p) {
-            return '<div onclick="seleccionarProductoPedido(' + i + ',\'' + p.id + '\')" style="padding:7px 10px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px" onmouseover="this.style.background=\'var(--surface-2)\'" onmouseout="this.style.background=\'var(--surface)\'">'
-              + '<div style="font-weight:500">' + p.nombre + '</div>'
-              + '<div style="color:var(--ink-3);font-size:11px">Stock actual: ' + (p.stock||0) + '</div>'
-            + '</div>';
-          });
       contenido = '<input type="text" class="f-input" placeholder="🔍 Buscar producto..." value="' + (l.busqueda||'').replace(/"/g,'&quot;') + '" '
         + 'data-idx="' + i + '" oninput="actualizarBusquedaPedido(this)" style="font-size:13px;margin-bottom:6px">'
-        + (busq ? '<div style="max-height:150px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--surface)">' + resultados + '</div>' : '');
+        + '<div id="pe-resultados-' + i + '">' + resultadosLineaPedido(i) + '</div>';
     } else {
       contenido = '<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--lime-bg);border-radius:8px;margin-bottom:8px">'
         + '<span style="font-size:12px;font-weight:600;color:var(--lime);flex:1">' + prod.nombre + '</span>'
@@ -6299,11 +6316,8 @@ window.actualizarBusquedaPedido = (el) => {
   const i = Number(el.dataset.idx);
   peLineas[i].busqueda = el.value;
   peLineas[i].prodId = '';
-  renderLineasPedido();
-  setTimeout(() => {
-    const input = document.querySelector('#pe-lineas-container input[type="text"][data-idx="' + i + '"]');
-    if(input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
-  }, 10);
+  const cont = document.getElementById('pe-resultados-' + i);
+  if(cont) cont.innerHTML = resultadosLineaPedido(i);
 };
 
 window.seleccionarProductoPedido = (i, prodId) => {
@@ -7002,27 +7016,33 @@ window.editarCombo = (id) => {
   openModal('modal-combo');
 };
 
+// 655. resultadosLineaCombo — solo el dropdown de resultados (ver
+//      resultadosLineaPedido / contenidoLineaVenta para el porqué).
+function resultadosLineaCombo(i) {
+  const l = comboLineas[i];
+  const busq = (l.busqueda||'').toLowerCase();
+  if(!busq) return '';
+  const candidatos = DATA.inventario.filter(p => p.nombre.toLowerCase().includes(busq) || (p.marca||'').toLowerCase().includes(busq));
+  return '<div style="max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--surface)">'
+    + agruparProductosPorMarca(candidatos.slice(0,20), function(p) {
+        return '<div onclick="seleccionarProductoCombo(' + i + ',\'' + p.id + '\')" style="padding:7px 10px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px" onmouseover="this.style.background=\'var(--surface-2)\'" onmouseout="this.style.background=\'var(--surface)\'">'
+          + '<div style="font-weight:500">' + p.nombre + '</div>'
+          + '<div style="color:var(--ink-3);font-size:11px">Stock: ' + (p.stock||0) + '</div>'
+        + '</div>';
+      })
+  + '</div>';
+}
+
 function renderLineasCombo() {
   // 431. Buscador de producto por línea — mismo patrón usado en Ventas multi-producto.
   //      Cada línea guarda l.busqueda (texto escrito) y l.prodId (producto elegido).
   const html = comboLineas.map((l,i) => {
     const prod = DATA.inventario.find(p => p.id === l.prodId);
-    const busq = (l.busqueda||'').toLowerCase();
-    const candidatos = busq
-      ? DATA.inventario.filter(p => p.nombre.toLowerCase().includes(busq) || (p.marca||'').toLowerCase().includes(busq))
-      : DATA.inventario;
 
     const buscadorOResultado = !l.prodId
       ? '<input type="text" class="f-input" placeholder="🔍 Buscar producto..." value="' + (l.busqueda||'').replace(/"/g,'&quot;') + '" '
           + 'data-idx="' + i + '" oninput="actualizarBusquedaCombo(this)" style="font-size:13px;margin-bottom:6px">'
-        + (busq ? '<div style="max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--surface)">'
-            + agruparProductosPorMarca(candidatos.slice(0,20), function(p) {
-                return '<div onclick="seleccionarProductoCombo(' + i + ',\'' + p.id + '\')" style="padding:7px 10px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px" onmouseover="this.style.background=\'var(--surface-2)\'" onmouseout="this.style.background=\'var(--surface)\'">'
-                  + '<div style="font-weight:500">' + p.nombre + '</div>'
-                  + '<div style="color:var(--ink-3);font-size:11px">Stock: ' + (p.stock||0) + '</div>'
-                + '</div>';
-              })
-          + '</div>' : '')
+        + '<div id="combo-resultados-' + i + '">' + resultadosLineaCombo(i) + '</div>'
       : '<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--lime-bg);border-radius:8px">'
           + '<span style="font-size:12px;font-weight:600;color:var(--lime);flex:1">' + (prod?.nombre||'') + '</span>'
           + '<button type="button" onclick="cambiarProductoCombo(' + i + ')" style="background:none;border:none;color:var(--ink-3);cursor:pointer;font-size:11px;text-decoration:underline">Cambiar</button>'
@@ -7043,14 +7063,8 @@ window.actualizarBusquedaCombo = (el) => {
   const i = Number(el.dataset.idx);
   comboLineas[i].busqueda = el.value;
   comboLineas[i].prodId = '';
-  renderLineasCombo();
-  // 472. FIX: buscamos el input por data-idx (no por posición) — si hay líneas
-  //      anteriores con producto ya elegido, no tienen input de texto visible,
-  //      y querySelectorAll(...)[i] apuntaría al input equivocado.
-  setTimeout(() => {
-    const input = document.querySelector('#combo-lineas input[type="text"][data-idx="' + i + '"]');
-    if(input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
-  }, 10);
+  const cont = document.getElementById('combo-resultados-' + i);
+  if(cont) cont.innerHTML = resultadosLineaCombo(i);
 };
 
 window.seleccionarProductoCombo = (i, prodId) => {
@@ -8236,28 +8250,34 @@ window.abrirDejarConsignacion = (tiendaId) => {
 // se deja en tiendas), pero queda editable por si la tienda vende a
 // otro valor.
 // ============================================================
+// 655. resultadosLineaConsig — solo el dropdown de resultados (ver
+//      resultadosLineaPedido / contenidoLineaVenta para el porqué).
+function resultadosLineaConsig(i) {
+  const l = dcLineas[i];
+  const busq = (l.busqueda||'').toLowerCase();
+  if(!busq) return '';
+  const candidatos = DATA.inventario.filter(p => p.nombre.toLowerCase().includes(busq) || (p.marca||'').toLowerCase().includes(busq));
+  const resultados = candidatos.length === 0
+    ? '<div style="padding:10px;color:var(--ink-3);font-size:12px;text-align:center">Sin resultados</div>'
+    : agruparProductosPorMarca(candidatos.slice(0,20), function(p) {
+        return '<div onclick="seleccionarProductoLineaConsig(' + i + ',\'' + p.id + '\')" style="padding:7px 10px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px" onmouseover="this.style.background=\'var(--surface-2)\'" onmouseout="this.style.background=\'var(--surface)\'">'
+          + '<div style="font-weight:500">' + p.nombre + '</div>'
+          + '<div style="color:var(--ink-3);font-size:11px">Stock disponible: ' + (p.stock||0) + ' · Dist: ' + fmt(p.pdist||0) + '</div>'
+        + '</div>';
+      });
+  return '<div style="max-height:150px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--surface)">' + resultados + '</div>';
+}
+
 function renderLineasConsignacion() {
   let html = '';
   dcLineas.forEach((l, i) => {
     const prod = DATA.inventario.find(p => p.id === l.prodId);
-    const busq = (l.busqueda||'').toLowerCase();
-    const candidatos = busq
-      ? DATA.inventario.filter(p => p.nombre.toLowerCase().includes(busq) || (p.marca||'').toLowerCase().includes(busq))
-      : DATA.inventario;
 
     let contenido;
     if(!l.prodId) {
-      const resultados = candidatos.length === 0
-        ? '<div style="padding:10px;color:var(--ink-3);font-size:12px;text-align:center">Sin resultados</div>'
-        : agruparProductosPorMarca(candidatos.slice(0,20), function(p) {
-            return '<div onclick="seleccionarProductoLineaConsig(' + i + ',\'' + p.id + '\')" style="padding:7px 10px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px" onmouseover="this.style.background=\'var(--surface-2)\'" onmouseout="this.style.background=\'var(--surface)\'">'
-              + '<div style="font-weight:500">' + p.nombre + '</div>'
-              + '<div style="color:var(--ink-3);font-size:11px">Stock disponible: ' + (p.stock||0) + ' · Dist: ' + fmt(p.pdist||0) + '</div>'
-            + '</div>';
-          });
       contenido = '<input type="text" class="f-input" placeholder="🔍 Buscar producto..." value="' + (l.busqueda||'').replace(/"/g,'&quot;') + '" '
         + 'data-idx="' + i + '" oninput="actualizarBusquedaLineaConsig(this)" style="font-size:13px;margin-bottom:6px">'
-        + (busq ? '<div style="max-height:150px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--surface)">' + resultados + '</div>' : '');
+        + '<div id="dc-resultados-' + i + '">' + resultadosLineaConsig(i) + '</div>';
     } else {
       contenido = '<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--lime-bg);border-radius:8px;margin-bottom:8px">'
         + '<span style="font-size:12px;font-weight:600;color:var(--lime);flex:1">' + prod.nombre + '</span>'
@@ -8308,11 +8328,8 @@ window.actualizarBusquedaLineaConsig = (el) => {
   const i = Number(el.dataset.idx);
   dcLineas[i].busqueda = el.value;
   dcLineas[i].prodId = '';
-  renderLineasConsignacion();
-  setTimeout(() => {
-    const input = document.querySelector('#dc-lineas-container input[type="text"][data-idx="' + i + '"]');
-    if(input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
-  }, 10);
+  const cont = document.getElementById('dc-resultados-' + i);
+  if(cont) cont.innerHTML = resultadosLineaConsig(i);
 };
 
 window.seleccionarProductoLineaConsig = (i, prodId) => {
