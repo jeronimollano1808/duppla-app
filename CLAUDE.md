@@ -721,5 +721,42 @@ Detalles que importan: los registros van en filas flexibles y no en tabla, porqu
 **Regla de diseño que sale de aquí, y aplica a toda pestaña que se reorganice después:** *un número puede aparecer dos veces solo si los dos sitios responden preguntas distintas, y el segundo sitio tiene que explicarse solo.* Cuatro tarjetas del mismo tamaño con la misma plata no son cuatro datos: son un dato y tres ruidos. Cuando un corte es útil (por categoría, por tipo), va **como desglose de un total ya mostrado** — no como una fila de tarjetas paralela compitiendo con él.
 
 
+### 14.22 Distribuidores mes a mes, y fuera el inventario (comentario 774)
+
+Pedido de Ángel, tres puntos:
+
+> *"Una herramienta que muestre cuánto vendió cada distribuidor cada mes, con la tabla de datos y una gráfica. Quitar la sección de inventario, porque ocupa espacio y visualmente no aporta. Tiene que ser intuitiva y sin enredos."*
+> Y sobre dónde ponerla: *"cuando yo le dé click donde dice distribuidores, en las ventanas, que me lleven ahí"*.
+
+**El comparativo.** Ya existía un mes a mes (comentario 701), pero de **un** distribuidor, escondido dentro de su tarjeta y solo si la abrías. Sirve para mirar a uno; no sirve para la pregunta real, que es **comparar**: quién creció, quién se enfrió, de quién depende el mes. Eso solo se ve con todos juntos, así que el comparativo es ahora lo primero de la página.
+
+Dos decisiones de fondo:
+
+**1. Va una fila "Sin vincular".** Son las ventas con `canal === 'distribuidor'` y sin `distribuidorId`. Sin esa fila la tabla cuadraría consigo misma pero mentiría: su total no daría el del canal. Con ella, **la suma de la tabla ES el canal** — mismo principio de auditabilidad que los grupos de Gastos (773). Además la fila va en ámbar: es una invitación a vincularlas.
+
+**2. La gráfica son columnas apiladas por mes, no una línea por distribuidor.** Con diez distribuidores las líneas son una maraña y en un celular no se lee ninguna. Apiladas se leen las dos cosas que importan a la vez: cuánto hizo el canal cada mes y quién lo hizo. Cada mes es clicable y cambia la ventana del detalle de abajo.
+
+Detalles que no son decorativos:
+
+| Decisión | Por qué |
+|---|---|
+| Paleta fija de 6 colores + gris para el resto | El color sigue **al distribuidor, no a su puesto**: filtrar un mes no repinta a los demás. Validada para daltonismo sobre fondo blanco (ΔE adyacente ≥ 9.1). |
+| Leyenda con nombre + punto, y la tabla completa debajo | Tres de los seis colores quedan bajo 3:1 de contraste sobre blanco: la identidad **nunca** puede quedar solo en el color. |
+| 2px de separación entre segmentos | Dos colores pegados se leen como una sola barra. |
+| Ciclos de izquierda (viejo) a derecha (nuevo) | Una línea de tiempo se lee así, aunque el offset 0 sea el de hoy. |
+| 6 meses por defecto, con "Ver todo el historial" | A los 12 meses la tabla no cabe en un celular. |
+| El año solo aparece si el comparativo cruza de año | "ago" solo basta mientras no haya dos agostos. |
+| `$16,1M` / `$860k` encima de cada columna (`fmtCorto`) | `$16.145.600` no cabe en una columna de 40px. |
+
+También se quitaron de esa página las tarjetas **"Total canal dist."** y **"Vinculado"**: el comparativo ya trae las dos (la fila Total y la fila Sin vincular), y repetirlas era exactamente lo que Ángel señaló en Gastos. Quedan los dos números que el comparativo **no** responde: margen real del canal y cuántos distribuidores hay.
+
+**Fuera el inventario.** Ángel escogió los tres sitios: el banner de stock bajo del Dashboard, el aviso de stock bajo de Inicio y la página Inventario del menú.
+
+- El banner del Dashboard era **el bloque más grande de la página** —una ficha por producto— para decir algo que no exige actuar hoy. Las alertas que quedan (mora, recompras) sí piden una llamada. Es la misma regla de las notificaciones (14.19) aplicada a la pantalla.
+- La página Inventario **sigue existiendo**: `renderPage`, el div `page-inventario` y todos los `showPage('inventario')` quedan intactos. Solo sale del menú. Se entra por un botón discreto en el pie del menú lateral, junto a Backup.
+
+**Por qué no se borró de verdad:** ahí es donde se arregla un costo y se crea un producto, y el costo es de lo que cuelga todo el sistema de márgenes que costó una sesión entera cuadrar (14.10–14.18). Quitarlo del camino diario es higiene; quitarlo del todo sería dejar sin herramienta la única palanca que corrige los márgenes. *Sacar algo de la vista no es lo mismo que quitarle a alguien la forma de arreglarlo.*
+
+
 ---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*

@@ -750,6 +750,10 @@ body{
         <div class="sidebar-avatar" id="user-avatar">J</div>
         <div class="sidebar-email" id="user-email-display"></div>
       </div>
+      <!-- 774. Inventario ya no está en el menú (ver 774 en MENU). Queda aquí,
+           con los otros accesos de mantenimiento, para arreglar un costo o
+           crear un producto sin tenerlo encima todos los días. -->
+      <button class="btn btn-sm" style="width:100%;margin-bottom:6px" onclick="showPage('inventario')">📦 Inventario</button>
       <!-- 626. Backup completo — descarga TODOS los datos, no solo ventas -->
       <button class="btn btn-sm" style="width:100%;margin-bottom:6px" onclick="exportarBackupCompleto()">⬇️ Backup completo</button>
       <button class="btn-logout" onclick="doLogout()">Cerrar sesión</button>
@@ -2831,7 +2835,13 @@ const MENU = [
   { id:'inicio', label:'Inicio', ico:'⚡', group:'Principal' },
   { id:'dashboard', label:'Dashboard', ico:'📊', group:'Principal' },
   { id:'ventas', label:'Ventas', ico:'🛒', group:'Negocio' },
-  { id:'inventario', label:'Inventario', ico:'📦', group:'Negocio' },
+  // 774. Inventario sale del menú. Ángel: "quitar la sección de inventario,
+  //      ocupa espacio y visualmente no aporta". El stock se sigue
+  //      descontando solo al vender y la página sigue existiendo —
+  //      `renderPage` y el div `page-inventario` quedan intactos— pero deja
+  //      de competir por la atención del día a día. Se entra por el botón
+  //      discreto del pie del menú, que es donde se arregla un costo o se
+  //      crea un producto cuando de verdad hace falta.
   { id:'clientes', label:'Clientes', ico:'👥', group:'Negocio' },
   // 327. Distribuidores — gimnasios y distribuidores con historial de compras
   { id:'distribuidores', label:'Distribuidores', ico:'🏋️', group:'Negocio' },
@@ -3447,23 +3457,10 @@ function renderDashboard() {
   });
   const gananciaBruta = tv - costoVendidoPeriodo;
 
-  // Alerta de stock bajo
-  const low = DATA.inventario.filter(p => p.stock <= (p.stockMinimo||5));
-  // 266. Alerta de stock bajo en dashboard — versión compacta con chips
-  const alertHtml = low.length ? `
-    <div style="background:var(--amber-bg);border:1px solid #FDE68A;border-radius:var(--radius-lg);padding:12px 16px;margin-bottom:16px">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-        <span>⚠️</span>
-        <span style="font-size:12px;font-weight:700;color:var(--amber)">STOCK BAJO — ${low.length} producto${low.length>1?'s':''}</span>
-        <button onclick="showPage('inventario')" style="margin-left:auto;font-size:11px;background:none;border:none;color:var(--amber);cursor:pointer;font-weight:600;text-decoration:underline">Ver inventario →</button>
-      </div>
-      <div style="display:flex;flex-wrap:wrap;gap:6px">
-        ${low.map(p => `<span style="background:${p.stock===0?'var(--red-bg)':'#fff'};border:1px solid ${p.stock===0?'#FECACA':'#FDE68A'};border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;color:${p.stock===0?'var(--red)':'#92400E'}">
-          ${p.stock===0?'🚫':'⚠️'} ${p.nombre.split(' ').slice(0,3).join(' ')} (${p.stock})
-        </span>`).join('')}
-      </div>
-    </div>` : '';
-
+  // 774. El banner de STOCK BAJO se eliminó del Dashboard (ver 774 en MENU).
+  //      Era el bloque más grande de la página —una ficha por producto— para
+  //      decir algo que no exige actuar hoy. Las alertas que quedan (mora,
+  //      recompras) sí piden una llamada.
   // 577. Alerta de deudores en mora — mismo patrón visual que STOCK BAJO, para
   //      que la deuda vieja no se pierda de vista aunque Ventas ya no la
   //      muestre por defecto (Ventas filtra por ciclo; esto no).
@@ -7664,7 +7661,7 @@ function renderInicio() {
   // ---- Alertas: mora, stock bajo, recompras ----
   const mora = calcularDeudores().filter(d => d.enMora);
   const moraTotal = Math.round(mora.reduce((s,d) => s + Number(d.total||0), 0));
-  const low = DATA.inventario.filter(p => p.stock <= (p.stockMinimo||5));
+  // 774. `low` (stock bajo) se eliminó: ya no se avisa aquí tampoco.
   const recompras = calcularRecompras();
 
   const alerta = (color, bg, borde, ico, texto, pagina) => `
@@ -7678,20 +7675,12 @@ function renderInicio() {
   let alertasHtml = '';
   if(mora.length) alertasHtml += alerta('var(--red)','var(--red-bg)','#FECACA','⏰',
     mora.length + ' deudor' + (mora.length>1?'es':'') + ' en mora · ' + fmt(moraTotal), 'deudores');
-  if(low.length) alertasHtml += alerta('#92400E','var(--amber-bg)','#FDE68A','📦',
-    // 682. Antes recortaba el nombre a 2 palabras y el aviso quedaba inútil:
-    //      "WHEY 100% (1), WHEY 100% (1), WHEY 100% (1)". Se prioriza lo que
-    //      está en cero y se deja el nombre casi completo para distinguirlos.
-    low.length + ' producto' + (low.length>1?'s':'') + ' en stock bajo: '
-      + [...low].sort((a,b) => Number(a.stock||0) - Number(b.stock||0)).slice(0,2)
-          .map(p => (p.nombre.length > 34 ? p.nombre.slice(0,32) + '…' : p.nombre) + ' (' + p.stock + ')').join(' · ')
-      + (low.length>2 ? ' y ' + (low.length-2) + ' más' : ''), 'inventario');
   if(recompras.length) alertasHtml += alerta('#1D4ED8','var(--blue-bg)','#BFDBFE','🔄',
     recompras.length + ' cliente' + (recompras.length>1?'s':'') + ' por recomprar', 'clientes');
   if(!alertasHtml) alertasHtml = `
     <div style="display:flex;align-items:center;gap:9px;background:var(--green-bg);border:1px solid #BBF7D0;border-radius:var(--radius);padding:11px 13px">
       <span style="font-size:15px">✅</span>
-      <span style="font-size:13px;font-weight:600;color:var(--green)">Todo al día — sin mora, sin stock bajo</span>
+      <span style="font-size:13px;font-weight:600;color:var(--green)">Todo al día — nadie en mora</span>
     </div>`;
 
   // ---- Punto de equilibrio ----
@@ -11775,6 +11764,194 @@ function historialPorCicloDist(ventasDelDist, nCiclos) {
   return out;
 }
 
+// ============================================================
+// 774. COMPARATIVO MES A MES DE DISTRIBUIDORES
+//
+// Pedido de Ángel: "una herramienta que muestre cuánto vendió cada
+// distribuidor cada mes, con la tabla de datos y una gráfica... que cuando
+// le dé clic a Distribuidores me lleve ahí". Así que esto es lo primero que
+// se ve al entrar a la página, antes que cualquier otra cosa.
+//
+// Lo que ya había (comentario 701) era el mes a mes de UN distribuidor,
+// escondido dentro de su tarjeta y solo si la abrías. Sirve para mirar a
+// uno; no sirve para la pregunta real, que es comparar: quién creció, quién
+// se enfrió, de quién depende el mes. Eso solo se ve con todos juntos.
+//
+// Dos decisiones de fondo:
+//
+//  · Va una fila "Sin vincular" con las ventas de canal distribuidor que no
+//    tienen distribuidorId. Sin ella la tabla cuadraría sola pero mentiría:
+//    el total no daría el del canal. Con ella, la suma de la tabla ES el
+//    canal — se audita de un vistazo, igual que los grupos de Gastos (773).
+//
+//  · La gráfica son columnas apiladas por mes, no una línea por
+//    distribuidor. Con diez distribuidores las líneas se vuelven una maraña
+//    y en un celular no se lee ninguna. Apiladas se leen las dos cosas que
+//    importan: cuánto hizo el canal cada mes y quién lo hizo.
+// ============================================================
+
+// Paleta de series. Orden fijo: el color sigue al distribuidor, no a su
+// puesto en el ranking, para que filtrar un mes no repinte a los demás.
+// Validada para daltonismo sobre fondo blanco (ΔE adyacente ≥ 9.1).
+const COLORES_DIST = ['#2a78d6','#eb6834','#1baf7a','#eda100','#e87ba4','#008300'];
+const COLOR_OTROS  = '#9CA3AF';
+const MAX_SERIES_DIST = 6;   // del 7º en adelante se doblan en "Otros"
+const MESES_COMPARATIVO = 6; // columnas visibles por defecto
+
+let distComparativoTodo = false;
+window.toggleComparativoDist = () => {
+  distComparativoTodo = !distComparativoTodo;
+  renderDistribuidores();
+};
+
+// Cifra corta para que quepa encima de una columna en un celular.
+const fmtCorto = n => {
+  const v = Math.round(Number(n)||0);
+  if(v === 0) return '—';
+  if(v >= 1000000) return '$' + (v/1000000).toFixed(v >= 10000000 ? 0 : 1).replace('.', ',') + 'M';
+  if(v >= 1000) return '$' + Math.round(v/1000) + 'k';
+  return '$' + v;
+};
+
+function comparativoDistribuidores() {
+  const nDisponibles = ciclosDisponibles();
+  const nMostrar = distComparativoTodo ? nDisponibles : Math.min(nDisponibles, MESES_COMPARATIVO - 1);
+
+  // Los ciclos van del más viejo al más nuevo: una línea de tiempo se lee
+  // de izquierda a derecha, aunque el offset 0 sea el de hoy.
+  const ciclos = [];
+  for(let i = nMostrar; i >= 0; i--) {
+    const c = getCicloActual(i);
+    ciclos.push({
+      offset: i, inicio: c.inicio, fin: c.fin, anio: c.inicio.slice(0,4),
+      mes: c.label.replace(/ de \d+$/, '').slice(0,3),
+      completo: i === 0 ? 'Este ciclo' : c.label.charAt(0).toUpperCase() + c.label.slice(1).replace(' de ', ' ')
+    });
+  }
+  // Si el comparativo cruza de año, "ago" solo deja de bastar: hay dos.
+  const variosAnios = new Set(ciclos.map(c => c.anio)).size > 1;
+  ciclos.forEach(c => {
+    c.etiqueta = c.offset === 0 ? 'Este mes' : c.mes + (variosAnios ? " '" + c.anio.slice(2) : '');
+  });
+
+  const sumaEn = (ventas, c) => ventas
+    .filter(v => v.fecha >= c.inicio && v.fecha <= c.fin)
+    .reduce((s,v) => s + ingresoVenta(v), 0);
+
+  const filas = DATA.distribuidores.map(d => {
+    const suyas = DATA.ventas.filter(v => v.distribuidorId === d.id);
+    const meses = ciclos.map(c => sumaEn(suyas, c));
+    return { id: d.id, nombre: d.nombre, meses, total: meses.reduce((a,b) => a+b, 0) };
+  });
+
+  // Las ventas del canal que nunca se vincularon a nadie. Van como una fila
+  // más para que la tabla no se quede corta frente al canal real.
+  const sueltas = DATA.ventas.filter(v => v.canal === 'distribuidor' && !v.distribuidorId);
+  const mesesSueltas = ciclos.map(c => sumaEn(sueltas, c));
+  const totalSueltas = mesesSueltas.reduce((a,b) => a+b, 0);
+
+  const conDatos = filas.filter(f => f.total > 0).sort((a,b) => b.total - a.total);
+  if(totalSueltas > 0) conDatos.push({ id:'__sueltas', nombre:'Sin vincular', meses: mesesSueltas, total: totalSueltas, suelta:true });
+
+  // Color por entidad: los MAX_SERIES_DIST primeros por total; el resto gris.
+  conDatos.forEach((f, i) => { f.color = (!f.suelta && i < MAX_SERIES_DIST) ? COLORES_DIST[i] : COLOR_OTROS; });
+
+  const totalesMes = ciclos.map((c, i) => conDatos.reduce((s,f) => s + f.meses[i], 0));
+  return { ciclos, filas: conDatos, totalesMes, total: totalesMes.reduce((a,b)=>a+b,0), hayMas: nDisponibles > nMostrar };
+}
+
+function comparativoDistHtml() {
+  const { ciclos, filas, totalesMes, total, hayMas } = comparativoDistribuidores();
+
+  if(!filas.length) {
+    return '<div class="card" style="margin-bottom:16px"><div class="empty-state" style="padding:26px">'
+      + '<div class="empty-state-icon">📊</div>'
+      + '<div class="empty-state-text">Todavía no hay ventas de distribuidores</div>'
+      + '<div class="empty-state-sub">En cuanto registres la primera, aquí aparece el mes a mes</div>'
+      + '</div></div>';
+  }
+
+  const maxMes = Math.max(...totalesMes, 1);
+
+  // ---- Gráfica: columnas apiladas, una por mes ----
+  // Cada segmento es un distribuidor. Los 2px de separación son del fondo:
+  // sin ellos dos colores pegados se leen como uno solo.
+  const columnas = ciclos.map((c, i) => {
+    const t = totalesMes[i];
+    const alturaPct = Math.round((t / maxMes) * 100);
+    const segmentos = filas
+      .map(f => ({ f, v: f.meses[i] }))
+      .filter(x => x.v > 0)
+      .reverse()  // el primero del ranking queda arriba de la pila
+      .map(x => '<div title="' + x.f.nombre + ': ' + fmt(x.v) + '" style="flex:' + x.v
+        + ' 1 0;min-height:3px;background:' + x.f.color + ';border-radius:3px"></div>')
+      .join('');
+    return '<div onclick="verCicloDistribuidores(' + c.offset + ')" style="flex:1;min-width:0;display:flex;'
+      + 'flex-direction:column;justify-content:flex-end;cursor:pointer" title="' + c.completo + ': ' + fmt(t) + '">'
+      + '<div style="font-size:9.5px;font-weight:700;color:var(--ink-2);text-align:center;margin-bottom:4px;'
+        + 'white-space:nowrap;font-variant-numeric:tabular-nums">' + fmtCorto(t) + '</div>'
+      + (t > 0
+          ? '<div style="height:' + Math.max(4, alturaPct) + '%;display:flex;flex-direction:column;gap:2px">' + segmentos + '</div>'
+          : '<div style="height:3px;background:var(--border);border-radius:2px"></div>')
+    + '</div>';
+  }).join('');
+
+  const etiquetasMes = ciclos.map(c =>
+    '<div style="flex:1;min-width:0;text-align:center;font-size:10.5px;color:var(--ink-3);'
+    + 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + c.etiqueta + '</div>').join('');
+
+  // ---- Leyenda: la identidad nunca queda solo en el color ----
+  const leyenda = filas.map(f =>
+    '<span style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:var(--ink-2)">'
+    + '<span style="width:9px;height:9px;border-radius:3px;background:' + f.color + ';flex-shrink:0"></span>'
+    + f.nombre + '</span>').join('');
+
+  // ---- Tabla: el dato exacto, celda por celda ----
+  const th = '<th style="position:sticky;left:0;background:var(--surface);z-index:1;min-width:128px">Distribuidor</th>'
+    + ciclos.map(c => '<th style="text-align:right;white-space:nowrap">' + c.etiqueta + '</th>').join('')
+    + '<th style="text-align:right">Total</th>';
+
+  const filasHtml = filas.map(f =>
+    '<tr>'
+    + '<td style="position:sticky;left:0;background:var(--surface);font-weight:600;white-space:nowrap">'
+      + '<span style="display:inline-block;width:8px;height:8px;border-radius:3px;background:' + f.color + ';margin-right:6px"></span>'
+      + (f.suelta ? '<span style="color:var(--amber)">' + f.nombre + '</span>' : f.nombre)
+    + '</td>'
+    + f.meses.map(v => '<td style="text-align:right;font-variant-numeric:tabular-nums;'
+        + (v > 0 ? 'color:var(--ink-2)' : 'color:var(--border-2)') + '">'
+        + (v > 0 ? fmt(v) : '—') + '</td>').join('')
+    + '<td style="text-align:right;font-weight:700;font-variant-numeric:tabular-nums">' + fmt(f.total) + '</td>'
+  + '</tr>').join('');
+
+  const filaTotal = '<tr style="border-top:2px solid var(--border)">'
+    + '<td style="position:sticky;left:0;background:var(--surface);font-weight:800">Total</td>'
+    + totalesMes.map(v => '<td style="text-align:right;font-weight:700;font-variant-numeric:tabular-nums">'
+        + (v > 0 ? fmt(v) : '—') + '</td>').join('')
+    + '<td style="text-align:right;font-weight:800;font-variant-numeric:tabular-nums">' + fmt(total) + '</td>'
+  + '</tr>';
+
+  return '<div class="card" style="margin-bottom:16px;padding:16px">'
+    + '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:3px">'
+      + '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2)">'
+        + '📊 Cuánto compró cada uno, mes a mes</div>'
+      + (hayMas || distComparativoTodo
+          ? '<button onclick="toggleComparativoDist()" style="background:none;border:none;cursor:pointer;'
+            + 'font-size:11.5px;color:var(--blue);font-weight:600;padding:0">'
+            + (distComparativoTodo ? 'Ver solo los últimos meses' : 'Ver todo el historial') + '</button>'
+          : '')
+    + '</div>'
+    + '<div style="font-size:11.5px;color:var(--ink-3);margin-bottom:13px;line-height:1.4">'
+      + 'Toca un mes para ver el detalle de ese ciclo más abajo.</div>'
+    + '<div style="display:flex;gap:7px;align-items:stretch;height:155px">' + columnas + '</div>'
+    + '<div style="display:flex;gap:7px;margin-top:7px;padding-top:7px;border-top:1px solid var(--border)">' + etiquetasMes + '</div>'
+    + '<div style="display:flex;flex-wrap:wrap;gap:10px 16px;margin:13px 0 4px">' + leyenda + '</div>'
+    + '<div class="table-wrap" style="margin-top:10px"><table class="tbl">'
+      + '<thead><tr>' + th + '</tr></thead>'
+      + '<tbody>' + filasHtml + filaTotal + '</tbody>'
+    + '</table></div>'
+  + '</div>';
+}
+
 function renderDistribuidores() {
   const tipoIco   = { gimnasio:'🏋️', persona:'👤', tienda:'🏪' };
   const tipoLabel = { gimnasio:'Gimnasio', persona:'Persona distribuidora', tienda:'Tienda / Local' };
@@ -11830,9 +12007,8 @@ function renderDistribuidores() {
   const ordenDist = window.distRankingPor || 'total';
   distData.sort((a,b) => ordenDist === 'margen' ? b.margen - a.margen : b.total - a.total);
 
-  const totalGeneral   = DATA.ventas.filter(v => v.canal === 'distribuidor' && enVentana(v)).reduce((s,v) => s+ingresoVenta(v), 0);
-  const totalVinculado = distData.reduce((s,d) => s + d.total, 0);
-  const margenTotal    = distData.reduce((s,d) => s + d.margen, 0);
+  // 774. `totalGeneral` y `totalVinculado` se eliminaron con sus tarjetas.
+  const margenTotal = distData.reduce((s,d) => s + d.margen, 0);
 
   // 514. DETECCIÓN DE DISTRIBUIDORES SIN REGISTRAR
   //      Ventas con canal='distribuidor' que tienen nombre de cliente pero
@@ -11878,11 +12054,18 @@ function renderDistribuidores() {
     + 'color:' + (verTodo?'#fff':'var(--ink-2)') + ';font-weight:' + (verTodo?'600':'400') + '">Todo</button>';
   const selectorDistHtml = '<div style="display:flex;gap:7px;overflow-x:auto;padding-bottom:4px;margin-bottom:14px">' + chipsDist + '</div>';
 
-  const resumenHtml = selectorDistHtml
+  // 774. Se quitaron "Total canal dist." y "Vinculado": el comparativo de
+  //      arriba ya trae los dos —la fila Total y la fila "Sin vincular"— y
+  //      repetirlos aquí era la misma plata dos veces, que es justo lo que
+  //      Ángel señaló en Gastos (773). Quedan los dos números que el
+  //      comparativo NO responde: cuánto deja el canal y cuántos hay.
+  const resumenHtml = '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:9px">'
+      + '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2)">👤 Detalle por distribuidor</div>'
+      + '<div style="font-size:11.5px;color:var(--ink-3)">' + etiquetaVentana + '</div>'
+    + '</div>'
+    + selectorDistHtml
     + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px">'
-    + '<div class="metric-card"><div class="metric-label">Total canal dist.</div><div class="metric-value" style="font-size:18px;color:var(--lime)">' + fmt(totalGeneral) + '</div><div class="metric-sub">' + etiquetaVentana + '</div></div>'
-    + '<div class="metric-card"><div class="metric-label">Vinculado</div><div class="metric-value" style="font-size:18px;color:var(--blue)">' + fmt(totalVinculado) + '</div><div class="metric-sub">con distribuidor asignado</div></div>'
-    + '<div class="metric-card"><div class="metric-label">Margen real total</div><div class="metric-value" style="font-size:18px;color:' + (margenTotal>=0?'var(--green)':'var(--red)') + '">' + fmt(margenTotal) + '</div><div class="metric-sub">lo que deja a Duppla</div></div>'
+    + '<div class="metric-card"><div class="metric-label">Margen real</div><div class="metric-value" style="font-size:18px;color:' + (margenTotal>=0?'var(--green)':'var(--red)') + '">' + fmt(margenTotal) + '</div><div class="metric-sub">lo que deja el canal en ' + etiquetaVentana + '</div></div>'
     + '<div class="metric-card"><div class="metric-label">Distribuidores</div><div class="metric-value" style="font-size:18px">' + DATA.distribuidores.length + '</div><div class="metric-sub">registrados</div></div>'
     + '</div>';
 
@@ -12037,7 +12220,7 @@ function renderDistribuidores() {
 
   document.getElementById('page-distribuidores').innerHTML =
     '<div class="page-header">'
-      + '<div><div class="page-title">Distribuidores</div><div class="page-sub">Gimnasios y distribuidores vinculados — rentabilidad real</div></div>'
+      + '<div><div class="page-title">Distribuidores</div><div class="page-sub">Cuánto compra cada gimnasio, mes a mes</div></div>'
       + '<div style="display:flex;gap:8px">'
       // 684. Acceso a la limpieza masiva de vínculos (ver comentario 683).
       //      Solo aparece si de verdad hay algo mal vinculado.
@@ -12047,8 +12230,11 @@ function renderDistribuidores() {
       + '<button class="btn btn-lime btn-sm" onclick="abrirNuevoDistribuidor()">+ Agregar</button>'
       + '</div>'
     + '</div>'
-    + resumenHtml
+    // 774. El comparativo va de primero: es a lo que Ángel entra cuando toca
+    //      "Distribuidores" en el menú.
+    + comparativoDistHtml()
     + sinRegistrarHtml
+    + resumenHtml
     + togglesHtml
     + cardsHtml;
 }
