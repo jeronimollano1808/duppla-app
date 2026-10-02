@@ -12645,6 +12645,7 @@ function comparativoDistribuidores() {
   // Color por entidad: los MAX_SERIES_DIST primeros por total; el resto gris.
   const paleta = coloresDeSerie();
   conDatos.forEach((f, i) => { f.color = (!f.suelta && i < MAX_SERIES_DIST) ? paleta.series[i] : paleta.otros; });
+  comparativoDistribuidores.paleta = paleta;
 
   const totalesMes = ciclos.map((c, i) => conDatos.reduce((s,f) => s + f.meses[i], 0));
   return { ciclos, filas: conDatos, totalesMes, total: totalesMes.reduce((a,b)=>a+b,0), hayMas: nDisponibles > nMostrar };
@@ -12652,6 +12653,7 @@ function comparativoDistribuidores() {
 
 function comparativoDistHtml() {
   const { ciclos, filas, totalesMes, total, hayMas } = comparativoDistribuidores();
+  const paletaDist = comparativoDistribuidores.paleta || coloresDeSerie();
 
   if(!filas.length) {
     return '<div class="card" style="margin-bottom:16px"><div class="empty-state" style="padding:26px">'
@@ -12666,15 +12668,26 @@ function comparativoDistHtml() {
   // ---- Gráfica: columnas apiladas, una por mes ----
   // Cada segmento es un distribuidor. Los 2px de separación son del fondo:
   // sin ellos dos colores pegados se leen como uno solo.
+  // 800. Los que no tienen color propio se apilan en UNA sola banda "Otros",
+  //      no en ocho bandas grises. Con catorce distribuidores la versión
+  //      anterior dibujaba ocho tiras grises por columna y la gráfica se leía
+  //      como ruido: lo que debería resaltar —quién carga el mes— quedaba
+  //      enterrado bajo rayas del mismo color. La tabla de abajo sigue
+  //      mostrando a todos, uno por uno, que es donde se consulta el detalle.
+  const conColor = filas.filter(f => !f.suelta && f.color !== paletaDist.otros);
+  const resto    = filas.filter(f => f.suelta || f.color === paletaDist.otros);
+
   const columnas = ciclos.map((c, i) => {
     const t = totalesMes[i];
     const alturaPct = Math.round((t / maxMes) * 100);
-    const segmentos = filas
-      .map(f => ({ f, v: f.meses[i] }))
+    const piezas = conColor.map(f => ({ nombre: f.nombre, v: f.meses[i], color: f.color }));
+    const vOtros = resto.reduce((a, f) => a + f.meses[i], 0);
+    if(vOtros > 0) piezas.push({ nombre: resto.length + ' más', v: vOtros, color: paletaDist.otros });
+    const segmentos = piezas
       .filter(x => x.v > 0)
       .reverse()  // el primero del ranking queda arriba de la pila
-      .map(x => '<div title="' + x.f.nombre + ': ' + fmt(x.v) + '" style="flex:' + x.v
-        + ' 1 0;min-height:3px;background:' + x.f.color + ';border-radius:3px"></div>')
+      .map(x => '<div title="' + escAttr(x.nombre) + ': ' + fmt(x.v) + '" style="flex:' + x.v
+        + ' 1 0;min-height:3px;background:' + x.color + ';border-radius:3px"></div>')
       .join('');
     return '<div onclick="verCicloDistribuidores(' + c.offset + ')" style="flex:1;min-width:0;display:flex;'
       + 'flex-direction:column;justify-content:flex-end;cursor:pointer" title="' + c.completo + ': ' + fmt(t) + '">'
@@ -12691,10 +12704,18 @@ function comparativoDistHtml() {
     + 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + c.etiqueta + '</div>').join('');
 
   // ---- Leyenda: la identidad nunca queda solo en el color ----
-  const leyenda = filas.map(f =>
+  // 800. La leyenda nombra solo a los que tienen color propio. Catorce
+  //      nombres, doce de ellos con el mismo punto gris, no es una leyenda:
+  //      es una lista que estorba.
+  const leyenda = conColor.map(f =>
     '<span style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:var(--ink-2)">'
     + '<span style="width:9px;height:9px;border-radius:3px;background:' + f.color + ';flex-shrink:0"></span>'
-    + f.nombre + '</span>').join('');
+    + escTxt(f.nombre) + '</span>').join('')
+    + (resto.length
+        ? '<span style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:var(--ink-3)">'
+          + '<span style="width:9px;height:9px;border-radius:3px;background:' + paletaDist.otros + ';flex-shrink:0"></span>'
+          + 'Otros ' + resto.length + ' · en la tabla</span>'
+        : '');
 
   // ---- Tabla: el dato exacto, celda por celda ----
   const th = '<th style="position:sticky;left:0;background:var(--surface);z-index:1;min-width:128px">Distribuidor</th>'

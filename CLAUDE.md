@@ -1004,6 +1004,10 @@ Los cajones se armaron por **el momento en que se usa cada cosa**, no por lo que
 
 El logo era la letra "D" tecleada dentro de un cuadro. Ahora es un dibujo: **una D partida en dos piezas**, con una ranura entre la vara y el arco. No es decoración — DUPPLA viene de *dupla*, y el negocio son dos socios. Una letra hecha de dos partes dice eso sin explicarlo. Va en SVG inline (pesa nada, nítida en cualquier pantalla, toma el color de donde esté) y el mismo dibujo es el favicon, embebido como data-URI.
 
+**800. Un problema que solo se vio al mirarlo en oscuro.** La gráfica de distribuidores dibujaba **una banda gris por cada distribuidor fuera del top 6**. Con catorce, cada columna eran ocho tiras grises y la gráfica se leía como ruido: lo que debía resaltar —quién carga el mes— quedaba enterrado bajo rayas del mismo color. (En claro ya pasaba; el contraste del tema oscuro lo hizo evidente.)
+
+Ahora todo lo que no tiene color propio se apila en **una sola banda "Otros"**, que es lo que prescribe la regla de paletas categóricas: pasado el octavo color no se inventan matices, se dobla en "Otros". La leyenda nombra solo a los seis con color y cierra con *"Otros 8 · en la tabla"*. **La tabla sigue mostrando a todos, uno por uno** — es ahí donde se consulta el detalle; la gráfica es para la forma.
+
 **Regla que sale de aquí:** *un tema oscuro no se agrega al final, se habilita.* El trabajo de verdad fue el 792 —sacar los colores del código— y eso no se ve en pantalla. Cuando alguien pida "modo oscuro" en una app con colores a mano, el 80% del tiempo se va en esa limpieza, y conviene decirlo antes de empezar.
 
 
