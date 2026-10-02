@@ -8745,26 +8745,16 @@ window.abrirCierreMes = () => {
 };
 
 window.confirmarCierreMes = async () => {
+  // 788. Este botón (el de Metas) ya no escribe por su cuenta: usa el mismo
+  //      camino que el de Informes, para que los dos congelen los costos.
   const c = window._cierrePendiente;
   if(!c) { alert('Error al preparar el cierre. Intenta de nuevo.'); return; }
-  // 784. Si ese mes ya tenía un registro (porque se cerró y se reabrió), se
-  //      actualiza el mismo en vez de crear otro: un mes tiene UN cierre.
-  const previo = DATA.cierres.find(x => x.mes === c.mes);
-  const datos = {
-    mes: c.mes,
-    ingresos: c.ingresos,
-    gastos: c.gastos,
-    margen: c.margen,
-    numVentas: c.numVentas,
-    inventarioValorizado: c.inventarioValorizado,
-    fechaCierre: today(),
-    cerradoPor: auth.currentUser?.email || 'desconocido',
-    reabierto: false
-  };
-  if(previo) await updateDoc(doc(db,'cierres',previo.id), datos);
-  else await addDoc(collection(db,'cierres'), { ...datos, createdAt: serverTimestamp() });
+  const { inicio, fin } = calcularRangoMeta(c.mes, DUPPLA_DIA_INICIO_MES);
+  const extra = resumenCongelacion(inicio, fin);
+  if(extra && !confirm('Antes de cerrar:' + extra + '\n\n¿Seguimos?')) return;
+  const { cong } = await ejecutarCierreDeMes(c.mes, inicio, fin);
   closeModal('modal-cierre-mes');
-  toast('✅ Mes cerrado correctamente — snapshot guardado');
+  toast('✅ Mes cerrado' + (cong.congeladas ? ' · ' + cong.congeladas + ' costo(s) congelado(s)' : ''));
 };
 
 // ============================================================
@@ -11913,6 +11903,12 @@ window.guardarCostosManuales = async () => {
     cambios.push({ p, linea, costoUnit: Math.round(val) });
   });
   if(!cambios.length) return toast('⚠️ No escribiste ningún costo');
+  // 787. Esta pantalla escribe `costoUnit` directo, sin pasar por guardarVenta,
+  //      así que se saltaba el candado de mes cerrado (784). Escribir un costo
+  //      en una venta de un mes cerrado le cambiaría el margen a ese mes — que
+  //      es justo lo que el congelado viene a impedir.
+  const bloqueada = cambios.find(c => cierreDeFecha(c.p.v.fecha));
+  if(bloqueada && !exigirMesAbierto(bloqueada.p.v.fecha, 'escribirle el costo a una venta')) return;
   const totalCosto = cambios.reduce((s,c) => s + c.costoUnit * c.linea.cant, 0);
   if(!confirm('Se le va a guardar el costo a ' + cambios.length + ' venta(s): ' + fmt(totalCosto) + ' en total.\n\n'
     + 'No se toca el inventario ni el valor de la venta.\n\n¿Seguimos?')) return;
@@ -12774,6 +12770,140 @@ function renglonInforme(etiqueta, valor, signo, nivel, nota, color) {
 // todavía puede mover el margen de un mes cerrado — queda anotado como
 // pendiente, no como resuelto.
 // ============================================================
+// ============================================================
+// 787. CONGELAR EL COSTO AL CERRAR EL MES
+//
+// Ángel: "quiero que lo congeles, porque los precios pueden variar, pero el
+// margen de ese mes ya estaría estipulado respecto al precio que nos valió
+// ese producto en ese momento".
+//
+// Es el agujero que quedó anotado en 784. `calcularMargenVenta` usa el
+// `costoUnit` guardado dentro de la venta y, si no lo tiene, cae al costo
+// ACTUAL del producto. O sea que subirle el costo a una creatina hoy
+// cambiaba el margen de todas las creatinas vendidas en mayo. Un mes
+// cerrado puede quedar bloqueado contra ediciones y aun así moverse por la
+// espalda.
+//
+// La propiedad que hace que esto sea seguro: el costo que se graba es
+// EXACTAMENTE el que el cálculo ya estaba usando, así que **congelar no
+// cambia ni un peso de los números de hoy**. Solo los deja de mover mañana.
+// Está probado como invariante, no como intención.
+//
+// Lo que NO se puede congelar se deja en paz y se informa: una venta manual
+// (producto fuera de catálogo) o una con el producto ya borrado no tienen de
+// dónde sacar un costo. Inventarles uno sería peor que dejarlas sin margen.
+// ============================================================
+function congelacionPendiente(ventas) {
+  const porCongelar = [], sinCosto = [];
+  const costoDe = (prodId) => {
+    const prod = DATA.inventario.find(x => x.id === prodId);
+    return prod ? Number(prod.costo || 0) : null;
+  };
+  const congelarLineas = (lineas) => {
+    let toco = false, faltan = 0;
+    const nuevas = lineas.map(l => {
+      if(l.costoUnit != null) return l;
+      const c = costoDe(l.prodId);
+      if(c == null) { faltan++; return l; }
+      toco = true;
+      return { ...l, costoUnit: c };
+    });
+    return { nuevas, toco, faltan };
+  };
+
+  ventas.forEach(v => {
+    // Venta manual: producto fuera de catálogo, nunca hubo costo que guardar.
+    if(v.esManual && !v.esMultiple && !v.esCombo) {
+      if(v.costoUnit == null) sinCosto.push(v);
+      return;
+    }
+    if(v.esMultiple && v.productosVenta?.length) {
+      const r = congelarLineas(v.productosVenta);
+      if(r.toco) porCongelar.push({ id: v.id, venta: v, datos: { productosVenta: r.nuevas } });
+      if(r.faltan) sinCosto.push(v);
+      return;
+    }
+    if(v.esCombo && v.productosCombo?.length) {
+      const r = congelarLineas(v.productosCombo);
+      if(r.toco) porCongelar.push({ id: v.id, venta: v, datos: { productosCombo: r.nuevas } });
+      if(r.faltan) sinCosto.push(v);
+      return;
+    }
+    if(v.costoUnit != null) return;          // ya estaba congelada
+    const c = costoDe(v.prodId);
+    if(c == null) { sinCosto.push(v); return; }   // producto borrado del inventario
+    porCongelar.push({ id: v.id, venta: v, datos: { costoUnit: c } });
+  });
+  return { porCongelar, sinCosto };
+}
+
+async function congelarCostosDelMes(inicio, fin) {
+  const ventas = DATA.ventas.filter(v => v.fecha >= inicio && v.fecha <= fin);
+  const { porCongelar, sinCosto } = congelacionPendiente(ventas);
+  let hechas = 0;
+  for(const c of porCongelar) {
+    try {
+      await updateDoc(doc(db,'ventas',c.id), { ...c.datos, costoCongeladoEn: today() });
+      hechas++;
+    } catch(e) { console.warn('No se pudo congelar el costo de la venta', c.id, e); }
+  }
+  return { congeladas: hechas, intentadas: porCongelar.length, sinCosto: sinCosto.length };
+}
+
+// ------------------------------------------------------------
+// 788. UN SOLO CIERRE
+//
+// Había dos caminos para cerrar un mes —el botón viejo de Metas y el nuevo
+// de Informes— cada uno con su propia escritura. Dos caminos para el mismo
+// acto es la receta de que uno congele los costos y el otro no. Ahora los
+// dos pasan por aquí.
+// ------------------------------------------------------------
+async function ejecutarCierreDeMes(mesStr, inicio, fin) {
+  const F = estadoFinanciero(inicio, fin, {});
+  const cong = await congelarCostosDelMes(inicio, fin);
+  const previo = DATA.cierres.find(c => c.mes === mesStr);
+  const datos = {
+    mes: mesStr,
+    ingresos: F.vendido, gastos: F.gastado, margen: F.utilidadBruta,
+    utilidadNeta: F.utilidadNeta, numVentas: F.nVentas,
+    inventarioValorizado: F.valorInventario,
+    costosCongelados: cong.congeladas,
+    ventasSinCosto: cong.sinCosto,
+    fechaCierre: today(),
+    cerradoPor: auth.currentUser?.email || 'desconocido',
+    reabierto: false
+  };
+  if(previo) await updateDoc(doc(db,'cierres',previo.id), datos);
+  else await addDoc(collection(db,'cierres'), { ...datos, createdAt: serverTimestamp() });
+
+  await registrarEnBitacora({
+    accion:'cerró', coleccion:'cierres', docId: mesStr, titulo: 'Mes ' + mesStr,
+    cambios: [
+      { campo:'vendido', etiqueta:'Vendido', antes:'—', despues: fmt(F.vendido) },
+      { campo:'utilidadNeta', etiqueta:'Utilidad neta', antes:'—', despues: fmt(F.utilidadNeta) },
+      { campo:'costosCongelados', etiqueta:'Costos congelados', antes:'—', despues: String(cong.congeladas) + ' venta(s)' }
+    ]
+  });
+  return { F, cong };
+}
+
+// Lo que el usuario necesita saber ANTES de confirmar: cuántas ventas van a
+// quedar con el costo clavado y cuántas se quedan sin margen, y por qué.
+function resumenCongelacion(inicio, fin) {
+  const ventas = DATA.ventas.filter(v => v.fecha >= inicio && v.fecha <= fin);
+  const { porCongelar, sinCosto } = congelacionPendiente(ventas);
+  let txt = '';
+  if(porCongelar.length) {
+    txt += '\n\n🔐 Se le va a clavar el costo a ' + porCongelar.length + ' venta(s): a partir de ahí, '
+      + 'cambiar el precio de un producto ya no les mueve el margen.';
+  }
+  if(sinCosto.length) {
+    txt += '\n\n⚠️ ' + sinCosto.length + ' venta(s) se quedan sin costo (producto fuera de catálogo o ya borrado). '
+      + 'Su margen seguirá sin calcularse, aquí y en los informes.';
+  }
+  return txt;
+}
+
 function mesStrDeFecha(fecha) {
   if(!fecha) return null;
   for(let i = 0; i <= 60; i++) {
@@ -12830,30 +12960,12 @@ window.cerrarMesDesdeInformes = async (mesStr) => {
   const [a, m] = String(mesStr).split('-');
   const nombre = (MESES[parseInt(m)] || mesStr) + ' ' + a;
   if(!confirm('Vas a cerrar ' + nombre + '.\n\n'
-    + 'Vendido ' + fmt(F.vendido) + ' · Utilidad neta ' + fmt(F.utilidadNeta) + '\n\n'
-    + 'A partir de ahí, sus ventas, gastos y abonos quedan bloqueados. '
-    + 'Siempre puedes reabrirlo si hace falta.\n\n¿Cerramos?')) return;
+    + 'Vendido ' + fmt(F.vendido) + ' · Utilidad neta ' + fmt(F.utilidadNeta)
+    + resumenCongelacion(r.inicio, r.fin)
+    + '\n\nSus ventas, gastos y abonos quedan bloqueados. Siempre puedes reabrirlo.\n\n¿Cerramos?')) return;
 
-  // Si el mes ya se había cerrado y se reabrió, se actualiza el mismo
-  // registro en vez de crear otro: así el historial de un mes es uno solo.
-  const previo = DATA.cierres.find(c => c.mes === mesStr);
-  const datos = {
-    mes: mesStr,
-    ingresos: F.vendido, gastos: F.gastado, margen: F.utilidadBruta,
-    utilidadNeta: F.utilidadNeta, numVentas: F.nVentas,
-    inventarioValorizado: F.valorInventario,
-    fechaCierre: today(),
-    cerradoPor: auth.currentUser?.email || 'desconocido',
-    reabierto: false
-  };
-  if(previo) await updateDoc(doc(db, 'cierres', previo.id), datos);
-  else await addDoc(collection(db, 'cierres'), { ...datos, createdAt: serverTimestamp() });
-  await registrarEnBitacora({ accion:'cerró', coleccion:'cierres', docId: mesStr, titulo: 'Mes ' + nombre,
-    cambios: [
-      { campo:'vendido', etiqueta:'Vendido', antes:'—', despues: fmt(F.vendido) },
-      { campo:'utilidadNeta', etiqueta:'Utilidad neta', antes:'—', despues: fmt(F.utilidadNeta) }
-    ] });
-  toast('🔒 ' + nombre + ' cerrado');
+  const { cong } = await ejecutarCierreDeMes(mesStr, r.inicio, r.fin);
+  toast('🔒 ' + nombre + ' cerrado' + (cong.congeladas ? ' · ' + cong.congeladas + ' costo(s) congelado(s)' : ''));
 };
 
 function bloqueoInformeHtml(r) {
@@ -12869,7 +12981,17 @@ function bloqueoInformeHtml(r) {
       + '<span style="flex:1;min-width:0;font-size:12.5px;color:var(--ink-2);line-height:1.4">'
         + '<strong style="color:var(--ink)">Mes cerrado.</strong> Sus ventas, gastos y abonos no se pueden tocar.'
         + (c.fechaCierre ? ' Se cerró el ' + c.fechaCierre : '')
-        + (c.cerradoPor ? ' por ' + escTxt(c.cerradoPor) : '') + '.</span>'
+        + (c.cerradoPor ? ' por ' + escTxt(c.cerradoPor) : '') + '.'
+        // 787. Que se vea que el margen de este mes ya no se puede mover por
+        //      la espalda: es la garantía que da el congelado.
+        + (c.costosCongelados > 0
+            ? ' <span style="color:var(--ink-3)">Costo clavado en ' + c.costosCongelados + ' venta'
+              + (c.costosCongelados !== 1 ? 's' : '') + ': cambiar un precio ya no mueve este margen.</span>'
+            : '')
+        + (c.ventasSinCosto > 0
+            ? ' <span style="color:var(--amber)">' + c.ventasSinCosto + ' quedaron sin costo.</span>'
+            : '')
+      + '</span>'
       + '<button class="btn btn-sm" style="white-space:nowrap" onclick="reabrirMes(\'' + escAttr(mesStr) + '\')">🔓 Reabrir</button>'
     + '</div>';
   }

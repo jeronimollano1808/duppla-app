@@ -897,5 +897,41 @@ El feed va agrupado por día, con filtros (Todo · Plata · Solo ediciones · So
 **Regla que sale de aquí:** *en un sistema con más de un dueño, cualquier campo que mueva plata necesita un antes y un después guardado.* No por desconfianza — por memoria. A los tres meses nadie recuerda por qué un número es el que es, y sin el rastro la única salida es volver a cuadrarlo todo a mano.
 
 
+### 14.26 El costo se congela al cerrar el mes (comentarios 787–788)
+
+Ángel, escogiendo de la lista:
+
+> *"Sí, quiero que lo congeles, porque los precios pueden variar, pero el margen de ese mes ya estaría estipulado respecto al precio que nos valió ese producto en ese momento."*
+
+Es el agujero que quedó anotado al final de 14.24, y lo describió exactamente.
+
+**El problema.** `calcularMargenVenta` usa el `costoUnit` guardado dentro de la venta y, **si no lo tiene, cae al costo ACTUAL del producto**. O sea que subirle hoy el costo a una creatina cambiaba el margen de todas las creatinas vendidas en mayo. Un mes podía estar bloqueado contra ediciones (784) **y aun así moverse por la espalda**.
+
+**El arreglo.** Al cerrar un mes se graba dentro de cada venta el costo vigente en ese momento.
+
+**La propiedad que lo hace seguro, y que está probada como invariante y no como intención:** el costo que se graba es *exactamente el que el cálculo ya estaba usando*, así que **congelar no cambia ni un peso de los números de hoy**. Solo deja de moverlos mañana. La prueba lo verifica en los dos sentidos:
+
+- congelar → todos los márgenes idénticos;
+- subir el costo después de congelar → todos los márgenes idénticos;
+- subir el costo **sin** haber congelado → los márgenes cambian (o sea: el problema era real, no teórico).
+
+**Las cuatro formas de venta se tratan distinto:**
+
+| Forma | Qué pasa |
+|---|---|
+| Normal sin `costoUnit` | Se graba el costo actual del producto. |
+| Múltiple / combo | Se graba línea por línea, y **solo** en las que faltaban. |
+| Ya tenía `costoUnit` | No se toca. El cierre es idempotente: cerrar dos veces no vuelve a escribir nada. |
+| Manual, o con el producto ya borrado | **No se congela y se avisa.** No hay de dónde sacar un costo; inventarle uno sería peor que dejarla sin margen. |
+
+El diálogo de confirmación dice, antes de cerrar, cuántas ventas van a quedar con el costo clavado y cuántas se quedan sin él y por qué. Y la franja del mes cerrado lo recuerda después.
+
+**788. Un solo cierre.** Había dos caminos para cerrar un mes —el botón viejo de Metas y el nuevo de Informes— cada uno con su propia escritura. Dos caminos para el mismo acto es la receta de que uno congele los costos y el otro no. Ahora los dos pasan por `ejecutarCierreDeMes()`.
+
+**Un agujero lateral que apareció revisando esto:** la pantalla de "Ventas sin costo" (comentario 760) escribe `costoUnit` **directo**, sin pasar por `guardarVenta`, así que se saltaba el candado de mes cerrado. Escribir un costo ahí en una venta de un mes cerrado le habría cambiado el margen — justo lo que el congelado viene a impedir. Ya tiene su candado.
+
+**Regla que sale de aquí:** *un candado puesto en la puerta principal no sirve si hay funciones que escriben por la ventana.* Cada vez que se agregue una pantalla que escriba directo con `updateDoc`, hay que preguntarse si debería pasar por `exigirMesAbierto`. Las dos encontradas hasta ahora (esta y `guardarCostosManuales`) no se encontraron leyendo el código: se encontraron preguntando *"¿qué más puede mover este número?"*.
+
+
 ---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*
