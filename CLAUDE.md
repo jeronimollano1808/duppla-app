@@ -800,5 +800,61 @@ Dos cosas que parecen detalle y no lo son:
 **Regla que sale de aquí:** *un dato que viene de lo que el usuario escribió —un nombre de cliente, una descripción de gasto— se escapa siempre al construir HTML, aunque "nadie va a escribir eso".* En esta app los nombres los teclea una persona apurada facturando, y los apóstrofes existen.
 
 
+### 14.24 Informes y meses congelados (comentarios 780–784)
+
+De la lista de "qué le falta para ser una plataforma premium de contabilidad", Ángel escogió arrancar por las dos primeras.
+
+**780. Un solo motor de cuentas: `estadoFinanciero(inicio, fin, opciones)`.**
+
+Antes de escribir el estado de resultados había que decidir algo: la cuenta de "qué ganó el negocio" y "qué pasó en el banco" vivía escrita a mano dentro de `renderInicio`. Copiarla a la pantalla nueva habría creado **dos implementaciones de la misma cuenta**, y dos implementaciones de una cuenta siempre terminan dando números distintos. Es la misma familia de error del 727 (venta vs cobro) y del 772 (abonos contados dos veces), que ya costaron una sesión cada uno.
+
+Así que la cuenta se extrajo y ahora Inicio e Informes la comparten. `renderInicio` quedó más corto y **sus números no cambiaron** — se compararon contra producción antes y después, renglón por renglón.
+
+**781. Gastos de operación ≠ gastos financieros.** Un contador no los mezcla: la utilidad **operacional** dice si el negocio funciona; la **neta**, qué queda después de lo que cuesta la plata prestada. Para Duppla no es un detalle académico: los intereses de Nancy Garay son de los gastos más grandes del mes.
+
+Pero en **Inicio los dos siguen sumando juntos**, a propósito. Ahí la pregunta de Ángel es "cuánto salió este mes", y los intereses salen. La separación formal vive en el informe, que es donde un contador la busca. Esta decisión es la razón de que el cambio de motor no moviera ningún número de Inicio.
+
+**782. La página Informes.** Dos estados, por la misma razón que en Inicio: ganar y cobrar son preguntas distintas, y un negocio puede tener un año excelente y quedarse sin efectivo el mismo mes.
+
+```
+ESTADO DE RESULTADOS            FLUJO DE CAJA
+  Ventas del periodo              Te pagaron de contado
+− Costo de la mercancía vendida  + Abonos que entraron
+= UTILIDAD BRUTA  (%)            + Cobros de cuentas viejas
+− Gastos de operación (por cat.) = TOTAL QUE ENTRÓ
+= UTILIDAD OPERACIONAL           − Compra de mercancía
+− Gastos financieros             − Gastos de operación / financieros
+= UTILIDAD NETA   (%)            = MOVIMIENTO DEL BANCO
+```
+
+Lleva un aviso que me importa: si el periodo tiene ventas sin costo registrado, el informe **lo dice en amarillo** y advierte que el margen está por encima del real. Un informe que calla lo que no sabe es peor que no tenerlo — alguien va a tomar una decisión con él.
+
+**783. PDF y Excel.** Ángel escogió los dos y tiene sentido: el PDF es lo que se envía y se archiva, el Excel es lo que un contador realmente usa porque va a querer sumar y filtrar. El Excel lleva tres hojas: el informe, **todas las ventas** y **todos los gastos** del periodo, con la mercancía marcada aparte — un informe sin su detalle es un número que hay que creer.
+
+Las filas salen de **una sola función** (`filasInforme`): si el PDF y el Excel se arman por separado, en tres meses dicen cosas distintas.
+
+SheetJS se carga **solo al pedir el Excel**. Son casi 900 KB; meterlos en la carga de la app para una exportación ocasional castigaría cada apertura desde el celular, que es como se usa esto el 90% del tiempo.
+
+**784. Un mes cerrado se congela.**
+
+Hasta ahora "cerrar mes" guardaba una foto y nada más: al día siguiente cualquiera editaba una venta de junio y junio cambiaba, dejando el snapshot mintiendo. Con dos socios sobre la misma base, eso es una discusión sin ganador.
+
+Ángel escogió **"bloqueado pero reabrible"**. Un mes cerrado no admite crear, editar ni borrar ventas, gastos ni abonos con fecha dentro de él. Si de verdad hay que corregir, se reabre a propósito, queda registrado **quién y cuándo**, y se vuelve a cerrar.
+
+El criterio: *un bloqueo que se puede saltar sin darse cuenta no protege nada; uno que no se puede saltar nunca obliga a mentir en otro lado.* Reabrir tiene que ser deliberado y quedar escrito.
+
+Tres detalles que no son obvios:
+
+| Caso | Por qué se bloquea |
+|---|---|
+| Editar una venta y **cambiarle la fecha** a un mes abierto | Se revisan las dos fechas, la nueva y la original. Mover la venta cambia el mes cerrado igual que editarla dentro. |
+| Registrar un **abono** | Un abono mueve DOS meses: el suyo (entra a caja) y el de la venta (le cambia el saldo). Si cualquiera está cerrado, no pasa. |
+| Un mes **reabierto** | No cuenta como cerrado en ningún lado. Si contara, el botón de cerrar quedaría deshabilitado para siempre. |
+
+Y un mes tiene **un** registro de cierre: al volver a cerrar se actualiza el mismo documento, no se crea otro.
+
+**Límite honesto, anotado como pendiente y no como resuelto:** se bloquea lo que mueve los estados financieros fechados (ventas, gastos, abonos). Cambiar el **costo de un producto en Inventario** todavía puede mover el margen de un mes cerrado, porque `calcularMargenVenta` cae al costo del producto cuando la línea no lo tiene. Para cerrarlo de verdad habría que congelar el costo dentro de cada línea de venta al cerrar el mes.
+
+
 ---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*

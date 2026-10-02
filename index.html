@@ -909,6 +909,8 @@ body{
     <div class="page" id="page-proveedores"></div>
     <div class="page" id="page-pedidos"></div>
     <div class="page" id="page-metas"></div>
+    <!-- 782. Informes: estado de resultados y flujo de caja, exportables. -->
+    <div class="page" id="page-informes"></div>
     <!-- 178. Página de combos -->
     <div class="page" id="page-combos"></div>
     <!-- 306. Página de deudores -->
@@ -2955,6 +2957,8 @@ const MENU = [
   { id:'proveedores', label:'Proveedores', ico:'🚚', group:'Operaciones' },
   { id:'pedidos', label:'Pedidos', ico:'📋', group:'Operaciones' },
   { id:'metas', label:'Metas', ico:'🎯', group:'Operaciones' },
+  // 782. Informes — lo que se le pasa a un contador, a un banco o a un socio.
+  { id:'informes', label:'Informes', ico:'📄', group:'Operaciones' },
   // 177. Combos
   { id:'combos', label:'Combos', ico:'🎁', group:'Operaciones' },
   // 305. Deudores — clientes que deben + consumo interno Ángel/Jero
@@ -3138,6 +3142,7 @@ function renderPage(id) {
     inventario:renderInventario, clientes:renderClientes,
     gastos:renderGastos, proveedores:renderProveedores,
     pedidos:renderPedidos, metas:renderMetas, combos:renderCombos,
+    informes:renderInformes,
     deudores:renderDeudores,
     distribuidores:renderDistribuidores,
     consignacion:renderConsignacion,
@@ -4603,6 +4608,11 @@ window.guardarVenta = async () => {
   if(editId && !ventaOriginal) { alert('La venta que estás editando ya no existe (puede que se haya eliminado)'); return; }
 
   const fecha = document.getElementById('v-fecha').value;
+  // 784. Candado de mes cerrado. Se revisa la fecha NUEVA y, si es una
+  //      edición, también la ORIGINAL: mover una venta de un mes cerrado a
+  //      uno abierto cambiaría el mes cerrado igual que editarla dentro.
+  if(!exigirMesAbierto(fecha, 'registrar ni editar una venta')) return;
+  if(ventaOriginal && !exigirMesAbierto(ventaOriginal.fecha, 'editar una venta')) return;
   const canal = document.getElementById('v-canal').value;
   const total = Number(document.getElementById('v-total').value);
   const cliente = document.getElementById('v-cliente').value;
@@ -4918,6 +4928,13 @@ window.guardarAbono = async () => {
   const valor = Number(document.getElementById('ab-valor').value);
   if(!valor || valor <= 0) { alert('Ingresa un valor de abono válido'); return; }
   if(valor > (venta.saldo||0)) { alert(`El abono no puede superar el saldo de ${fmt(venta.saldo||0)}`); return; }
+
+  // 784. Candado de mes cerrado. Un abono mueve DOS meses: el de su propia
+  //      fecha (entra a caja ahí) y el de la venta (le cambia el saldo). Si
+  //      cualquiera de los dos está cerrado, no pasa.
+  const fechaAbono = document.getElementById('ab-fecha').value;
+  if(!exigirMesAbierto(fechaAbono, 'registrar un abono')) return;
+  if(!exigirMesAbierto(venta.fecha, 'abonar a una venta')) return;
 
   // 123. Calculamos los nuevos valores tras el abono
   const nuevoPagado = (venta.pagado||0) + valor;
@@ -6753,6 +6770,10 @@ window.guardarGasto = async () => {
 
   // 95. Si hay ID guardado = modo edición, si no = modo creación
   const gastoId = document.getElementById('g-id').value;
+  // 784. Candado de mes cerrado (ver guardarVenta: la fecha nueva y la vieja).
+  if(!exigirMesAbierto(fecha, 'registrar ni editar un gasto')) return;
+  const gastoOriginal = gastoId ? DATA.gastos.find(g => g.id === gastoId) : null;
+  if(gastoOriginal && !exigirMesAbierto(gastoOriginal.fecha, 'editar un gasto')) return;
   // 671. esFijo se guarda siempre explícito (true/false), nunca undefined —
   //      así una desmarcada manual gana sobre la deducción por descripción.
   const datos = {
@@ -7828,6 +7849,106 @@ function crecimientoHtml() {
   + '</div>';
 }
 
+// ============================================================
+// 780. ESTADO FINANCIERO DE UN RANGO — una sola cuenta para todos
+//
+// Hasta ahora el cálculo de "qué ganó el negocio" y "qué pasó en el banco"
+// vivía escrito a mano dentro de renderInicio. Con el estado de resultados
+// nuevo pasaban a ser DOS implementaciones de la misma cuenta, y dos
+// implementaciones de una cuenta siempre terminan dando números distintos
+// —es exactamente la familia de error del comentario 727 y del 772—.
+// Así que la cuenta se extrae aquí y la usan los dos.
+//
+// No recalcula nada por su lado: se apoya en las fuentes de verdad que ya
+// existen (ingresoVenta, calcularMargenVenta, esCompraMercancia, saldoReal)
+// y en la descomposición de caja del 772: el pago inicial de una venta
+// entra el día de la venta, y cada abono el día del abono.
+//
+// 781. Separa gastos de OPERACIÓN de gastos FINANCIEROS (intereses,
+//      comisiones, 4x1000). Un contador no los mezcla: la utilidad
+//      operacional dice si el negocio funciona, y la neta dice qué queda
+//      después de lo que cuesta la plata prestada. Para Duppla no es un
+//      detalle: los intereses de Nancy Garay son de los gastos más grandes.
+//      OJO: en Inicio los dos siguen sumando juntos a propósito (ver 781
+//      allá) — ahí la pregunta es "cuánto salió", no cómo se clasifica.
+// ============================================================
+const CATS_FINANCIERAS = ['finanzas'];
+const esGastoFinanciero = (g) => CATS_FINANCIERAS.includes(g?.cat);
+
+function estadoFinanciero(inicio, fin, opciones) {
+  const op = opciones || {};
+  const ventasR = DATA.ventas.filter(v => v.fecha >= inicio && v.fecha <= fin);
+  const gastosR = DATA.gastos.filter(g => g.fecha >= inicio && g.fecha <= fin);
+  const cobrosR = DATA.cobros.filter(c => c.fecha >= inicio && c.fecha <= fin);
+
+  // ---- Resultados ----
+  const vendido = ventasR.reduce((s,v) => s + ingresoVenta(v), 0);
+  let costoVendido = 0, ventasSinCosto = 0;
+  ventasR.forEach(v => {
+    const m = calcularMargenVenta(v);
+    if(m !== null) { costoVendido += Number(v.total||0) - m; return; }
+    const prod = DATA.inventario.find(p => p.id === v.prodId);
+    if(prod?.costo) costoVendido += Number(prod.costo) * Number(v.cant||1);
+    else ventasSinCosto++;
+  });
+  const utilidadBruta = vendido - costoVendido;
+  const margenPct = vendido > 0 ? Math.round((utilidadBruta / vendido) * 100) : 0;
+
+  // ---- Gastos, separados por naturaleza ----
+  const compras = gastosR.filter(esCompraMercancia).reduce((s,g) => s + Number(g.valor||0), 0);
+  const deOperacion = gastosR.filter(g => !esCompraMercancia(g) && !esGastoFinanciero(g));
+  const financieros = gastosR.filter(g => !esCompraMercancia(g) && esGastoFinanciero(g));
+  const gastosOperacion   = deOperacion.reduce((s,g) => s + Number(g.valor||0), 0);
+  const gastosFinancieros = financieros.reduce((s,g) => s + Number(g.valor||0), 0);
+  const gastado = gastosR.reduce((s,g) => s + Number(g.valor||0), 0);
+
+  const porCategoria = Object.entries(CATS)
+    .map(([k, label]) => ({
+      k, label,
+      total: deOperacion.filter(g => (g.cat || 'otro') === k).reduce((s,g) => s + Number(g.valor||0), 0)
+    }))
+    .filter(c => c.total > 0)
+    .sort((a,b) => b.total - a.total);
+  // Un gasto con una categoría que ya no existe en CATS no se puede perder:
+  // lo que no quedó clasificado se muestra, no se descarta en silencio.
+  const categorizado = porCategoria.reduce((s2,c) => s2 + c.total, 0);
+  if(gastosOperacion - categorizado > 0) {
+    porCategoria.push({ k:'__otros', label:'Sin categoría', total: gastosOperacion - categorizado });
+  }
+
+  const utilidadOperacional = utilidadBruta - gastosOperacion;
+  const utilidadNeta = utilidadOperacional - gastosFinancieros;
+
+  // ---- Caja (ver 770 y 772) ----
+  const pagoInicial = v => Number(v.pagado||0) - (v.abonos||[]).reduce((s2,a) => s2 + Number(a.valor||0), 0);
+  let contado = 0, abonos = 0;
+  DATA.ventas.forEach(v => {
+    if(v.fecha >= inicio && v.fecha <= fin) contado += Math.max(0, pagoInicial(v));
+    (v.abonos||[]).forEach(a => { if(a.fecha >= inicio && a.fecha <= fin) abonos += Number(a.valor||0); });
+  });
+  const cobrosViejos = cobrosR.reduce((s2,c) => s2 + ingresoVenta(c), 0);
+  const entradas = contado + abonos + cobrosViejos;
+  const neto = entradas - gastado;
+  const fiado = Math.round(ventasR.reduce((s2,v) => s2 + saldoReal(v), 0));
+
+  // ---- Indicadores ----
+  // La cartera del periodo en curso es TODA la viva; la de un periodo
+  // cerrado, solo lo que ese periodo dejó debiendo (misma regla que 694).
+  const cartera = Math.round((op.carteraViva ? DATA.ventas : ventasR).reduce((s2,v) => s2 + saldoReal(v), 0));
+  const valorInventario = DATA.inventario.reduce((s2,p) => s2 + Number(p.stock||0) * Number(p.costo||0), 0);
+
+  return {
+    inicio, fin,
+    vendido, nVentas: ventasR.length, ticket: ventasR.length ? Math.round(vendido / ventasR.length) : 0,
+    costoVendido, utilidadBruta, margenPct, ventasSinCosto,
+    porCategoria, gastosOperacion, gastosFinancieros, compras, gastado,
+    utilidadOperacional, utilidadNeta,
+    margenNetoPct: vendido > 0 ? Math.round((utilidadNeta / vendido) * 100) : 0,
+    caja: { contado, abonos, cobrosViejos, entradas, compras, gastosOperacion, gastosFinancieros, salidas: gastado, neto, fiado },
+    cartera, valorInventario, nCobros: cobrosR.length
+  };
+}
+
 function renderInicio() {
   const ciclo = getCicloActual(inicioCicloOffset);
   const cicloAnt = getCicloActual(inicioCicloOffset + 1);
@@ -7859,30 +7980,30 @@ function renderInicio() {
   const finAnt = finComparable < cicloAnt.fin ? finComparable : cicloAnt.fin;
   const ventasAnt   = DATA.ventas.filter(v => v.fecha >= cicloAnt.inicio && v.fecha <= finAnt);
 
-  const vendido    = ventasCiclo.reduce((s,v) => s + ingresoVenta(v), 0);
-  const vendidoAnt = ventasAnt.reduce((s,v) => s + ingresoVenta(v), 0);
-  const gastado    = gastosCiclo.reduce((s,g) => s + Number(g.valor||0), 0);
-  const fijos      = calcularGastosFijosRango(ciclo.inicio, ciclo.fin);
+  // 780. La cuenta del ciclo ya no se escribe aquí: la calcula estadoFinanciero,
+  //      el mismo motor que alimenta el estado de resultados. Los números no
+  //      cambian —las fórmulas son idénticas, verificadas contra producción
+  //      antes y después— pero ahora viven en un solo sitio.
+  const F = estadoFinanciero(ciclo.inicio, ciclo.fin, { carteraViva: esCicloActual });
+  const vendido      = F.vendido;
+  const vendidoAnt   = ventasAnt.reduce((s,v) => s + ingresoVenta(v), 0);
+  const gastado      = F.gastado;
+  const fijos        = calcularGastosFijosRango(ciclo.inicio, ciclo.fin);
   // 694. En el ciclo en curso interesa TODA la cartera viva (incluida la de
   //      meses viejos, que es la que hay que salir a cobrar). En un ciclo ya
   //      cerrado interesa solo lo que quedó debiendo ESE ciclo.
-  const porCobrar = Math.round(
-    (esCicloActual ? DATA.ventas : ventasCiclo).reduce((s,v) => s + saldoReal(v), 0));
-
+  const porCobrar    = F.cartera;
   // 678. Compras de mercancía del ciclo, aparte del resto (ver 677)
-  const compras    = gastosCiclo.filter(esCompraMercancia).reduce((s,g) => s + Number(g.valor||0), 0);
-  const operativos = gastado - compras;
-
-  // Ganancia bruta del ciclo — solo el costo de lo YA vendido, sin gastos
-  let costoVendido = 0;
-  ventasCiclo.forEach(v => {
-    const m = calcularMargenVenta(v);
-    if(m !== null) { costoVendido += Number(v.total||0) - m; return; }
-    const prod = DATA.inventario.find(p => p.id === v.prodId);
-    if(prod?.costo) costoVendido += Number(prod.costo) * Number(v.cant||1);
-  });
-  const margenCiclo = vendido - costoVendido;
-  const margenPctCiclo = vendido > 0 ? Math.round((margenCiclo/vendido)*100) : 0;
+  const compras      = F.compras;
+  // 781. En Inicio los intereses siguen sumando con los demás gastos: aquí la
+  //      pregunta es "cuánto salió del bolsillo este mes", y los intereses
+  //      salen. La separación formal entre gasto de operación y gasto
+  //      financiero está en el estado de resultados, que es donde un contador
+  //      la busca. Por eso este número no cambió con el cambio de motor.
+  const operativos   = F.gastosOperacion + F.gastosFinancieros;
+  const costoVendido = F.costoVendido;
+  const margenCiclo  = F.utilidadBruta;
+  const margenPctCiclo = F.margenPct;
 
   // Variación contra el mismo punto del ciclo anterior
   const varPct = vendidoAnt > 0 ? Math.round(((vendido - vendidoAnt)/vendidoAnt)*100) : null;
@@ -7978,38 +8099,16 @@ function renderInicio() {
   // ============================================================
   const utilidadReal = margenCiclo - operativos;
 
-  // 770. FIX: la caja contaba como recibida toda venta del ciclo, aunque el
-  //      cliente no hubiera pagado. Ahora suma solo la plata que de verdad
-  //      entró, y cada entrada en su propio renglón.
-  //
-  // 772. TRAMPA, encontrada al verificar 770 en producción: `v.pagado` NO es
-  //      el pago del día de la venta — `guardarAbono` le suma cada abono
-  //      (`nuevoPagado = pagado + valor`). Así que sumar `pagado` y además los
-  //      abonos del ciclo contaba dos veces todo abono hecho dentro del mismo
-  //      ciclo de la venta. Agosto mostraba $13.333.476 recibidos contra
-  //      $11.791.384 vendidos, que es imposible sin cuentas viejas.
-  //
-  //      La descomposición correcta separa las dos cosas por FECHA de entrada:
-  //        · pago inicial = pagado − todos sus abonos  → entra el día de la venta
-  //        · cada abono                                 → entra el día del abono
-  //      Así ninguna plata se cuenta dos veces y cada peso queda fechado en el
-  //      ciclo en que de verdad llegó al banco.
-  const pagoInicial = v =>
-    Number(v.pagado||0) - (v.abonos||[]).reduce((s,a) => s + Number(a.valor||0), 0);
-  let cobradoDeVentas = 0, abonosEnCiclo = 0;
-  DATA.ventas.forEach(v => {
-    if(v.fecha >= ciclo.inicio && v.fecha <= ciclo.fin) cobradoDeVentas += Math.max(0, pagoInicial(v));
-    (v.abonos||[]).forEach(a => {
-      if(a.fecha >= ciclo.inicio && a.fecha <= ciclo.fin) abonosEnCiclo += Number(a.valor||0);
-    });
-  });
-  const entroAlBanco = cobradoDeVentas + abonosEnCiclo + cobrado;
-  // Lo fiado es el saldo vivo de las ventas de ESTE ciclo — no una resta contra
-  // lo recibido, que mezclaría abonos de ventas viejas.
-  const quedoFiado = Math.round(ventasCiclo.reduce((s,v) => s + saldoReal(v), 0));
-  const caja = entroAlBanco - gastado;
+  // 770 + 772. La descomposición de caja —pago inicial por fecha de venta,
+  //      abonos por fecha de abono, cobros de cuentas viejas aparte— vive
+  //      ahora dentro de estadoFinanciero (ver 780).
+  const cobradoDeVentas = F.caja.contado;
+  const abonosEnCiclo   = F.caja.abonos;
+  const entroAlBanco    = F.caja.entradas;
+  const quedoFiado      = F.caja.fiado;
+  const caja            = F.caja.neto;
 
-  const inventarioValorizado = DATA.inventario.reduce((s,p) => s + Number(p.stock||0) * Number(p.costo||0), 0);
+  const inventarioValorizado = F.valorInventario;
   const colorUtil = utilidadReal >= 0 ? 'var(--green)' : 'var(--red)';
   const colorCaja = caja >= 0 ? 'var(--ink)' : 'var(--red)';
 
@@ -8486,7 +8585,9 @@ function renderMetas() {
   const mesACerrarStr = new Date(mesContieneHoyStr.getFullYear(), mesContieneHoyStr.getMonth()-1, 1);
   const mesActualStr = mesACerrarStr.getFullYear() + '-' + String(mesACerrarStr.getMonth()+1).padStart(2,'0');
   const cierresOrd = [...DATA.cierres].sort((a,b) => b.mes > a.mes ? 1 : -1);
-  const yaExisteCierreMesActual = cierresOrd.some(c => c.mes === mesActualStr);
+  // 784. Un mes reabierto NO cuenta como cerrado: si contara, el botón
+  //      quedaría deshabilitado y no habría forma de volver a cerrarlo.
+  const yaExisteCierreMesActual = cierresOrd.some(c => c.mes === mesActualStr && c.reabierto !== true);
 
   let cierresHtml = '';
   if(cierresOrd.length === 0) {
@@ -8498,7 +8599,11 @@ function renderMetas() {
       cierresHtml += '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">'
         + '<div>'
           + '<div style="font-size:13px;font-weight:600;color:var(--ink)">' + (MESES[parseInt(cm)]||c.mes) + ' ' + ca + '</div>'
-          + '<div style="font-size:11px;color:var(--ink-3)">Cerrado el ' + (c.fechaCierre||'') + ' · ' + (c.numVentas||0) + ' ventas</div>'
+          + '<div style="font-size:11px;color:' + (c.reabierto ? 'var(--amber)' : 'var(--ink-3)') + '">'
+            + (c.reabierto
+                ? '🔓 Reabierto el ' + (c.reabiertoEn||'') + (c.reabiertoPor ? ' por ' + escTxt(c.reabiertoPor) : '') + ' — sin cerrar'
+                : '🔒 Cerrado el ' + (c.fechaCierre||'') + (c.cerradoPor ? ' por ' + escTxt(c.cerradoPor) : '') + ' · ' + (c.numVentas||0) + ' ventas')
+          + '</div>'
         + '</div>'
         + '<div style="text-align:right">'
           + '<div style="font-size:13px;font-weight:700;color:' + (utilidadC>=0?'var(--green)':'var(--red)') + '">' + fmt(utilidadC) + '</div>'
@@ -8584,7 +8689,10 @@ window.abrirCierreMes = () => {
 window.confirmarCierreMes = async () => {
   const c = window._cierrePendiente;
   if(!c) { alert('Error al preparar el cierre. Intenta de nuevo.'); return; }
-  await addDoc(collection(db,'cierres'), {
+  // 784. Si ese mes ya tenía un registro (porque se cerró y se reabrió), se
+  //      actualiza el mismo en vez de crear otro: un mes tiene UN cierre.
+  const previo = DATA.cierres.find(x => x.mes === c.mes);
+  const datos = {
     mes: c.mes,
     ingresos: c.ingresos,
     gastos: c.gastos,
@@ -8592,8 +8700,11 @@ window.confirmarCierreMes = async () => {
     numVentas: c.numVentas,
     inventarioValorizado: c.inventarioValorizado,
     fechaCierre: today(),
-    createdAt: serverTimestamp()
-  });
+    cerradoPor: auth.currentUser?.email || 'desconocido',
+    reabierto: false
+  };
+  if(previo) await updateDoc(doc(db,'cierres',previo.id), datos);
+  else await addDoc(collection(db,'cierres'), { ...datos, createdAt: serverTimestamp() });
   closeModal('modal-cierre-mes');
   toast('✅ Mes cerrado correctamente — snapshot guardado');
 };
@@ -9126,6 +9237,10 @@ window.eliminarDoc = async (col, id) => {
   const snapshot = DATA[col]?.find(x => x.id === id)
     || (col === 'ventas' ? DATA.cobros.find(x => x.id === id) : null)
     || null;
+  // 784. Candado de mes cerrado. Solo para lo que mueve los estados
+  //      financieros fechados: ventas (y cobros, que viven ahí) y gastos.
+  if((col === 'ventas' || col === 'gastos') && snapshot?.fecha
+     && !exigirMesAbierto(snapshot.fecha, 'borrar un registro')) return;
   pendienteEliminar = { col, id, snapshot, timeoutId: null };
   mostrarBannerDeshacer('🗑️ Registro eliminado');
   pendienteEliminar.timeoutId = setTimeout(confirmarEliminacionPendiente, 6000);
@@ -12378,6 +12493,483 @@ window.abrirFichaDistribuidor = (id) => {
 window.abrirFichaSinVincular = () => {
   const ventas = DATA.ventas.filter(v => v.canal === 'distribuidor' && !v.distribuidorId);
   abrirFicha('Sin vincular', 'Ventas de distribuidor que no están asignadas a nadie', ventas);
+};
+
+// ============================================================
+// 782. INFORMES — estado de resultados y flujo de caja
+//
+// Esto es lo que se le pasa a un contador, a un banco o a un socio. Hasta
+// ahora Duppla sabía perfectamente cuánto ganaba, pero no tenía cómo
+// decirlo en el formato en que se lo van a pedir.
+//
+// Dos estados, no uno, y por la misma razón que en Inicio (769): ganar y
+// cobrar son preguntas distintas. Un negocio puede tener un año excelente
+// y quedarse sin efectivo el mismo mes.
+//
+// Todo sale de estadoFinanciero (780): esta pantalla no calcula nada por su
+// cuenta. Si un número de aquí no cuadra con Inicio, el error está en el
+// motor y se arregla una vez.
+// ============================================================
+let informesOffset = 0;
+window.verCicloInformes = (o) => { informesOffset = Number(o); renderInformes(); };
+
+function rangoInformes() {
+  if(informesOffset === -1) {
+    const fechas = [...DATA.ventas.map(v => v.fecha), ...DATA.gastos.map(g => g.fecha)].filter(Boolean).sort();
+    return { inicio: fechas[0] || today(), fin: today(), etiqueta: 'Todo el historial', esCiclo: false, actual: false };
+  }
+  const c = getCicloActual(informesOffset);
+  return {
+    inicio: c.inicio, fin: c.fin, esCiclo: true, actual: informesOffset === 0,
+    etiqueta: c.label.charAt(0).toUpperCase() + c.label.slice(1).replace(' de ', ' ')
+  };
+}
+
+// Un renglón del estado. nivel: 'normal' | 'total' | 'final'
+function renglonInforme(etiqueta, valor, signo, nivel, nota, color) {
+  const esTotal = nivel === 'total' || nivel === 'final';
+  const fin = nivel === 'final';
+  return '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:14px;'
+    + 'padding:' + (esTotal ? '10px 0 4px' : '5px 0') + ';'
+    + (esTotal ? 'border-top:' + (fin ? '2px' : '1.5px') + ' solid var(--border);margin-top:4px' : '') + '">'
+    + '<span style="min-width:0">'
+      + '<span style="font-size:' + (fin ? '14' : esTotal ? '13' : '12.5') + 'px;'
+        + (esTotal ? 'font-weight:' + (fin ? '800' : '700') + ';color:var(--ink);text-transform:uppercase;letter-spacing:.03em'
+                   : 'color:var(--ink-2)') + '">' + etiqueta + '</span>'
+      + (nota ? '<span style="display:block;font-size:10.5px;color:var(--ink-3);line-height:1.35">' + nota + '</span>' : '')
+    + '</span>'
+    + '<span style="font-size:' + (fin ? '19' : esTotal ? '16' : '13.5') + 'px;font-weight:' + (esTotal ? '800' : '600') + ';'
+      + 'white-space:nowrap;font-variant-numeric:tabular-nums;color:' + (color || (esTotal ? 'var(--ink)' : 'var(--ink-2)')) + '">'
+      + (signo || '') + fmt(Math.abs(valor)) + '</span>'
+  + '</div>';
+}
+
+// ============================================================
+// 784. MESES CERRADOS: SE CONGELAN
+//
+// Hasta ahora "cerrar mes" guardaba una foto y nada más: al día siguiente
+// cualquiera podía editar una venta de junio y junio cambiaba, dejando el
+// snapshot mintiendo. Con dos socios tocando la misma base, eso es una
+// discusión sin ganador.
+//
+// Ahora un mes cerrado NO admite crear, editar ni borrar ventas, gastos ni
+// abonos con fecha dentro de él. Ángel escogió "bloqueado pero reabrible":
+// si de verdad hay que corregir algo, se reabre el mes a propósito, queda
+// registrado quién lo hizo y cuándo, y se vuelve a cerrar.
+//
+// La decisión de fondo es que reabrir sea DELIBERADO y quede escrito. Un
+// bloqueo que se puede saltar sin darse cuenta no protege nada; uno que no
+// se puede saltar nunca obliga a mentir en otro lado.
+//
+// Alcance honesto: se bloquea lo que mueve los estados financieros del mes
+// (ventas, gastos, abonos). Cambiar el COSTO de un producto en Inventario
+// todavía puede mover el margen de un mes cerrado — queda anotado como
+// pendiente, no como resuelto.
+// ============================================================
+function mesStrDeFecha(fecha) {
+  if(!fecha) return null;
+  for(let i = 0; i <= 60; i++) {
+    const c = getCicloActual(i);
+    if(fecha >= c.inicio && fecha <= c.fin) return c.mesStr;
+    if(fecha > c.fin) return null;   // más nueva que el ciclo en curso: no hay cierre posible
+  }
+  return null;
+}
+
+function cierreVigente(mesStr) {
+  if(!mesStr) return null;
+  return DATA.cierres.find(c => c.mes === mesStr && c.reabierto !== true) || null;
+}
+
+function cierreDeFecha(fecha) { return cierreVigente(mesStrDeFecha(fecha)); }
+
+// Puerta única. Devuelve true si se puede seguir; si no, avisa y devuelve false.
+function exigirMesAbierto(fecha, queSeIbaAHacer) {
+  const c = cierreDeFecha(fecha);
+  if(!c) return true;
+  const [a, m] = String(c.mes).split('-');
+  const nombre = (MESES[parseInt(m)] || c.mes) + ' ' + a;
+  alert('🔒 ' + nombre + ' ya está cerrado.\n\n'
+    + 'No se puede ' + queSeIbaAHacer + ' con fecha dentro de un mes cerrado, '
+    + 'porque los informes de ese mes ya se dieron por buenos'
+    + (c.fechaCierre ? ' (se cerró el ' + c.fechaCierre + ')' : '') + '.\n\n'
+    + 'Si de verdad hay que corregirlo, reabre el mes en Informes, haz el cambio '
+    + 'y vuelve a cerrarlo. Queda registrado.');
+  return false;
+}
+
+window.reabrirMes = async (mesStr) => {
+  const c = cierreVigente(mesStr);
+  if(!c) return;
+  const [a, m] = String(mesStr).split('-');
+  const nombre = (MESES[parseInt(m)] || mesStr) + ' ' + a;
+  if(!confirm('Vas a reabrir ' + nombre + '.\n\n'
+    + 'Mientras esté abierto se pueden editar sus ventas y gastos, y los informes de ese mes '
+    + 'pueden cambiar. Queda registrado que lo reabriste tú y cuándo.\n\n¿Seguimos?')) return;
+  await updateDoc(doc(db, 'cierres', c.id), {
+    reabierto: true,
+    reabiertoPor: auth.currentUser?.email || 'desconocido',
+    reabiertoEn: today()
+  });
+  toast('🔓 ' + nombre + ' reabierto — acuérdate de volver a cerrarlo');
+};
+
+window.cerrarMesDesdeInformes = async (mesStr) => {
+  const r = rangoInformes();
+  const F = estadoFinanciero(r.inicio, r.fin, {});
+  const [a, m] = String(mesStr).split('-');
+  const nombre = (MESES[parseInt(m)] || mesStr) + ' ' + a;
+  if(!confirm('Vas a cerrar ' + nombre + '.\n\n'
+    + 'Vendido ' + fmt(F.vendido) + ' · Utilidad neta ' + fmt(F.utilidadNeta) + '\n\n'
+    + 'A partir de ahí, sus ventas, gastos y abonos quedan bloqueados. '
+    + 'Siempre puedes reabrirlo si hace falta.\n\n¿Cerramos?')) return;
+
+  // Si el mes ya se había cerrado y se reabrió, se actualiza el mismo
+  // registro en vez de crear otro: así el historial de un mes es uno solo.
+  const previo = DATA.cierres.find(c => c.mes === mesStr);
+  const datos = {
+    mes: mesStr,
+    ingresos: F.vendido, gastos: F.gastado, margen: F.utilidadBruta,
+    utilidadNeta: F.utilidadNeta, numVentas: F.nVentas,
+    inventarioValorizado: F.valorInventario,
+    fechaCierre: today(),
+    cerradoPor: auth.currentUser?.email || 'desconocido',
+    reabierto: false
+  };
+  if(previo) await updateDoc(doc(db, 'cierres', previo.id), datos);
+  else await addDoc(collection(db, 'cierres'), { ...datos, createdAt: serverTimestamp() });
+  toast('🔒 ' + nombre + ' cerrado');
+};
+
+function bloqueoInformeHtml(r) {
+  if(!r.esCiclo) return '';
+  const mesStr = getCicloActual(informesOffset).mesStr;
+  const c = cierreVigente(mesStr);
+  const reabierto = DATA.cierres.find(x => x.mes === mesStr && x.reabierto === true);
+
+  if(c) {
+    return '<div style="display:flex;align-items:center;gap:10px;background:var(--surface-2);border:1px solid var(--border-2);'
+      + 'border-left:3px solid var(--ink);border-radius:var(--radius);padding:11px 13px;margin-bottom:16px">'
+      + '<span style="font-size:15px">🔒</span>'
+      + '<span style="flex:1;min-width:0;font-size:12.5px;color:var(--ink-2);line-height:1.4">'
+        + '<strong style="color:var(--ink)">Mes cerrado.</strong> Sus ventas, gastos y abonos no se pueden tocar.'
+        + (c.fechaCierre ? ' Se cerró el ' + c.fechaCierre : '')
+        + (c.cerradoPor ? ' por ' + escTxt(c.cerradoPor) : '') + '.</span>'
+      + '<button class="btn btn-sm" style="white-space:nowrap" onclick="reabrirMes(\'' + escAttr(mesStr) + '\')">🔓 Reabrir</button>'
+    + '</div>';
+  }
+  if(r.actual) {
+    return '<div style="display:flex;align-items:center;gap:10px;background:var(--surface-2);border:1px solid var(--border);'
+      + 'border-radius:var(--radius);padding:11px 13px;margin-bottom:16px">'
+      + '<span style="font-size:15px">⏳</span>'
+      + '<span style="font-size:12.5px;color:var(--ink-3);line-height:1.4">Este ciclo todavía está corriendo. '
+        + 'Se puede cerrar cuando termine, el ' + fCorta(r.fin) + '.</span>'
+    + '</div>';
+  }
+  return '<div style="display:flex;align-items:center;gap:10px;background:var(--amber-bg);border:1px solid #FDE68A;'
+    + 'border-radius:var(--radius);padding:11px 13px;margin-bottom:16px">'
+    + '<span style="font-size:15px">' + (reabierto ? '🔓' : '📂') + '</span>'
+    + '<span style="flex:1;min-width:0;font-size:12.5px;color:#92400E;line-height:1.4">'
+      + (reabierto
+          ? '<strong>Reabierto</strong> el ' + (reabierto.reabiertoEn||'') + (reabierto.reabiertoPor ? ' por ' + escTxt(reabierto.reabiertoPor) : '') + '. Acuérdate de volver a cerrarlo.'
+          : '<strong>Sin cerrar.</strong> Mientras no lo cierres, cualquiera puede editar sus ventas y gastos y este informe puede cambiar.')
+    + '</span>'
+    + '<button class="btn btn-sm btn-lime" style="white-space:nowrap" onclick="cerrarMesDesdeInformes(\'' + escAttr(mesStr) + '\')">🔒 Cerrar mes</button>'
+  + '</div>';
+}
+
+function renderInformes() {
+  const r = rangoInformes();
+  const F = estadoFinanciero(r.inicio, r.fin, { carteraViva: r.actual });
+  window._informeActual = { ...F, etiqueta: r.etiqueta };
+
+  // ---- Selector de periodo ----
+  const n = ciclosDisponibles();
+  let chips = '';
+  for(let i = 0; i <= n; i++) {
+    const c = getCicloActual(i);
+    const act = informesOffset === i;
+    const mes = c.label.charAt(0).toUpperCase() + c.label.slice(1).replace(' de ', ' ');
+    chips += '<button onclick="verCicloInformes(' + i + ')" style="padding:6px 13px;border-radius:20px;white-space:nowrap;'
+      + 'cursor:pointer;font-size:12.5px;border:1.5px solid ' + (act?'var(--ink)':'var(--border)') + ';'
+      + 'background:' + (act?'var(--ink)':'var(--surface)') + ';color:' + (act?'#fff':'var(--ink-2)') + ';'
+      + 'font-weight:' + (act?'600':'400') + '">' + (i===0?'Este ciclo':mes) + '</button>';
+  }
+  const todo = informesOffset === -1;
+  chips += '<button onclick="verCicloInformes(-1)" style="padding:6px 13px;border-radius:20px;white-space:nowrap;'
+    + 'cursor:pointer;font-size:12.5px;border:1.5px solid ' + (todo?'var(--ink)':'var(--border)') + ';'
+    + 'background:' + (todo?'var(--ink)':'var(--surface)') + ';color:' + (todo?'#fff':'var(--ink-2)') + ';'
+    + 'font-weight:' + (todo?'600':'400') + '">Todo</button>';
+
+  // ---- Aviso honesto: un informe que calla lo que no sabe no sirve ----
+  const aviso = F.ventasSinCosto > 0
+    ? '<div style="display:flex;gap:9px;align-items:flex-start;background:var(--amber-bg);border:1px solid #FDE68A;'
+      + 'border-radius:var(--radius);padding:11px 13px;margin-bottom:16px">'
+      + '<span style="font-size:14px">⚠️</span>'
+      + '<span style="font-size:12px;color:#92400E;line-height:1.45">'
+        + '<strong>' + F.ventasSinCosto + ' venta' + (F.ventasSinCosto!==1?'s':'') + ' sin costo registrado.</strong> '
+        + 'Esas ventas entran completas como utilidad bruta, así que el margen de este informe está por encima del real. '
+        + 'Se corrige poniéndoles el costo en Ventas.</span>'
+    + '</div>'
+    : '';
+
+  // ---- Estado de resultados ----
+  const maxCat = Math.max(...F.porCategoria.map(c => c.total), 1);
+  const categorias = F.porCategoria.map(c =>
+    '<div style="display:flex;align-items:center;gap:10px;padding:4px 0 4px 14px">'
+    + '<span style="flex:1;min-width:0;font-size:12px;color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + c.label + '</span>'
+    + '<span style="width:70px;height:5px;background:var(--surface-3);border-radius:20px;overflow:hidden;flex-shrink:0">'
+      + '<span style="display:block;height:100%;width:' + Math.max(4, Math.round((c.total/maxCat)*100)) + '%;background:var(--ink-3);border-radius:20px"></span>'
+    + '</span>'
+    + '<span style="font-size:12px;color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap;min-width:84px;text-align:right">' + fmt(c.total) + '</span>'
+  + '</div>').join('');
+
+  const colorNeta = F.utilidadNeta >= 0 ? 'var(--green)' : 'var(--red)';
+  const resultados = '<div class="card" style="padding:18px">'
+    + '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2)">📐 Estado de resultados</div>'
+    + '<div style="font-size:11.5px;color:var(--ink-3);margin:3px 0 12px">' + r.etiqueta + ' · ' + fCorta(r.inicio) + ' al ' + fCorta(r.fin) + '</div>'
+    + renglonInforme('Ventas del periodo', F.vendido, '', 'normal', F.nVentas + ' venta' + (F.nVentas!==1?'s':'') + ' · ticket promedio ' + fmt(F.ticket))
+    + renglonInforme('Costo de la mercancía vendida', F.costoVendido, '−', 'normal', 'solo el costo de lo que SÍ se vendió')
+    + renglonInforme('Utilidad bruta', F.utilidadBruta, '', 'total', F.margenPct + '% sobre ventas')
+    + '<div style="margin:10px 0 2px;font-size:11px;font-weight:700;color:var(--ink-2);text-transform:uppercase;letter-spacing:.04em">Gastos de operación</div>'
+    + categorias
+    + renglonInforme('Total gastos de operación', F.gastosOperacion, '−', 'normal')
+    + renglonInforme('Utilidad operacional', F.utilidadOperacional, F.utilidadOperacional < 0 ? '−' : '', 'total',
+        'lo que deja el negocio antes de los intereses', F.utilidadOperacional >= 0 ? 'var(--ink)' : 'var(--red)')
+    + renglonInforme('Gastos financieros', F.gastosFinancieros, '−', 'normal', 'intereses, comisiones bancarias, 4×1000')
+    + renglonInforme('Utilidad neta', F.utilidadNeta, F.utilidadNeta < 0 ? '−' : '', 'final',
+        F.margenNetoPct + '% sobre ventas', colorNeta)
+    + '<div style="font-size:11px;color:var(--ink-3);margin-top:12px;line-height:1.45;padding-top:10px;border-top:1px solid var(--border)">'
+      + 'La compra de mercancía (' + fmt(F.compras) + ' en este periodo) no es un gasto: es inventario. '
+      + 'Su costo entra aquí solo cuando el producto se vende, dentro del costo de la mercancía vendida.</div>'
+  + '</div>';
+
+  // ---- Flujo de caja ----
+  const C = F.caja;
+  const flujo = '<div class="card" style="padding:18px">'
+    + '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2)">🏦 Flujo de caja</div>'
+    + '<div style="font-size:11.5px;color:var(--ink-3);margin:3px 0 12px">Plata que de verdad entró y salió en el periodo</div>'
+    + renglonInforme('Te pagaron de contado', C.contado, '', 'normal', 'el pago del día de cada venta')
+    + renglonInforme('Abonos que entraron', C.abonos, '', 'normal', 'fechados en este periodo, sea de cuando sea la venta')
+    + renglonInforme('Cobros de cuentas viejas', C.cobrosViejos, '', 'normal', F.nCobros + ' movimiento' + (F.nCobros!==1?'s':'') + ' · no son venta nueva')
+    + renglonInforme('Total que entró', C.entradas, '', 'total', null, 'var(--green)')
+    + renglonInforme('Compra de mercancía', C.compras, '−', 'normal', 'no es gasto, pero del banco salió')
+    + renglonInforme('Gastos de operación', C.gastosOperacion, '−', 'normal')
+    + renglonInforme('Gastos financieros', C.gastosFinancieros, '−', 'normal')
+    + renglonInforme('Total que salió', C.salidas, '−', 'total', null, 'var(--red)')
+    + renglonInforme('Movimiento del banco', C.neto, C.neto < 0 ? '−' : '', 'final', null, C.neto >= 0 ? 'var(--ink)' : 'var(--red)')
+    + (C.fiado > 0
+        ? '<div style="font-size:11.5px;color:var(--ink-3);margin-top:12px;line-height:1.45;padding-top:10px;border-top:1px solid var(--border)">'
+          + 'De las ventas de este periodo quedaron <strong style="color:var(--ink-2)">' + fmt(C.fiado) + '</strong> sin cobrar. '
+          + 'Esa plata ya cuenta como venta arriba, pero todavía no llegó al banco.</div>'
+        : '')
+  + '</div>';
+
+  // ---- Posición al cierre ----
+  const dato = (etiqueta, valor, sub, color) =>
+    '<div class="metric-card"><div class="metric-label">' + etiqueta + '</div>'
+    + '<div class="metric-value" style="font-size:19px;color:' + (color||'var(--ink)') + '">' + valor + '</div>'
+    + '<div class="metric-sub">' + sub + '</div></div>';
+  const posicion = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-top:16px">'
+    + dato('Cartera por cobrar', fmt(F.cartera), r.actual ? 'toda la que está viva hoy' : 'lo que dejó debiendo este periodo', F.cartera > 0 ? 'var(--amber)' : 'var(--green)')
+    + dato('Inventario a costo', fmt(F.valorInventario), 'plata parada en el estante', 'var(--blue)')
+    + dato('Margen bruto', F.margenPct + '%', 'sobre las ventas del periodo')
+    + dato('Margen neto', F.margenNetoPct + '%', 'después de todos los gastos', F.utilidadNeta >= 0 ? 'var(--green)' : 'var(--red)')
+  + '</div>';
+
+  document.getElementById('page-informes').innerHTML =
+    '<div class="page-header">'
+      + '<div><div class="page-title">Informes</div>'
+        + '<div class="page-sub">Lo que se le pasa a un contador, a un banco o a un socio</div></div>'
+      + '<div style="display:flex;gap:8px">'
+        + '<button class="btn btn-sm" onclick="exportarInformePDF()">↓ PDF</button>'
+        + '<button class="btn btn-sm" onclick="exportarInformeExcel()">↓ Excel</button>'
+      + '</div>'
+    + '</div>'
+    + '<div style="display:flex;gap:7px;overflow-x:auto;padding-bottom:4px;margin-bottom:14px">' + chips + '</div>'
+    + bloqueoInformeHtml(r)
+    + aviso
+    + '<div style="display:flex;flex-direction:column;gap:14px">' + resultados + flujo + '</div>'
+    + posicion;
+}
+
+// ============================================================
+// 783. EXPORTAR EL INFORME — PDF para mandar, Excel para trabajar
+//
+// Ángel escogió los dos, y tiene sentido: el PDF es lo que se envía y se
+// archiva (nadie discute un PDF), y el Excel es lo que un contador
+// realmente usa, porque va a querer sumar, filtrar y pegar en su sistema.
+//
+// SheetJS se carga SOLO cuando se pide el Excel. Son casi 900 KB: meterlos
+// en la carga de la app para una exportación ocasional castigaría cada
+// apertura desde el celular, que es como se usa esto el 90% del tiempo.
+// ============================================================
+let _sheetJsCargando = null;
+function cargarSheetJs() {
+  if(window.XLSX) return Promise.resolve(window.XLSX);
+  if(_sheetJsCargando) return _sheetJsCargando;
+  _sheetJsCargando = new Promise((resolver, rechazar) => {
+    const sc = document.createElement('script');
+    sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    sc.onload = () => resolver(window.XLSX);
+    sc.onerror = () => { _sheetJsCargando = null; rechazar(new Error('No se pudo cargar el generador de Excel')); };
+    document.head.appendChild(sc);
+  });
+  return _sheetJsCargando;
+}
+
+// Las filas del informe, en un solo sitio. PDF y Excel las pintan distinto
+// pero dicen exactamente lo mismo: si divergen, es que hay dos informes.
+function filasInforme(F) {
+  const filas = [
+    ['ESTADO DE RESULTADOS', ''],
+    ['Ventas del periodo', F.vendido],
+    ['Costo de la mercancía vendida', -F.costoVendido],
+    ['UTILIDAD BRUTA', F.utilidadBruta],
+    ['Margen bruto (%)', F.margenPct + '%'],
+    ['', ''],
+    ['GASTOS DE OPERACIÓN', ''],
+  ];
+  F.porCategoria.forEach(c => filas.push(['   ' + c.label, -c.total]));
+  filas.push(['Total gastos de operación', -F.gastosOperacion]);
+  filas.push(['UTILIDAD OPERACIONAL', F.utilidadOperacional]);
+  filas.push(['Gastos financieros', -F.gastosFinancieros]);
+  filas.push(['UTILIDAD NETA', F.utilidadNeta]);
+  filas.push(['Margen neto (%)', F.margenNetoPct + '%']);
+  filas.push(['', '']);
+  filas.push(['FLUJO DE CAJA', '']);
+  filas.push(['Te pagaron de contado', F.caja.contado]);
+  filas.push(['Abonos que entraron', F.caja.abonos]);
+  filas.push(['Cobros de cuentas viejas', F.caja.cobrosViejos]);
+  filas.push(['TOTAL QUE ENTRÓ', F.caja.entradas]);
+  filas.push(['Compra de mercancía', -F.caja.compras]);
+  filas.push(['Gastos de operación', -F.caja.gastosOperacion]);
+  filas.push(['Gastos financieros', -F.caja.gastosFinancieros]);
+  filas.push(['TOTAL QUE SALIÓ', -F.caja.salidas]);
+  filas.push(['MOVIMIENTO DEL BANCO', F.caja.neto]);
+  filas.push(['', '']);
+  filas.push(['POSICIÓN AL CIERRE', '']);
+  filas.push(['Cartera por cobrar', F.cartera]);
+  filas.push(['Quedó fiado del periodo', F.caja.fiado]);
+  filas.push(['Inventario a costo', F.valorInventario]);
+  filas.push(['Número de ventas', F.nVentas]);
+  filas.push(['Ticket promedio', F.ticket]);
+  filas.push(['Compra de mercancía del periodo', F.compras]);
+  return filas;
+}
+
+const esTituloInforme = (t) => t === t.toUpperCase() && t.trim() !== '' && !t.startsWith('   ');
+
+window.exportarInformePDF = () => {
+  const F = window._informeActual;
+  if(!F) { alert('Abre primero un periodo en Informes.'); return; }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit:'mm', format:'letter' });
+  const M = 18;
+  let y = 22;
+
+  doc.setFillColor(17,24,39); doc.rect(0,0,216,15,'F');
+  doc.setTextColor(200,224,90); doc.setFont('helvetica','bold'); doc.setFontSize(13);
+  doc.text('DUPPLA', M, 10);
+  doc.setTextColor(255,255,255); doc.setFont('helvetica','normal'); doc.setFontSize(8);
+  doc.text('Informe financiero', M + 24, 10);
+
+  y = 26;
+  doc.setTextColor(17,24,39); doc.setFont('helvetica','bold'); doc.setFontSize(15);
+  doc.text(F.etiqueta, M, y);
+  y += 6;
+  doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(110,115,125);
+  doc.text('Periodo del ' + F.inicio + ' al ' + F.fin + '   ·   Generado el ' + today(), M, y);
+  y += 9;
+
+  filasInforme(F).forEach(([etiqueta, valor]) => {
+    if(y > 250) { doc.addPage(); y = 22; }
+    if(etiqueta === '') { y += 3; return; }
+    const titulo = esTituloInforme(etiqueta);
+    const resaltar = titulo && valor !== '';
+    if(titulo && valor === '') {
+      y += 3;
+      doc.setDrawColor(225,228,232); doc.line(M, y - 3.5, 216 - M, y - 3.5);
+      doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(17,24,39);
+      doc.text(etiqueta, M, y);
+      y += 6;
+      return;
+    }
+    doc.setFont('helvetica', resaltar ? 'bold' : 'normal');
+    doc.setFontSize(resaltar ? 10.5 : 9.5);
+    doc.setTextColor(resaltar ? 17 : 90, resaltar ? 24 : 95, resaltar ? 39 : 105);
+    doc.text(etiqueta, M, y);
+    const txt = typeof valor === 'number' ? fmt(valor) : String(valor);
+    doc.text(txt, 216 - M, y, { align:'right' });
+    if(resaltar) { doc.setDrawColor(225,228,232); doc.line(M, y + 1.8, 216 - M, y + 1.8); }
+    y += resaltar ? 8 : 6;
+  });
+
+  if(F.ventasSinCosto > 0) {
+    y += 4;
+    doc.setFont('helvetica','italic'); doc.setFontSize(8); doc.setTextColor(146,64,14);
+    doc.text(F.ventasSinCosto + ' venta(s) de este periodo no tienen costo registrado: el margen real puede ser menor.', M, y);
+  }
+
+  doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(150,155,165);
+  doc.text('La compra de mercancía no se considera gasto: es inventario. Su costo entra al venderse.', M, 265);
+
+  doc.save('duppla-informe-' + F.etiqueta.toLowerCase().replace(/\s+/g,'-') + '.pdf');
+  toast('📄 Informe en PDF descargado');
+};
+
+window.exportarInformeExcel = async () => {
+  const F = window._informeActual;
+  if(!F) { alert('Abre primero un periodo en Informes.'); return; }
+  toast('Preparando el Excel…');
+  let XLSX;
+  try { XLSX = await cargarSheetJs(); }
+  catch(e) { alert('No se pudo cargar el generador de Excel. Revisa la conexión e intenta de nuevo.'); return; }
+
+  const wb = XLSX.utils.book_new();
+
+  // Hoja 1 — el informe
+  const hoja = [
+    ['DUPPLA — Informe financiero'],
+    [F.etiqueta],
+    ['Periodo', F.inicio, 'al', F.fin],
+    ['Generado', today()],
+    [],
+    ...filasInforme(F)
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(hoja);
+  ws['!cols'] = [{ wch: 38 }, { wch: 18 }];
+  XLSX.utils.book_append_sheet(wb, ws, 'Informe');
+
+  // Hoja 2 — las ventas que lo sustentan. Un informe sin su detalle es un
+  // número que hay que creer; con el detalle, se puede auditar.
+  const ventas = DATA.ventas.filter(v => v.fecha >= F.inicio && v.fecha <= F.fin)
+    .sort((a,b) => a.fecha > b.fecha ? 1 : -1);
+  const wsV = XLSX.utils.aoa_to_sheet([
+    ['Fecha','Cliente','Canal','Producto','Cantidad','Total','Pagado','Saldo','Margen'],
+    ...ventas.map(v => {
+      const m = calcularMargenVenta(v);
+      return [v.fecha, v.cliente||'', v.canal||'', lineasDeVenta(v).map(l => l.cant+'x '+l.nombre).join(' · '),
+        lineasDeVenta(v).reduce((a,l)=>a+l.cant,0), ingresoVenta(v), Number(v.pagado||0), saldoReal(v), m === null ? 'sin costo' : m];
+    })
+  ]);
+  wsV['!cols'] = [{wch:12},{wch:26},{wch:13},{wch:40},{wch:9},{wch:13},{wch:13},{wch:12},{wch:13}];
+  XLSX.utils.book_append_sheet(wb, wsV, 'Ventas');
+
+  // Hoja 3 — los gastos, con la mercancía marcada aparte
+  const gastos = DATA.gastos.filter(g => g.fecha >= F.inicio && g.fecha <= F.fin)
+    .sort((a,b) => a.fecha > b.fecha ? 1 : -1);
+  const wsG = XLSX.utils.aoa_to_sheet([
+    ['Fecha','Categoría','Descripción','Valor','Naturaleza','Fijo o variable'],
+    ...gastos.map(g => [g.fecha, CATS[g.cat]||g.cat||'', g.desc||'', Number(g.valor||0),
+      esCompraMercancia(g) ? 'Mercancía (inventario)' : esGastoFinanciero(g) ? 'Financiero' : 'Operación',
+      esGastoFijo(g) ? 'Fijo' : 'Variable'])
+  ]);
+  wsG['!cols'] = [{wch:12},{wch:16},{wch:40},{wch:14},{wch:24},{wch:15}];
+  XLSX.utils.book_append_sheet(wb, wsG, 'Gastos');
+
+  XLSX.writeFile(wb, 'duppla-informe-' + F.etiqueta.toLowerCase().replace(/\s+/g,'-') + '.xlsx');
+  toast('📊 Informe en Excel descargado');
 };
 
 function renderDistribuidores() {
