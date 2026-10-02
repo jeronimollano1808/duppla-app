@@ -933,5 +933,36 @@ El diálogo de confirmación dice, antes de cerrar, cuántas ventas van a quedar
 **Regla que sale de aquí:** *un candado puesto en la puerta principal no sirve si hay funciones que escriben por la ventana.* Cada vez que se agregue una pantalla que escriba directo con `updateDoc`, hay que preguntarse si debería pasar por `exigirMesAbierto`. Las dos encontradas hasta ahora (esta y `guardarCostosManuales`) no se encontraron leyendo el código: se encontraron preguntando *"¿qué más puede mover este número?"*.
 
 
+### 14.27 Buscador global de clientes y distribuidores (comentarios 789–790)
+
+Pedido de Ángel, de la lista: *"buscador global de clientes y distribuidores"*.
+
+**Por qué importa más de lo que parece.** Hasta ahora, para mirar a alguien había que acordarse de en qué pantalla vive: los clientes en Clientes, los gimnasios en Distribuidores, el que debe en Deudores. Pero **cuando a uno le escriben por WhatsApp no piensa "esto es un distribuidor", piensa en el nombre.** La app obligaba a traducir la pregunta antes de poder hacerla.
+
+El buscador entra por el nombre y **sale en la ficha (778)**. Es la pieza que le faltaba a la ficha para ser útil de verdad: tenerla a dos toques desde cualquier parte, en vez de navegar hasta la tabla donde está la fila.
+
+Se abre con el botón 🔍 (header móvil y encima del menú en escritorio) o con **Ctrl/Cmd + K**. Se mueve con flechas, se abre con Enter, se cierra con Esc.
+
+**790. Busca por tokens, no por substring.** Un `includes()` plano falla justo como la gente escribe cuando busca de afán:
+
+| Se escribe | `includes()` | Por tokens |
+|---|---|---|
+| `bedoya sebas` | ✗ (el orden no coincide) | ✓ |
+| `sebas` | ✓ | ✓ |
+| `jeronimo` sobre "JERÓNIMO" | ✗ (la tilde) | ✓ |
+| `tina` sobre "CREATINA" | ✓ **(ruido)** | ✗ |
+
+La última fila es deliberada: un token calza si **alguna palabra empieza por él**, no si lo contiene. Buscar por el final de una palabra casi nunca es lo que uno quiere y llena la lista de basura.
+
+**Dos decisiones de datos:**
+
+- **Un distribuidor registrado manda sobre la entrada por nombre.** Si no, el mismo gimnasio saldría dos veces —una como cliente y otra como distribuidor— porque sus ventas llevan su nombre en `cliente` *y* su `distribuidorId`. Se unifican por nombre normalizado y gana el registro formal, que es el que tiene ficha, ciudad y teléfono. Un distribuidor **sin** compras también aparece: existe aunque todavía no haya vendido nada.
+- **El índice se arma en el momento de buscar, no se cachea.** `DATA` cambia con cada `onSnapshot`; un índice viejo mostraría a alguien que ya no existe o escondería al que acabas de crear.
+
+Cada resultado trae ya lo que uno iba a preguntar: cuántas compras, cuánto en total, cuándo fue la última y **cuánto debe** si debe algo. Con el buscador abierto y sin escribir nada, muestra a los que más compran.
+
+**Regla que sale de aquí:** *una función de búsqueda se diseña contra cómo se escribe de afán, no contra cómo está guardado el dato.* Las tildes, el orden de los apellidos y los apodos no son casos raros: son el caso normal.
+
+
 ---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*
