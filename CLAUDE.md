@@ -973,5 +973,39 @@ Ahora se agrupa por una clave que ignora puntuación y la palabra DISTRIBUIDOR. 
 **Y la otra:** *cuando dos pantallas puedan responder distinto a la misma pregunta, una tiene que ceder y la otra avisar.* Sumar en silencio para que "cuadre" es cómo nacen los números que nadie puede defender.
 
 
+### 14.28 Presentación: tema oscuro, menú, carga y marca (comentarios 792–799)
+
+Ángel: *"sigamos con la presentación"* — los cuatro puntos del grupo.
+
+**792. Primero los tokens, porque sin eso el modo oscuro era imposible.** Había **142 colores escritos a mano** repartidos por el archivo: `#FDE68A` para el borde ámbar, `#92400E` para su texto, `#BFDBFE` para el azul, y así. Mientras siguieran sueltos no había dónde cambiarlos. Se reemplazaron por tokens semánticos (`--amber-bd`, `--amber-ink`, `--blue-bd`, `--red-ink`, `--green-bd`…). Dos pasadas, 142 reemplazos, y lo que quedó crudo son los degradados de marca, que funcionan igual en los dos temas.
+
+**793. El tema oscuro no es un invertido.** Los pasos oscuros se escogieron uno a uno contra el fondo oscuro; invertir produce textos que vibran y colores que se apagan. Tres estados, no dos: **automático** (sigue al sistema operativo, que es lo normal), claro y oscuro. El interruptor manda sobre el sistema en los dos sentidos, por eso la media query lleva el guardia `:not([data-theme])`.
+
+El tema guardado se aplica en un `<script>` del `<head>`, **antes** del módulo: si se aplicara desde el módulo llegaría después del primer pintado y la pantalla daría un fogonazo blanco antes de ponerse oscura.
+
+**795. El error clásico, evitado a propósito: `--on-ink`.** En claro, el texto sobre un fondo fuerte (`--ink`, `--red`, `--blue`) es blanco. En oscuro esos fondos **se vuelven claros**, así que ese texto tiene que volverse oscuro. Sin ese token, los chips activos, los badges de mora y el toast habrían quedado **blanco sobre blanco** — es el fallo más común al ponerle tema oscuro a una app que nació clara, y pasa justo en los elementos que uno menos mira al probar.
+
+**794. La paleta de las gráficas se lee del CSS, no de una constante en JS.** Si estuviera escrita en el código habría dos listas de colores en sitios distintos y habría que acordarse de cambiar las dos. Los seis matices oscuros son los mismos tonos re-escalonados para fondo oscuro, **validados contra él** (ΔE adyacente ≥ 8.4 para daltonismo, los seis por encima de 3:1 de contraste). Al cambiar de tema se repinta la página: los colores van metidos en el `style` de cada barra, así que no se enteran solos.
+
+**796. El menú en cuatro cajones — y un bug que llevaba meses a la vista.** `buildNav` sacaba un título de grupo "cuando cambiaba el grupo", recorriendo los ítems. Como el array tenía los grupos **interleaveados**, la barra mostraba **"Negocio" y "Operaciones" dos veces cada uno**. Ahora los grupos van contiguos *y* `buildNav` recorre los grupos, no las filas: volver a desordenar el array ya no puede repetirlos.
+
+Los cajones se armaron por **el momento en que se usa cada cosa**, no por lo que es:
+
+| Cajón | Qué lleva |
+|---|---|
+| Día a día | Inicio · Ventas · Deudores · Gastos |
+| Quién compra | Clientes · Distribuidores · Consignación |
+| Cómo vamos | Dashboard · Informes · Metas |
+| Operación | Pedidos · Proveedores · Combos · Actividad |
+
+**797. Esqueletos de carga.** Mientras Firebase responde, las pantallas salían en blanco y la app parecía rota —sobre todo con datos móviles flojos—. Ahora muestran bloques grises con un brillo que recorre de izquierda a derecha. Dos decisiones: el brillo recorre en vez de parpadear (un parpadeo compite con el contenido real cuando aparece), y **se espera a las tres colecciones esenciales** (ventas, gastos, inventario) antes de pintar datos: mostrar $0 mientras carga es peor que no mostrar nada, porque **parece un dato**.
+
+**798–799. La marca.** Inter se queda para la interfaz —es la que mejor se lee a 11px en un celular, que es como se usa esto—. Se suma **Archivo** para lo que identifica: logo, títulos y cifras grandes. La razón de fondo no es estética: Archivo trae cifras tabulares de verdad, y en una app de plata que los números de una columna no bailen al pasar de $9.000 a $11.000 es lo que permite compararlos de un vistazo.
+
+El logo era la letra "D" tecleada dentro de un cuadro. Ahora es un dibujo: **una D partida en dos piezas**, con una ranura entre la vara y el arco. No es decoración — DUPPLA viene de *dupla*, y el negocio son dos socios. Una letra hecha de dos partes dice eso sin explicarlo. Va en SVG inline (pesa nada, nítida en cualquier pantalla, toma el color de donde esté) y el mismo dibujo es el favicon, embebido como data-URI.
+
+**Regla que sale de aquí:** *un tema oscuro no se agrega al final, se habilita.* El trabajo de verdad fue el 792 —sacar los colores del código— y eso no se ve en pantalla. Cuando alguien pida "modo oscuro" en una app con colores a mano, el 80% del tiempo se va en esa limpieza, y conviene decirlo antes de empezar.
+
+
 ---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*

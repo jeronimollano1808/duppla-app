@@ -6,15 +6,26 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>DUPPLA</title>
+<!-- 799. Favicon con la misma marca, en SVG embebido: ningún archivo que servir. -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23C8E05A'/%3E%3Cg fill='none' stroke='%230F1117' stroke-width='3.4' stroke-linecap='round' transform='translate(4 4)'%3E%3Cpath d='M5.2 4.2 V19.8'/%3E%3Cpath d='M9.8 4.2 H11.6 A7.8 7.8 0 0 1 11.6 19.8 H9.8'/%3E%3C/g%3E%3C/svg%3E">
+<meta name="theme-color" content="#C8E05A">
 <!-- 386. jsPDF para generar cuentas de cobro PDF directamente en el navegador -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
 /* ============================================================
-   253. FUENTES — Inter desde Google Fonts
-   Inter es la fuente estándar de apps deportivas y dashboards modernos
-   Carga solo los pesos que usamos: 400, 500, 600, 700, 800
+   798. TIPOGRAFÍA — dos voces, no una
+   Inter sigue siendo la letra de la interfaz: es la que mejor se lee a
+   11px en un celular, que es el 90% de esta app.
+   Lo que se agrega es una voz propia para lo que IDENTIFICA a Duppla:
+   el logo, los títulos de página y las cifras grandes. Archivo tiene
+   más carácter y, sobre todo, cifras tabulares de verdad — en una app
+   de plata, que los números de una columna no bailen al cambiar de
+   $9.000 a $11.000 no es estética, es poder compararlos de un vistazo.
    ============================================================ */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Archivo:wght@600;700;800;900&display=swap');
+
+/* 798. Las cifras, siempre tabulares y sin ligaduras raras. */
+.metric-value, .page-title, .tbl td, .tbl th { font-variant-numeric: tabular-nums; }
 
 /* ============================================================
    1. RESET Y BASE
@@ -60,12 +71,95 @@
   --amber-bg:#FFFBEB;
   --green:#16A34A;
   --green-bg:#F0FDF4;
+  /* 792. Tokens semánticos nuevos. Antes estos colores estaban escritos a
+     mano 142 veces repartidas por todo el archivo (#FDE68A para el borde
+     ámbar, #92400E para su texto, y así). Mientras siguieran sueltos, el
+     modo oscuro era imposible: no hay dónde cambiarlos. */
+  --amber-bd:#FDE68A;   --amber-ink:#92400E;  --amber-bg-2:#FEF3C7;
+  --blue-bd:#BFDBFE;    --blue-ink:#1D4ED8;
+  --red-bd:#FECACA;     --red-ink:#991B1B;
+  --green-bd:#BBF7D0;   --green-ink:#166534;
+  --on-lime:#0F1117;    /* texto sobre el verde de marca: siempre oscuro */
+  /* 795. Texto que va ENCIMA de un fondo fuerte (--ink, --red, --blue).
+     En claro es blanco; en oscuro esos fondos se vuelven claros, así que el
+     texto tiene que volverse oscuro. Sin este token, los chips activos y los
+     badges quedaban blanco sobre blanco en modo oscuro — el error más común
+     al añadir un tema oscuro a una app que nació clara. */
+  --on-ink:#FFFFFF;
+  --lime-soft:#E3F09A;   /* raya clara de la barra del mes en curso */
+  /* Paleta de series de las gráficas. Validada para daltonismo sobre fondo
+     claro (ΔE adyacente ≥ 9.1). El JS las lee de aquí, así que la gráfica
+     cambia de tema sola (ver 794). */
+  --serie-1:#2a78d6; --serie-2:#eb6834; --serie-3:#1baf7a;
+  --serie-4:#eda100; --serie-5:#e87ba4; --serie-6:#008300;
+  --serie-otros:#9CA3AF;
   --shadow-sm:0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);
   --shadow:0 4px 6px -1px rgba(0,0,0,.07),0 2px 4px -1px rgba(0,0,0,.04);
   --shadow-lg:0 10px 15px -3px rgba(0,0,0,.08),0 4px 6px -2px rgba(0,0,0,.04);
   --radius:10px;
   --radius-lg:14px;
   --radius-xl:20px;
+  color-scheme:light;
+}
+
+/* ============================================================
+   793. MODO OSCURO
+   Los pasos oscuros NO son un invertido automático del claro: se
+   escogieron uno a uno contra el fondo oscuro. Invertir produce textos
+   que vibran y colores que se apagan.
+   Dos reglas en vez de una: la del sistema operativo y la del
+   interruptor. El interruptor manda sobre el sistema en los dos
+   sentidos, por eso la media query lleva el guardia :not([data-theme]).
+   ============================================================ */
+:root[data-theme="dark"]{
+  --lime:#A7C957;
+  --lime-bg:#20260F;
+  --lime-accent:#C8E05A;
+  --ink:#F2F4F7;
+  --ink-2:#A3ABB8;
+  --ink-3:#6F7885;
+  --surface:#171A1F;
+  --surface-2:#101317;
+  --surface-3:#21252B;
+  --border:#282D34;
+  --border-2:#3A4049;
+  --red:#F87171;        --red-bg:#2A1416;   --red-bd:#572529;   --red-ink:#FCA5A5;
+  --blue:#60A5FA;       --blue-bg:#111E2F;  --blue-bd:#1E3A5F;  --blue-ink:#93C5FD;
+  --amber:#FBBF24;      --amber-bg:#241C0B; --amber-bd:#4A3714; --amber-ink:#FCD34D;
+  --amber-bg-2:#2E2410;
+  --green:#4ADE80;      --green-bg:#0D2016; --green-bd:#1B4430; --green-ink:#86EFAC;
+  --on-lime:#0F1117;   --on-ink:#101317;  --lime-soft:#5C6B2A;
+  /* Mismos seis matices, re-escalonados para fondo oscuro y validados
+     contra él (ΔE adyacente ≥ 8.4, todos por encima de 3:1 de contraste). */
+  --serie-1:#3987e5; --serie-2:#d95926; --serie-3:#199e70;
+  --serie-4:#c98500; --serie-5:#d55181; --serie-6:#008300;
+  --serie-otros:#6F7885;
+  /* En oscuro una sombra no se ve: el relieve lo da el borde. */
+  --shadow-sm:0 1px 2px rgba(0,0,0,.4);
+  --shadow:0 4px 10px rgba(0,0,0,.45);
+  --shadow-lg:0 12px 28px rgba(0,0,0,.55);
+  color-scheme:dark;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]):not([data-theme="dark"]){
+    --lime:#A7C957; --lime-bg:#20260F; --lime-accent:#C8E05A;
+    --ink:#F2F4F7; --ink-2:#A3ABB8; --ink-3:#6F7885;
+    --surface:#171A1F; --surface-2:#101317; --surface-3:#21252B;
+    --border:#282D34; --border-2:#3A4049;
+    --red:#F87171;  --red-bg:#2A1416;   --red-bd:#572529;   --red-ink:#FCA5A5;
+    --blue:#60A5FA; --blue-bg:#111E2F;  --blue-bd:#1E3A5F;  --blue-ink:#93C5FD;
+    --amber:#FBBF24;--amber-bg:#241C0B; --amber-bd:#4A3714; --amber-ink:#FCD34D;
+    --amber-bg-2:#2E2410;
+    --green:#4ADE80;--green-bg:#0D2016; --green-bd:#1B4430; --green-ink:#86EFAC;
+    --on-lime:#0F1117; --on-ink:#101317; --lime-soft:#5C6B2A;
+    --serie-1:#3987e5; --serie-2:#d95926; --serie-3:#199e70;
+    --serie-4:#c98500; --serie-5:#d55181; --serie-6:#008300;
+    --serie-otros:#6F7885;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.4);
+    --shadow:0 4px 10px rgba(0,0,0,.45);
+    --shadow-lg:0 12px 28px rgba(0,0,0,.55);
+    color-scheme:dark;
+  }
 }
 
 /* ============================================================
@@ -96,7 +190,7 @@ body{
   gap:12px;
   background:var(--surface);
 }
-.loading-logo{font-size:28px;font-weight:900;color:#111827;letter-spacing:2px;font-family:'Inter',sans-serif}
+.loading-logo{font-size:28px;font-weight:900;color:var(--ink);letter-spacing:2px;font-family:'Archivo','Inter',sans-serif}
 .loading-dot{width:6px;height:6px;border-radius:50%;background:var(--lime-accent);display:inline-block;animation:bounce 1.2s infinite}
 .loading-dot:nth-child(2){animation-delay:.2s}
 .loading-dot:nth-child(3){animation-delay:.4s}
@@ -135,10 +229,10 @@ body{
   background:linear-gradient(135deg,#C8E05A 0%,#9CB83A 100%);
   border-radius:9px;
   display:flex;align-items:center;justify-content:center;
-  font-weight:900;font-size:16px;color:#0F1117;
+  font-weight:900;font-size:16px;color:var(--on-lime);
   box-shadow:0 3px 10px rgba(200,224,90,.3);
 }
-.login-logo-text{font-size:20px;font-weight:900;color:var(--ink);letter-spacing:.5px;font-family:'Inter',sans-serif}
+.login-logo-text{font-size:20px;font-weight:900;color:var(--ink);letter-spacing:.5px;font-family:'Archivo','Inter',sans-serif}
 .login-subtitle{font-size:13px;color:var(--ink-2);margin-bottom:28px}
 .login-label{font-size:12px;font-weight:500;color:var(--ink-2);display:block;margin-bottom:5px}
 .login-input{
@@ -155,13 +249,13 @@ body{
 .login-btn{
   width:100%;padding:11px;margin-top:6px;
   background:var(--ink);border:none;
-  border-radius:var(--radius);color:#fff;
+  border-radius:var(--radius);color:var(--on-ink);
   font-weight:600;font-size:14px;cursor:pointer;
   transition:opacity .15s;
 }
 .login-btn:hover{opacity:.85}
 .login-err{
-  background:var(--red-bg);border:1px solid #FECACA;
+  background:var(--red-bg);border:1px solid var(--red-bd);
   border-radius:8px;padding:9px 13px;
   font-size:13px;color:var(--red);
   margin-bottom:14px;display:none;
@@ -193,18 +287,30 @@ body{
 .sidebar-header{
   padding:20px 16px 16px;
   /* 264. Línea de acento verde lima arriba del header — detalle deportivo */
-  border-top:2px solid #C8E05A;
+  border-top:2px solid var(--lime-accent);
   border-bottom:1px solid rgba(255,255,255,.06);
   display:flex;align-items:center;gap:10px;
   background:rgba(200,224,90,.03);
 }
+/* ============================================================
+   799. LA MARCA
+   El logo era la letra "D" tecleada dentro de un cuadro. Ahora es un
+   dibujo: una D partida en dos piezas con una ranura entre la vara y el
+   arco. No es decoración — DUPPLA viene de "dupla", y el negocio son dos
+   socios. Una letra hecha de dos partes dice eso sin explicarlo.
+   Va en SVG y no en imagen: pesa nada, se ve nítida en cualquier pantalla
+   y toma el color de donde esté (currentColor), así que sirve igual sobre
+   el verde del cuadro que sobre un fondo claro.
+   ============================================================ */
+.marca-d{width:62%;height:62%;display:block}
+
 .sidebar-logo-mark{
   width:34px;height:34px;
   /* 255. Logo mark con gradiente verde lima — identidad DUPPLA */
   background:linear-gradient(135deg,#C8E05A 0%,#9CB83A 100%);
   border-radius:9px;
   display:flex;align-items:center;justify-content:center;
-  font-weight:900;font-size:15px;color:#0F1117;flex-shrink:0;
+  font-weight:900;font-size:15px;color:var(--on-lime);flex-shrink:0;
   box-shadow:0 2px 12px rgba(200,224,90,.4),0 0 0 1px rgba(200,224,90,.1);
 }
 .sidebar-logo-text{font-size:17px;font-weight:800;color:#FFFFFF;letter-spacing:.5px}
@@ -243,8 +349,8 @@ body{
 /* 257. Estado activo: barra izquierda lima + fondo translúcido */
 .nav-btn.active{
   background:rgba(200,224,90,.1);
-  color:#C8E05A;
-  box-shadow:inset 3px 0 0 #C8E05A;
+  color:var(--lime-accent);
+  box-shadow:inset 3px 0 0 var(--lime-accent);
 }
 .nav-btn .ico{
   width:28px;height:28px;border-radius:7px;
@@ -269,7 +375,7 @@ body{
   width:30px;height:30px;border-radius:50%;
   background:linear-gradient(135deg,#C8E05A,#9CB83A);
   display:flex;align-items:center;justify-content:center;
-  font-size:11px;font-weight:700;color:#0F1117;flex-shrink:0;
+  font-size:11px;font-weight:700;color:var(--on-lime);flex-shrink:0;
 }
 .sidebar-email{font-size:11px;color:rgba(255,255,255,.35);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
 .btn-logout{
@@ -294,7 +400,7 @@ body{
   box-shadow:var(--shadow-sm);
 }
 .mobile-logo{display:flex;align-items:center;gap:8px}
-.mobile-logo-mark{width:26px;height:26px;background:linear-gradient(135deg,#C8E05A,#9CB83A);border-radius:6px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:12px;color:#0F1117}
+.mobile-logo-mark{width:26px;height:26px;background:linear-gradient(135deg,#C8E05A,#9CB83A);border-radius:6px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:12px;color:var(--on-lime)}
 .mobile-logo-text{font-size:15px;font-weight:800;color:var(--ink)}
 .hamburger{background:none;border:none;color:var(--ink-2);font-size:20px;cursor:pointer;padding:4px;border-radius:6px}
 .hamburger:hover{background:var(--surface-3)}
@@ -383,7 +489,7 @@ body{
 .metric-card{transition:transform .18s cubic-bezier(.34,1.56,.64,1),box-shadow .18s ease}
 @media (hover:hover){ .metric-card:hover{box-shadow:0 10px 22px -10px rgba(17,24,39,.18);transform:translateY(-2px)} }
 .metric-label{font-size:10px;font-weight:700;color:var(--ink-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px}
-.metric-value{font-size:26px;font-weight:800;color:var(--ink);line-height:1;font-family:'Inter',sans-serif}
+.metric-value{font-size:26px;font-weight:800;color:var(--ink);line-height:1;font-family:'Archivo','Inter',sans-serif;letter-spacing:-.02em}
 .metric-sub{font-size:11px;color:var(--ink-3);margin-top:5px}
 .metric-badge{
   display:inline-flex;align-items:center;gap:3px;
@@ -440,6 +546,21 @@ body{
   border-left:3px solid transparent;-webkit-tap-highlight-color:transparent}
 .bus-fila.activa{background:var(--lime-bg);border-left-color:var(--lime)}
 .bus-fila:active{background:var(--surface-3)}
+
+/* ============================================================
+   797. ESQUELETOS DE CARGA
+   Mientras Firebase responde, las pantallas salían en blanco y la app
+   parecía rota o vacía —sobre todo con datos móviles flojos—. Un bloque
+   gris que respira dice "ya viene" sin mentir con un número.
+   El brillo va de izquierda a derecha sobre el bloque, no un parpadeo:
+   un parpadeo compite con el contenido real cuando aparece.
+   ============================================================ */
+.esq{background:var(--surface-3);border-radius:8px;position:relative;overflow:hidden}
+.esq::after{content:'';position:absolute;inset:0;transform:translateX(-100%);
+  background:linear-gradient(90deg,transparent,rgba(127,127,127,.14),transparent);
+  animation:esqBrillo 1.3s infinite}
+@keyframes esqBrillo{100%{transform:translateX(100%)}}
+@media (prefers-reduced-motion:reduce){ .esq::after{animation:none} }
 .tbl tbody tr:hover{background:var(--surface-2)}
 .tbl td{
   padding:11px 12px;color:var(--ink);
@@ -456,13 +577,13 @@ body{
   border-radius:20px;font-size:11px;font-weight:600;
   white-space:nowrap;
 }
-.b-web{background:#DBEAFE;color:#1D4ED8}
+.b-web{background:#DBEAFE;color:var(--blue-ink)}
 .b-directo{background:var(--lime-bg);color:var(--lime)}
-.b-distribuidor{background:#FEF3C7;color:#92400E}
+.b-distribuidor{background:var(--amber-bg-2);color:var(--amber-ink)}
 .b-danger{background:var(--red-bg);color:var(--red)}
 .b-warning{background:var(--amber-bg);color:var(--amber)}
 .b-success{background:var(--green-bg);color:var(--green)}
-.b-info{background:#EFF6FF;color:var(--blue)}
+.b-info{background:var(--blue-bg);color:var(--blue)}
 .b-gray{background:var(--surface-3);color:var(--ink-2)}
 
 /* ============================================================
@@ -487,7 +608,7 @@ body{
   position:relative;overflow:hidden;isolation:isolate;
   padding:8px 14px;border-radius:var(--radius);
   border:1px solid var(--border-2);
-  background:linear-gradient(180deg,#fff 0%,var(--surface-2) 100%);
+  background:linear-gradient(180deg,var(--surface) 0%,var(--surface-2) 100%);
   color:var(--ink);
   cursor:pointer;font-size:13px;font-weight:600;
   display:inline-flex;align-items:center;gap:5px;
@@ -507,7 +628,7 @@ body{
 }
 .btn:active::after{opacity:.22;transform:scale(0);transition:0s}
 @media (hover:hover){
-  .btn:hover{background:#fff;border-color:var(--ink-3);transform:translateY(-1px);
+  .btn:hover{background:var(--surface);border-color:var(--ink-3);transform:translateY(-1px);
     box-shadow:0 4px 10px rgba(17,24,39,.09),inset 0 1px 0 rgba(255,255,255,.8)}
 }
 .btn:active{transform:translateY(1px) scale(.975);
@@ -515,7 +636,7 @@ body{
 .btn:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(90,138,31,.28),0 1px 2px rgba(17,24,39,.06)}
 .btn:disabled{opacity:.5;cursor:not-allowed;transform:none!important;box-shadow:none}
 .btn-primary{
-  background:linear-gradient(180deg,#1F2937 0%,var(--ink) 100%);color:#fff;
+  background:linear-gradient(180deg,#1F2937 0%,var(--ink) 100%);color:var(--on-ink);
   border-color:var(--ink);
   box-shadow:0 2px 6px rgba(17,24,39,.22),inset 0 1px 0 rgba(255,255,255,.14);
 }
@@ -524,7 +645,7 @@ body{
 /* 260. Botón lime — acción principal con verde DUPPLA y tipografía bold */
 .btn-lime{
   background:linear-gradient(180deg,#D4E873 0%,#B0CB40 100%);
-  color:#0F1117;
+  color:var(--on-lime);
   border-color:#A6C035;
   font-weight:700;
   letter-spacing:.02em;
@@ -532,7 +653,7 @@ body{
 }
 @media (hover:hover){ .btn-lime:hover{background:linear-gradient(180deg,#DCEE8C 0%,#BBD64C 100%);border-color:#A6C035;
   box-shadow:0 6px 18px rgba(176,203,64,.42),inset 0 1px 0 rgba(255,255,255,.6)} }
-.btn-danger{color:var(--red);border-color:#FECACA;background:linear-gradient(180deg,#fff 0%,#FFF7F7 100%)}
+.btn-danger{color:var(--red);border-color:var(--red-bd);background:linear-gradient(180deg,var(--surface) 0%,var(--red-bg) 100%)}
 @media (hover:hover){ .btn-danger:hover{background:var(--red-bg);border-color:#F87171;color:#B91C1C} }
 .btn-sm{padding:6px 11px;font-size:12px;border-radius:8px}
 .btn-xs{padding:4px 9px;font-size:11px;border-radius:7px;font-weight:600}
@@ -638,9 +759,9 @@ body{
   padding:12px 14px;border-radius:var(--radius);
   margin-bottom:16px;font-size:13px;
 }
-.alert-warn{background:var(--amber-bg);border:1px solid #FDE68A;color:#78350F}
-.alert-error{background:var(--red-bg);border:1px solid #FECACA;color:#7F1D1D}
-.alert-success{background:var(--green-bg);border:1px solid #BBF7D0;color:#14532D}
+.alert-warn{background:var(--amber-bg);border:1px solid var(--amber-bd);color:var(--amber-ink)}
+.alert-error{background:var(--red-bg);border:1px solid var(--red-bd);color:#7F1D1D}
+.alert-success{background:var(--green-bg);border:1px solid var(--green-bd);color:#14532D}
 .alert-icon{font-size:15px;flex-shrink:0;margin-top:1px}
 
 /* ============================================================
@@ -674,10 +795,10 @@ body{
   padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;
 }
 .status-chip::before{content:'';width:5px;height:5px;border-radius:50%}
-.chip-pending{background:#FEF3C7;color:#92400E}.chip-pending::before{background:#F59E0B}
-.chip-transit{background:var(--blue-bg);color:#1E40AF}.chip-transit::before{background:var(--blue)}
-.chip-received{background:var(--green-bg);color:#166534}.chip-received::before{background:var(--green)}
-.chip-cancelled{background:var(--red-bg);color:#991B1B}.chip-cancelled::before{background:var(--red)}
+.chip-pending{background:var(--amber-bg-2);color:var(--amber-ink)}.chip-pending::before{background:#F59E0B}
+.chip-transit{background:var(--blue-bg);color:var(--blue-ink)}.chip-transit::before{background:var(--blue)}
+.chip-received{background:var(--green-bg);color:var(--green-ink)}.chip-received::before{background:var(--green)}
+.chip-cancelled{background:var(--red-bg);color:var(--red-ink)}.chip-cancelled::before{background:var(--red)}
 
 /* ============================================================
    24. NOTIFICACIONES — CAMPANA Y PANEL
@@ -695,7 +816,7 @@ body{
 .notif-btn:hover{background:rgba(255,255,255,.1);color:rgba(255,255,255,.8)}
 .notif-dot{
   position:absolute;top:-4px;right:-4px;
-  background:var(--red);color:#fff;
+  background:var(--red);color:var(--on-ink);
   border-radius:50%;min-width:17px;height:17px;
   font-size:10px;font-weight:700;
   display:none;align-items:center;justify-content:center;
@@ -783,6 +904,15 @@ body{
 }
 </style>
 </head>
+<script>
+  // 793. Va aquí arriba y no en el módulo: el módulo carga después del primer
+  //      pintado, así que el tema guardado llegaría tarde y la pantalla daría
+  //      un fogonazo blanco antes de ponerse oscura.
+  try {
+    var t = localStorage.getItem('duppla-tema');
+    if(t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t);
+  } catch(e) {}
+</script>
 <body>
 
 <!-- ============================================================
@@ -790,7 +920,7 @@ body{
      Se muestra mientras Firebase inicializa la autenticación
      ============================================================ -->
 <div id="loading">
-  <div class="loading-logo">DUPPLA</div>
+  <div style="display:flex;align-items:center;gap:11px"><div class="sidebar-logo-mark" style="width:30px;height:30px"><svg class="marca-d" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" aria-hidden="true"><path d="M5.2 4.2 V19.8"/><path d="M9.8 4.2 H11.6 A7.8 7.8 0 0 1 11.6 19.8 H9.8"/></svg></div><div class="loading-logo">DUPPLA</div></div>
   <div style="display:flex;gap:5px;margin-top:8px">
     <div class="loading-dot"></div>
     <div class="loading-dot"></div>
@@ -805,7 +935,7 @@ body{
 <div id="login-screen">
   <div class="login-card">
     <div class="login-logo">
-      <div class="login-logo-mark">D</div>
+      <div class="login-logo-mark"><svg class="marca-d" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" aria-hidden="true"><path d="M5.2 4.2 V19.8"/><path d="M9.8 4.2 H11.6 A7.8 7.8 0 0 1 11.6 19.8 H9.8"/></svg></div>
       <div>
         <div class="login-logo-text">DUPPLA</div>
       </div>
@@ -834,7 +964,7 @@ body{
          cualquier app, y aquí no hacía nada. -->
     <div class="sidebar-header logo-link" role="button" tabindex="0" onclick="showPage('inicio')"
       onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();showPage('inicio')}">
-      <div class="sidebar-logo-mark">D</div>
+      <div class="sidebar-logo-mark"><svg class="marca-d" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" aria-hidden="true"><path d="M5.2 4.2 V19.8"/><path d="M9.8 4.2 H11.6 A7.8 7.8 0 0 1 11.6 19.8 H9.8"/></svg></div>
       <div>
         <div class="sidebar-logo-text">DUPPLA</div>
         <div class="sidebar-logo-sub">Panel de gestión</div>
@@ -872,6 +1002,9 @@ body{
         <div class="sidebar-avatar" id="user-avatar">J</div>
         <div class="sidebar-email" id="user-email-display"></div>
       </div>
+      <!-- 793. Interruptor de tema. Tres estados, no dos: lo normal es seguir
+           al sistema, y las otras dos son decisiones explícitas. -->
+      <button class="btn btn-sm" style="width:100%;margin-bottom:6px" onclick="cambiarTema()" id="btn-tema">🌗 Tema</button>
       <!-- 774. Inventario ya no está en el menú (ver 774 en MENU). Queda aquí,
            con los otros accesos de mantenimiento, para arreglar un costo o
            crear un producto sin tenerlo encima todos los días. -->
@@ -888,7 +1021,7 @@ body{
   <div class="mobile-header">
     <div class="mobile-logo logo-link" role="button" tabindex="0" onclick="showPage('inicio')"
       onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();showPage('inicio')}">
-      <div class="mobile-logo-mark">D</div>
+      <div class="mobile-logo-mark"><svg class="marca-d" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" aria-hidden="true"><path d="M5.2 4.2 V19.8"/><path d="M9.8 4.2 H11.6 A7.8 7.8 0 0 1 11.6 19.8 H9.8"/></svg></div>
       <div class="mobile-logo-text">DUPPLA</div>
     </div>
     <div style="display:flex;align-items:center;gap:8px">
@@ -1061,7 +1194,7 @@ body{
       <label class="f-label">¿Qué pasó?</label>
       <div style="display:flex;gap:8px">
         <button type="button" id="rc-tipo-venta" onclick="setTipoReporteConsig('venta')"
-          style="flex:1;padding:9px;border-radius:var(--radius);border:2px solid var(--ink);background:var(--ink);color:#fff;font-size:13px;font-weight:600;cursor:pointer">
+          style="flex:1;padding:9px;border-radius:var(--radius);border:2px solid var(--ink);background:var(--ink);color:var(--on-ink);font-size:13px;font-weight:600;cursor:pointer">
           💰 Se vendió
         </button>
         <button type="button" id="rc-tipo-devolucion" onclick="setTipoReporteConsig('devolucion')"
@@ -1103,7 +1236,7 @@ body{
         <label class="f-label">¿Cómo quedó el pago?</label>
         <div style="display:flex;gap:6px">
           <button type="button" id="rc-pago-completo" onclick="setEstadoPagoConsig('completo')"
-            style="flex:1;padding:8px 4px;border-radius:var(--radius);border:2px solid var(--ink);background:var(--ink);color:#fff;font-size:12px;font-weight:600;cursor:pointer">
+            style="flex:1;padding:8px 4px;border-radius:var(--radius);border:2px solid var(--ink);background:var(--ink);color:var(--on-ink);font-size:12px;font-weight:600;cursor:pointer">
             ✅ Completo
           </button>
           <button type="button" id="rc-pago-parcial" onclick="setEstadoPagoConsig('parcial')"
@@ -1181,7 +1314,7 @@ body{
       <button class="modal-close" onclick="closeModal('modal-cuenta-cobro')">✕</button>
     </div>
     <input type="hidden" id="cdc-dist-id" value="">
-    <div style="background:var(--amber-bg);border:1px solid #FDE68A;border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#92400E">
+    <div style="background:var(--amber-bg);border:1px solid var(--amber-bd);border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:var(--amber-ink)">
       Total a cobrar: <strong id="cdc-total-preview"></strong>
     </div>
     <div class="f-group">
@@ -1368,7 +1501,7 @@ body{
       <span class="modal-title">Cerrar el mes actual</span>
       <button class="modal-close" onclick="closeModal('modal-cierre-mes')">✕</button>
     </div>
-    <div style="background:var(--amber-bg);border:1px solid #FDE68A;border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#92400E">
+    <div style="background:var(--amber-bg);border:1px solid var(--amber-bd);border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:var(--amber-ink)">
       ⚠️ Esta acción guarda una foto fija de las cifras del mes. No se puede deshacer ni recalcular automáticamente después.
     </div>
     <div id="cierre-mes-preview" style="margin-bottom:14px"></div>
@@ -1430,7 +1563,7 @@ body{
          perder las líneas ya cargadas) -->
     <div style="display:flex;gap:8px;margin-bottom:12px" id="v-modo-toggle">
       <button type="button" id="btn-tipo-inv" onclick="setTipoProducto('inventario')"
-        style="flex:1;padding:8px;border-radius:var(--radius);border:2px solid var(--ink);background:var(--ink);color:#fff;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">
+        style="flex:1;padding:8px;border-radius:var(--radius);border:2px solid var(--ink);background:var(--ink);color:var(--on-ink);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">
         📦 Inventario
       </button>
       <button type="button" id="btn-tipo-manual" onclick="setTipoProducto('manual')"
@@ -1491,7 +1624,7 @@ body{
       <div class="f-group">
         <div style="display:flex;gap:8px">
           <button type="button" id="mp-efectivo" onclick="setMetodoPago('efectivo')"
-            style="flex:1;padding:8px;border-radius:var(--radius);border:2px solid var(--ink);background:var(--ink);color:#fff;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">
+            style="flex:1;padding:8px;border-radius:var(--radius);border:2px solid var(--ink);background:var(--ink);color:var(--on-ink);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">
             💵 Efectivo
           </button>
           <button type="button" id="mp-transferencia" onclick="setMetodoPago('transferencia')"
@@ -1604,7 +1737,7 @@ body{
       <label class="f-label">Método de pago</label>
       <div style="display:flex;gap:8px">
         <button type="button" id="ev-mp-efectivo" onclick="setMetodoPagoEdit('efectivo')"
-          style="flex:1;padding:7px;border-radius:var(--radius);border:2px solid var(--ink);background:var(--ink);color:#fff;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">
+          style="flex:1;padding:7px;border-radius:var(--radius);border:2px solid var(--ink);background:var(--ink);color:var(--on-ink);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">
           💵 Efectivo
         </button>
         <button type="button" id="ev-mp-transferencia" onclick="setMetodoPagoEdit('transferencia')"
@@ -1671,7 +1804,7 @@ body{
       <button class="modal-close" onclick="closeModal('modal-abono')">✕</button>
     </div>
     <!-- 106. Resumen de la deuda actual antes de registrar el abono -->
-    <div id="abono-resumen" style="background:var(--amber-bg);border:1px solid #FDE68A;border-radius:var(--radius);padding:12px 14px;margin-bottom:16px;font-size:13px;color:#78350F"></div>
+    <div id="abono-resumen" style="background:var(--amber-bg);border:1px solid var(--amber-bd);border-radius:var(--radius);padding:12px 14px;margin-bottom:16px;font-size:13px;color:var(--amber-ink)"></div>
     <div class="f-group">
       <label class="f-label">Fecha del abono</label>
       <input type="date" id="ab-fecha" class="f-input">
@@ -1695,7 +1828,7 @@ body{
       <label class="f-label">Método de pago</label>
       <div style="display:flex;gap:8px">
         <button type="button" id="ab-mp-efectivo" onclick="setMetodoPagoAbono('efectivo')"
-          style="flex:1;padding:7px;border-radius:var(--radius);border:2px solid var(--ink);background:var(--ink);color:#fff;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">
+          style="flex:1;padding:7px;border-radius:var(--radius);border:2px solid var(--ink);background:var(--ink);color:var(--on-ink);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">
           💵 Efectivo
         </button>
         <button type="button" id="ab-mp-transferencia" onclick="setMetodoPagoAbono('transferencia')"
@@ -1725,10 +1858,10 @@ body{
       <span class="modal-title">Registrar cobro de cuenta</span>
       <button class="modal-close" onclick="closeModal('modal-cobro')">✕</button>
     </div>
-    <div style="background:var(--blue-bg);border:1px solid #BFDBFE;border-radius:var(--radius);padding:11px 13px;margin-bottom:16px;font-size:12.5px;color:#1E3A8A;line-height:1.45">
+    <div style="background:var(--blue-bg);border:1px solid var(--blue-bd);border-radius:var(--radius);padding:11px 13px;margin-bottom:16px;font-size:12.5px;color:var(--blue-ink);line-height:1.45">
       Esto es plata que entra pagando algo <strong>vendido en un mes anterior</strong>.
       Suma en caja, no en lo vendido de este ciclo.
-      <div style="margin-top:6px;color:#1E40AF">
+      <div style="margin-top:6px;color:var(--blue-ink)">
         ¿La venta está registrada en la app? Entonces ciérrala desde
         <strong>Cobrar → + Abono</strong>: así también le baja la deuda al cliente.
       </div>
@@ -1768,7 +1901,7 @@ body{
           💵 Efectivo
         </button>
         <button type="button" id="cb-mp-transferencia" onclick="setMetodoPagoCobro('transferencia')"
-          style="flex:1;padding:7px;border-radius:var(--radius);border:2px solid var(--ink);background:var(--ink);color:#fff;font-size:12px;font-weight:600;cursor:pointer">
+          style="flex:1;padding:7px;border-radius:var(--radius);border:2px solid var(--ink);background:var(--ink);color:var(--on-ink);font-size:12px;font-weight:600;cursor:pointer">
           📲 Transferencia
         </button>
       </div>
@@ -1831,7 +1964,7 @@ body{
       <div class="f-row trio">
         <div class="f-group" style="margin-bottom:0">
           <label class="f-label" style="display:flex;align-items:center;gap:5px">
-            <span style="width:8px;height:8px;border-radius:50%;background:#2563EB;display:inline-block"></span>
+            <span style="width:8px;height:8px;border-radius:50%;background:var(--blue);display:inline-block"></span>
             Precio público ($)
           </label>
           <input type="number" id="p-pventa" class="f-input" value="0" placeholder="Ej: 110000" oninput="previoCOP('p-pventa','prev-pventa')">
@@ -1839,7 +1972,7 @@ body{
         </div>
         <div class="f-group" style="margin-bottom:0">
           <label class="f-label" style="display:flex;align-items:center;gap:5px">
-            <span style="width:8px;height:8px;border-radius:50%;background:#D97706;display:inline-block"></span>
+            <span style="width:8px;height:8px;border-radius:50%;background:var(--amber);display:inline-block"></span>
             Precio distribuidor ($)
           </label>
           <input type="number" id="p-pdist" class="f-input" value="0" placeholder="Ej: 91000" oninput="previoCOP('p-pdist','prev-pdist')">
@@ -1847,7 +1980,7 @@ body{
         </div>
         <div class="f-group" style="margin-bottom:0">
           <label class="f-label" style="display:flex;align-items:center;gap:5px">
-            <span style="width:8px;height:8px;border-radius:50%;background:#16A34A;display:inline-block"></span>
+            <span style="width:8px;height:8px;border-radius:50%;background:var(--green);display:inline-block"></span>
             Precio especial ($)
           </label>
           <input type="number" id="p-pesp" class="f-input" value="0" placeholder="Ej: 100000" oninput="previoCOP('p-pesp','prev-pesp')">
@@ -1989,7 +2122,7 @@ body{
       <button class="modal-close" onclick="closeModal('modal-pedido')">✕</button>
     </div>
     <input type="hidden" id="pe-id" value="">
-    <div id="pe-edit-warning" style="display:none;background:var(--amber-bg);border:1px solid #FDE68A;border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:12px;color:#92400E">
+    <div id="pe-edit-warning" style="display:none;background:var(--amber-bg);border:1px solid var(--amber-bd);border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:12px;color:var(--amber-ink)">
       ⚠️ Ya fue recibido — este cambio no actualiza los lotes/stock ya ingresados.
     </div>
     <div class="f-row">
@@ -2011,7 +2144,7 @@ body{
       <label class="f-label" style="margin:0">Productos *</label>
       <div style="display:flex;gap:6px">
         <button type="button" class="btn btn-sm" onclick="agregarLineaPedido()">+ Producto</button>
-        <button type="button" class="btn btn-sm" style="color:var(--blue);border-color:#BFDBFE" onclick="abrirNuevoProductoDesdePedido()">+ Producto nuevo</button>
+        <button type="button" class="btn btn-sm" style="color:var(--blue);border-color:var(--blue-bd)" onclick="abrirNuevoProductoDesdePedido()">+ Producto nuevo</button>
       </div>
     </div>
     <div id="pe-lineas-container"></div>
@@ -2029,7 +2162,7 @@ body{
       <label class="f-label">Pago al proveedor</label>
       <div style="display:flex;gap:6px">
         <button type="button" id="pe-pago-completo" onclick="setEstadoPagoPedido('completo')"
-          style="flex:1;padding:8px 4px;border-radius:var(--radius);border:2px solid var(--ink);background:var(--ink);color:#fff;font-size:12px;font-weight:600;cursor:pointer">
+          style="flex:1;padding:8px 4px;border-radius:var(--radius);border:2px solid var(--ink);background:var(--ink);color:var(--on-ink);font-size:12px;font-weight:600;cursor:pointer">
           ✅ Completo
         </button>
         <button type="button" id="pe-pago-parcial" onclick="setEstadoPagoPedido('parcial')"
@@ -2221,7 +2354,7 @@ body{
     <!-- 184. Toggle: combo fijo guardado o armar en el momento -->
     <div style="display:flex;gap:8px;margin-bottom:12px">
       <button type="button" id="btn-combo-fijo" onclick="setTipoCombo('fijo')"
-        style="flex:1;padding:8px;border-radius:var(--radius);border:2px solid var(--ink);background:var(--ink);color:#fff;font-size:12px;font-weight:600;cursor:pointer">
+        style="flex:1;padding:8px;border-radius:var(--radius);border:2px solid var(--ink);background:var(--ink);color:var(--on-ink);font-size:12px;font-weight:600;cursor:pointer">
         🎁 Combo guardado
       </button>
       <button type="button" id="btn-combo-var" onclick="setTipoCombo('variable')"
@@ -2266,7 +2399,7 @@ body{
       <label class="f-label">Método de pago</label>
       <div style="display:flex;gap:8px">
         <button type="button" id="vc-mp-efectivo" onclick="setMetodoPagoCombo('efectivo')"
-          style="flex:1;padding:8px;border-radius:var(--radius);border:2px solid var(--ink);background:var(--ink);color:#fff;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">
+          style="flex:1;padding:8px;border-radius:var(--radius);border:2px solid var(--ink);background:var(--ink);color:var(--on-ink);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">
           💵 Efectivo
         </button>
         <button type="button" id="vc-mp-transferencia" onclick="setMetodoPagoCombo('transferencia')"
@@ -2322,7 +2455,7 @@ body{
       <label class="f-label">¿En cuál ubicación?</label>
       <div style="display:flex;gap:8px">
         <button type="button" id="aj-loc-jero" onclick="setUbicacionAjuste('jero')"
-          style="flex:1;padding:9px;border-radius:var(--radius);border:2px solid var(--ink);background:var(--ink);color:#fff;font-size:13px;font-weight:600;cursor:pointer">
+          style="flex:1;padding:9px;border-radius:var(--radius);border:2px solid var(--ink);background:var(--ink);color:var(--on-ink);font-size:13px;font-weight:600;cursor:pointer">
           👤 Jero
         </button>
         <button type="button" id="aj-loc-angel" onclick="setUbicacionAjuste('angel')"
@@ -2472,6 +2605,12 @@ let DATA = {
   bitacora:[]   // 785. quién tocó qué y cuándo
 };
 let currentPage = 'inicio';  // 663. Página activa — arrancamos en Inicio
+// 797. Hasta que lleguen las tres colecciones de las que cuelga casi todo,
+//      las pantallas muestran esqueleto en vez de ceros. Mostrar $0 mientras
+//      carga es peor que no mostrar nada: parece un dato.
+const COLS_ESENCIALES = ['ventas','gastos','inventario'];
+const colsCargadas = new Set();
+let datosListos = false;
 let ajusteProductoId = null;    // ID del producto que se está ajustando
 
 // ============================================================
@@ -2588,7 +2727,7 @@ window.setDashRankingPor = (tipo) => {
     if(!btn) return;
     const activo = t === tipo;
     btn.style.background = activo ? 'var(--ink)' : 'transparent';
-    btn.style.color = activo ? '#fff' : 'var(--ink-3)';
+    btn.style.color = activo ? 'var(--on-ink)' : 'var(--ink-3)';
     btn.style.borderColor = activo ? 'var(--ink)' : 'var(--border)';
   });
 };
@@ -2977,38 +3116,44 @@ const today = () => fechaLocal(new Date());
 // Definimos las páginas con id, label, ícono y grupo
 // El grupo permite agrupar items en el sidebar
 // ============================================================
+// 796. Menú en cuatro cajones, por el MOMENTO en que se usa cada cosa y no
+//      por lo que es. Antes eran tres grupos pero el orden del array los
+//      interleaveaba, así que "Negocio" y "Operaciones" aparecían DOS VECES
+//      cada uno en la barra: un bug que llevaba meses a la vista.
+//      Ahora cada grupo va contiguo y buildNav recorre los grupos, no las
+//      filas, para que volver a desordenar el array no pueda repetirlos.
+const GRUPOS_MENU = ['Día a día', 'Quién compra', 'Cómo vamos', 'Operación'];
 const MENU = [
-  // 662. Inicio va de primero y es la página por defecto al entrar.
-  { id:'inicio', label:'Inicio', ico:'⚡', group:'Principal' },
-  { id:'dashboard', label:'Dashboard', ico:'📊', group:'Principal' },
-  { id:'ventas', label:'Ventas', ico:'🛒', group:'Negocio' },
-  // 774. Inventario sale del menú. Ángel: "quitar la sección de inventario,
-  //      ocupa espacio y visualmente no aporta". El stock se sigue
-  //      descontando solo al vender y la página sigue existiendo —
-  //      `renderPage` y el div `page-inventario` quedan intactos— pero deja
-  //      de competir por la atención del día a día. Se entra por el botón
-  //      discreto del pie del menú, que es donde se arregla un costo o se
-  //      crea un producto cuando de verdad hace falta.
-  { id:'clientes', label:'Clientes', ico:'👥', group:'Negocio' },
-  // 327. Distribuidores — gimnasios y distribuidores con historial de compras
-  { id:'distribuidores', label:'Distribuidores', ico:'🏋️', group:'Negocio' },
-  { id:'gastos', label:'Gastos', ico:'💸', group:'Negocio' },
-  { id:'proveedores', label:'Proveedores', ico:'🚚', group:'Operaciones' },
-  { id:'pedidos', label:'Pedidos', ico:'📋', group:'Operaciones' },
-  { id:'metas', label:'Metas', ico:'🎯', group:'Operaciones' },
+  // --- Día a día: lo que se toca con el negocio abierto ---
+  { id:'inicio', label:'Inicio', ico:'⚡', group:'Día a día' },
+  { id:'ventas', label:'Ventas', ico:'🛒', group:'Día a día' },
+  { id:'deudores', label:'Deudores', ico:'💳', group:'Día a día' },
+  { id:'gastos', label:'Gastos', ico:'💸', group:'Día a día' },
+
+  // --- Quién compra ---
+  { id:'clientes', label:'Clientes', ico:'👥', group:'Quién compra' },
+  // 327. Distribuidores — gimnasios con historial de compras
+  { id:'distribuidores', label:'Distribuidores', ico:'🏋️', group:'Quién compra' },
+  // 489. Consignación — tiendas con producto que todavía no han comprado
+  { id:'consignacion', label:'Consignación', ico:'🏪', group:'Quién compra' },
+
+  // --- Cómo vamos: para mirar, no para registrar ---
+  { id:'dashboard', label:'Dashboard', ico:'📊', group:'Cómo vamos' },
   // 782. Informes — lo que se le pasa a un contador, a un banco o a un socio.
-  { id:'informes', label:'Informes', ico:'📄', group:'Operaciones' },
+  { id:'informes', label:'Informes', ico:'📄', group:'Cómo vamos' },
+  { id:'metas', label:'Metas', ico:'🎯', group:'Cómo vamos' },
+
+  // --- Operación: de vez en cuando ---
+  { id:'pedidos', label:'Pedidos', ico:'📦', group:'Operación' },
+  { id:'proveedores', label:'Proveedores', ico:'🚚', group:'Operación' },
   // 177. Combos
-  { id:'combos', label:'Combos', ico:'🎁', group:'Operaciones' },
-  // 305. Deudores — clientes que deben + consumo interno Ángel/Jero
-  { id:'deudores', label:'Deudores', ico:'💳', group:'Negocio' },
-  // 489. Consignación — tiendas físicas que tienen productos sin haberlos comprado aún
-  { id:'consignacion', label:'Consignación', ico:'🏪', group:'Negocio' },
-  // 622. Papelera — registros eliminados recuperables por 7 días
-  // 786. Se absorbe dentro de Actividad: "qué pasó aquí" y "qué se borró" son
-  //      la misma pregunta hecha con distinto alcance, y el menú ya está largo.
-  //      La página vieja sigue existiendo y showPage('papelera') sigue sirviendo.
-  { id:'actividad', label:'Actividad', ico:'📋', group:'Operaciones' },
+  { id:'combos', label:'Combos', ico:'🎁', group:'Operación' },
+  // 786. Actividad se comió a Papelera (ver 786). La página vieja sigue
+  //      existiendo y showPage('papelera') sigue sirviendo.
+  { id:'actividad', label:'Actividad', ico:'📋', group:'Operación' },
+  // 774. Inventario no está en el menú a propósito: se entra por el botón
+  //      discreto del pie, que es donde se arregla un costo o se crea un
+  //      producto cuando de verdad hace falta.
 ];
 
 // ============================================================
@@ -3027,6 +3172,7 @@ onAuthStateChanged(auth, user => {
     document.getElementById('user-avatar').textContent = initial;
     startListeners();   // Iniciamos conexión con Firebase
     buildNav();         // Construimos el menú lateral
+    aplicarTema(temaGuardado());  // 793. Deja el botón con la etiqueta correcta
     showPage('inicio'); // 664. Entramos por Inicio, no por Dashboard
     requestNotifPermission(); // Pedimos permiso de notificaciones
   } else {
@@ -3076,6 +3222,11 @@ function startListeners() {
     const q = query(collection(db, col), orderBy('createdAt','desc'));
     onSnapshot(q, snap => {
       DATA[col] = snap.docs.map(d => ({id:d.id, ...d.data()}));
+      // 797. Primera llegada de cada colección esencial.
+      if(!datosListos && COLS_ESENCIALES.includes(col)) {
+        colsCargadas.add(col);
+        if(COLS_ESENCIALES.every(c => colsCargadas.has(c))) datosListos = true;
+      }
       // 730. Único punto donde se separan ventas y cobros (ver 727). Se hace
       //      aquí, al entrar los datos a memoria, y no en cada suma: si se
       //      dejara a criterio de cada pantalla, tarde o temprano una se
@@ -3092,6 +3243,9 @@ function startListeners() {
       //      todo hasta que navegaras a otra página y volvieras. Cualquier
       //      página futura que resuma varias colecciones debe sumarse aquí.
       if(currentPage === col || currentPage === 'dashboard' || currentPage === 'inicio') renderPage(currentPage);
+      // 797. En cuanto están las tres, se repinta lo que esté a la vista para
+      //      cambiar el esqueleto por los datos de verdad.
+      else if(datosListos) renderPage(currentPage);
       if(currentPage === 'clientes' && (col === 'ventas' || col === 'inventario')) renderPage('clientes');
       if(currentPage === 'deudores' && (col === 'ventas' || col === 'consumos')) renderPage('deudores');
       if(currentPage === 'distribuidores' && (col === 'ventas' || col === 'distribuidores')) renderPage('distribuidores');
@@ -3158,21 +3312,23 @@ function buildNav() {
   // 642. Badge de recompras próximas en "Clientes" — mismo patrón que el de Deudores.
   const recomprasNav = calcularRecompras().length;
   let html = '';
-  let lastGroup = '';
-  MENU.forEach(m => {
-    // Agregamos título de grupo cuando cambia
-    if(m.group !== lastGroup) {
-      html += `<div class="nav-section-title">${m.group}</div>`;
-      lastGroup = m.group;
-    }
+  // 796. Se recorren los GRUPOS y dentro de cada uno sus ítems. Con el bucle
+  //      viejo —recorrer ítems y sacar título cuando cambiaba el grupo— un
+  //      array desordenado repetía los títulos, que es lo que pasaba.
+  GRUPOS_MENU.forEach(grupo => {
+    const items = MENU.filter(m => m.group === grupo);
+    if(!items.length) return;
+    html += `<div class="nav-section-title">${grupo}</div>`;
+    items.forEach(m => {
     const badge = (m.id === 'deudores' && enMoraNav > 0)
-      ? `<span style="margin-left:auto;background:var(--red);color:#fff;border-radius:20px;padding:1px 8px;font-size:10px;font-weight:700">${enMoraNav}</span>`
+      ? `<span style="margin-left:auto;background:var(--red);color:var(--on-ink);border-radius:20px;padding:1px 8px;font-size:10px;font-weight:700">${enMoraNav}</span>`
       : (m.id === 'clientes' && recomprasNav > 0)
-      ? `<span style="margin-left:auto;background:#2563EB;color:#fff;border-radius:20px;padding:1px 8px;font-size:10px;font-weight:700">${recomprasNav}</span>`
+      ? `<span style="margin-left:auto;background:var(--blue);color:var(--on-ink);border-radius:20px;padding:1px 8px;font-size:10px;font-weight:700">${recomprasNav}</span>`
       : '';
     html += `<button class="nav-btn${m.id===currentPage?' active':''}" onclick="showPage('${m.id}')" style="display:flex;align-items:center">
       <span class="ico">${m.ico}</span>${m.label}${badge}
     </button>`;
+    });
   });
   nav.innerHTML = html;
 }
@@ -3187,7 +3343,33 @@ window.showPage = (id) => {
   closeSidebar(); // En móvil cerramos el sidebar al navegar
 };
 
+// 797. Un esqueleto genérico: cabecera, una fila de tarjetas y una lista.
+//      Es la forma que tienen casi todas las páginas de la app, así que
+//      encaja sin tener que escribir uno por pantalla.
+function esqueletoHtml() {
+  const bloque = (w, h, mb) => '<div class="esq" style="width:' + w + ';height:' + h + 'px;margin-bottom:' + (mb||0) + 'px"></div>';
+  const tarjeta = '<div class="card" style="padding:16px">' + bloque('45%',10,12) + bloque('70%',22,10) + bloque('55%',10) + '</div>';
+  const fila = '<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)">'
+    + '<div class="esq" style="width:34px;height:34px;border-radius:50%"></div>'
+    + '<div style="flex:1">' + bloque('40%',11,7) + bloque('65%',9) + '</div>'
+    + '<div class="esq" style="width:72px;height:14px"></div></div>';
+  return '<div aria-busy="true" aria-live="polite">'
+    + '<div style="margin-bottom:22px">' + bloque('180px',24,9) + bloque('260px',12) + '</div>'
+    + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:9px;margin-bottom:16px">'
+      + tarjeta + tarjeta + tarjeta + '</div>'
+    + '<div class="card" style="padding:4px 16px">' + fila + fila + fila + fila + '</div>'
+  + '</div>';
+}
+
 function renderPage(id) {
+  // 797. Con las colecciones todavía en camino, esqueleto. Las páginas que no
+  //      dependen de datos (papelera vacía, actividad) también lo muestran un
+  //      instante, y es preferible a que salten de vacías a llenas.
+  if(!datosListos) {
+    const cont = document.getElementById('page-' + id);
+    if(cont) cont.innerHTML = esqueletoHtml();
+    return;
+  }
   const renders = {
     inicio:renderInicio,
     dashboard:renderDashboard, ventas:renderVentas,
@@ -3630,14 +3812,14 @@ function renderDashboard() {
   //      muestre por defecto (Ventas filtra por ciclo; esto no).
   const deudoresMoraDash = calcularDeudores().filter(d => d.enMora);
   const alertDeudoresHtml = deudoresMoraDash.length ? `
-    <div style="background:var(--red-bg);border:1px solid #FECACA;border-radius:var(--radius-lg);padding:12px 16px;margin-bottom:16px">
+    <div style="background:var(--red-bg);border:1px solid var(--red-bd);border-radius:var(--radius-lg);padding:12px 16px;margin-bottom:16px">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
         <span>⏰</span>
         <span style="font-size:12px;font-weight:700;color:var(--red)">DEUDORES EN MORA — ${deudoresMoraDash.length} cliente${deudoresMoraDash.length>1?'s':''}</span>
         <button onclick="showPage('deudores')" style="margin-left:auto;font-size:11px;background:none;border:none;color:var(--red);cursor:pointer;font-weight:600;text-decoration:underline">Ver deudores →</button>
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:6px">
-        ${deudoresMoraDash.map(d => `<span style="background:#fff;border:1px solid #FECACA;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;color:var(--red)">
+        ${deudoresMoraDash.map(d => `<span style="background:var(--surface);border:1px solid var(--red-bd);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;color:var(--red)">
           ⏰ ${d.cliente} (${fmt(d.total)} · ${d.diasMora}d)
         </span>`).join('')}
       </div>
@@ -3647,14 +3829,14 @@ function renderDashboard() {
   // acabando (o ya se les acabó) un producto con duración configurada.
   const recomprasDash = calcularRecompras();
   const alertRecomprasHtml = recomprasDash.length ? `
-    <div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:var(--radius-lg);padding:12px 16px;margin-bottom:16px">
+    <div style="background:var(--blue-bg);border:1px solid var(--blue-bd);border-radius:var(--radius-lg);padding:12px 16px;margin-bottom:16px">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
         <span>🔄</span>
-        <span style="font-size:12px;font-weight:700;color:#1D4ED8">PRÓXIMOS A RECOMPRAR — ${recomprasDash.length} cliente${recomprasDash.length>1?'s':''}</span>
-        <button onclick="showPage('clientes')" style="margin-left:auto;font-size:11px;background:none;border:none;color:#1D4ED8;cursor:pointer;font-weight:600;text-decoration:underline">Ver clientes →</button>
+        <span style="font-size:12px;font-weight:700;color:var(--blue-ink)">PRÓXIMOS A RECOMPRAR — ${recomprasDash.length} cliente${recomprasDash.length>1?'s':''}</span>
+        <button onclick="showPage('clientes')" style="margin-left:auto;font-size:11px;background:none;border:none;color:var(--blue-ink);cursor:pointer;font-weight:600;text-decoration:underline">Ver clientes →</button>
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:6px">
-        ${recomprasDash.map(r => `<span style="background:#fff;border:1px solid #BFDBFE;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;color:#1D4ED8">
+        ${recomprasDash.map(r => `<span style="background:var(--surface);border:1px solid var(--blue-bd);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;color:var(--blue-ink)">
           🔄 ${r.cliente} — ${r.prodNombre} (${r.diasRestantes<0?'hace '+(-r.diasRestantes)+'d':r.diasRestantes+'d'})
         </span>`).join('')}
       </div>
@@ -3675,7 +3857,7 @@ function renderDashboard() {
         <button onclick="setDashPeriodo('${p.id}')"
           style="padding:5px 12px;border-radius:20px;border:1.5px solid ${dashPeriodo===p.id?'var(--ink)':'var(--border)'};
           background:${dashPeriodo===p.id?'var(--ink)':'var(--surface)'};
-          color:${dashPeriodo===p.id?'#fff':'var(--ink-2)'};
+          color:${dashPeriodo===p.id?'var(--on-ink)':'var(--ink-2)'};
           font-size:12px;font-weight:${dashPeriodo===p.id?'600':'400'};cursor:pointer;transition:all .15s">
           ${p.label}
         </button>`).join('')}
@@ -3695,7 +3877,7 @@ function renderDashboard() {
   pv.forEach(v => { if(canales[v.canal]!==undefined) canales[v.canal]+=ingresoVenta(v); });
   const maxC = Math.max(...Object.values(canales), 1);
   const cNames = { web:'Web', directo:'Directo', distribuidor:'Dist.' };
-  const cColors = { web:'#BFDBFE', directo:'var(--lime-accent)', distribuidor:'#FDE68A' };
+  const cColors = { web:'var(--blue-bd)', directo:'var(--lime-accent)', distribuidor:'var(--amber-bd)' };
 
   // 414. RENTABILIDAD POR CANAL — margen real (no solo volumen) de Web/Directo/Distribuidor
   //      Responde: ¿cuál canal deja más plata realmente, no solo cuál mueve más dinero?
@@ -3900,9 +4082,9 @@ function renderDashboard() {
           <!-- 374. Toggle para rankear por ingresos o por margen real — repinta solo el ranking -->
           <div style="display:flex;gap:4px">
             <button id="dash-rank-btn-ingresos" onclick="setDashRankingPor('ingresos')"
-              style="padding:3px 9px;border-radius:14px;border:1px solid ${ordenarPor==='ingresos'?'var(--ink)':'var(--border)'};background:${ordenarPor==='ingresos'?'var(--ink)':'transparent'};color:${ordenarPor==='ingresos'?'#fff':'var(--ink-3)'};font-size:10px;font-weight:600;cursor:pointer">Ingresos</button>
+              style="padding:3px 9px;border-radius:14px;border:1px solid ${ordenarPor==='ingresos'?'var(--ink)':'var(--border)'};background:${ordenarPor==='ingresos'?'var(--ink)':'transparent'};color:${ordenarPor==='ingresos'?'var(--on-ink)':'var(--ink-3)'};font-size:10px;font-weight:600;cursor:pointer">Ingresos</button>
             <button id="dash-rank-btn-margen" onclick="setDashRankingPor('margen')"
-              style="padding:3px 9px;border-radius:14px;border:1px solid ${ordenarPor==='margen'?'var(--ink)':'var(--border)'};background:${ordenarPor==='margen'?'var(--ink)':'transparent'};color:${ordenarPor==='margen'?'#fff':'var(--ink-3)'};font-size:10px;font-weight:600;cursor:pointer">Margen</button>
+              style="padding:3px 9px;border-radius:14px;border:1px solid ${ordenarPor==='margen'?'var(--ink)':'var(--border)'};background:${ordenarPor==='margen'?'var(--ink)':'transparent'};color:${ordenarPor==='margen'?'var(--on-ink)':'var(--ink-3)'};font-size:10px;font-weight:600;cursor:pointer">Margen</button>
           </div>
         </div>
         <div id="dash-top-productos">${topHtml}</div>
@@ -3930,7 +4112,7 @@ function renderVentas() {
         <button onclick="setVentasPeriodo('${p.id}')"
           style="padding:5px 12px;border-radius:20px;border:1.5px solid ${ventasPeriodo===p.id?'var(--ink)':'var(--border)'};
           background:${ventasPeriodo===p.id?'var(--ink)':'var(--surface)'};
-          color:${ventasPeriodo===p.id?'#fff':'var(--ink-2)'};
+          color:${ventasPeriodo===p.id?'var(--on-ink)':'var(--ink-2)'};
           font-size:12px;font-weight:${ventasPeriodo===p.id?'600':'400'};cursor:pointer;transition:all .15s">
           ${p.label}
         </button>`).join('')}
@@ -4011,9 +4193,9 @@ function renderVentas() {
   // 743. Aviso si se coló un cobro registrado como venta. Se arregla en un clic.
   const malRegistradas = ventasQueSonCobros();
   const avisoCobrosMalRegistrados = malRegistradas.length ? `
-    <div style="background:var(--amber-bg);border:1px solid #FDE68A;border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <div style="background:var(--amber-bg);border:1px solid var(--amber-bd);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
       <span style="font-size:16px">⚠️</span>
-      <span style="flex:1;min-width:220px;font-size:12.5px;color:#92400E;line-height:1.45">
+      <span style="flex:1;min-width:220px;font-size:12.5px;color:var(--amber-ink);line-height:1.45">
         <strong>${malRegistradas.length} movimiento(s) por ${fmt(malRegistradas.reduce((s,v)=>s+ingresoVenta(v),0))} están contados como venta pero son cobros</strong>
         de cuentas de meses anteriores. Así, ese dinero se cuenta dos veces: cuando se vendió y cuando lo pagaron.
       </span>
@@ -4098,11 +4280,11 @@ function renderVentas() {
 
     // 116. Botón de abono solo visible en ventas con saldo pendiente
     const btnAbono = (saldoReal(v) > 0)
-      ? `<button class="btn btn-xs" style="color:var(--amber);border-color:#FDE68A" onclick="abrirAbono('${v.id}')">+ Abono</button>`
+      ? `<button class="btn btn-xs" style="color:var(--amber);border-color:var(--amber-bd)" onclick="abrirAbono('${v.id}')">+ Abono</button>`
       : '';
     // 246. Botón de historial de abonos — solo si tiene abonos registrados
     const btnHistorial = (v.abonos?.length > 0)
-      ? `<button class="btn btn-xs" style="color:var(--blue);border-color:#BFDBFE" onclick="verHistorialAbonos('${v.id}')">📋 ${v.abonos.length}</button>`
+      ? `<button class="btn btn-xs" style="color:var(--blue);border-color:var(--blue-bd)" onclick="verHistorialAbonos('${v.id}')">📋 ${v.abonos.length}</button>`
       : '';
 
     // 117. Mostramos el saldo pendiente si existe
@@ -4171,7 +4353,7 @@ function renderVentas() {
       <div style="display:flex;gap:8px">
         <button class="btn btn-sm" onclick="exportarCSV()">↓ CSV</button>
         <button class="btn btn-sm" onclick="abrirImportarVentas()">⬆️ Importar</button>
-        <button class="btn btn-sm" style="color:var(--amber);border-color:#FDE68A" onclick="abrirRevisarPrecios()">⚠️ Revisar precios</button>
+        <button class="btn btn-sm" style="color:var(--amber);border-color:var(--amber-bd)" onclick="abrirRevisarPrecios()">⚠️ Revisar precios</button>
         <button class="btn btn-sm" onclick="abrirModalCobro()">💳 Cobro</button>
         <button class="btn btn-lime btn-sm" onclick="abrirModalVenta()">+ Nueva venta</button>
       </div>
@@ -4270,7 +4452,7 @@ window.setMetodoPago = (tipo) => {
     if(!btn) return;
     const activo = k === tipo;
     btn.style.background = activo ? 'var(--ink)' : 'var(--surface-2)';
-    btn.style.color = activo ? '#fff' : 'var(--ink-2)';
+    btn.style.color = activo ? 'var(--on-ink)' : 'var(--ink-2)';
     btn.style.borderColor = activo ? 'var(--ink)' : 'var(--border)';
   });
   // 359. Mostramos el desglose efectivo/transferencia solo si es mixto
@@ -4300,7 +4482,7 @@ window.setMetodoPagoAbono = (tipo) => {
     if(!btn) return;
     const activo = k === tipo;
     btn.style.background = activo ? 'var(--ink)' : 'var(--surface-2)';
-    btn.style.color = activo ? '#fff' : 'var(--ink-2)';
+    btn.style.color = activo ? 'var(--on-ink)' : 'var(--ink-2)';
     btn.style.borderColor = activo ? 'var(--ink)' : 'var(--border)';
   });
 };
@@ -4313,7 +4495,7 @@ window.setMetodoPagoEdit = (tipo) => {
     if(!btn) return;
     const activo = k === tipo;
     btn.style.background = activo ? 'var(--ink)' : 'var(--surface-2)';
-    btn.style.color = activo ? '#fff' : 'var(--ink-2)';
+    btn.style.color = activo ? 'var(--on-ink)' : 'var(--ink-2)';
     btn.style.borderColor = activo ? 'var(--ink)' : 'var(--border)';
   });
   // 364. Mostramos desglose mixto en edición
@@ -4336,7 +4518,7 @@ window.setMetodoPagoCombo = (tipo) => {
     if(!btn) return;
     const activo = k === tipo;
     btn.style.background = activo ? 'var(--ink)' : 'var(--surface-2)';
-    btn.style.color = activo ? '#fff' : 'var(--ink-2)';
+    btn.style.color = activo ? 'var(--on-ink)' : 'var(--ink-2)';
     btn.style.borderColor = activo ? 'var(--ink)' : 'var(--border)';
   });
   const grupo = document.getElementById('vc-mixto-grupo');
@@ -4358,10 +4540,10 @@ window.setTipoProducto = (tipo) => {
   const btnInv = document.getElementById('btn-tipo-inv');
   const btnMan = document.getElementById('btn-tipo-manual');
   btnInv.style.background = esInv ? 'var(--ink)' : 'var(--surface-2)';
-  btnInv.style.color = esInv ? '#fff' : 'var(--ink-2)';
+  btnInv.style.color = esInv ? 'var(--on-ink)' : 'var(--ink-2)';
   btnInv.style.borderColor = esInv ? 'var(--ink)' : 'var(--border)';
   btnMan.style.background = esInv ? 'var(--surface-2)' : 'var(--ink)';
-  btnMan.style.color = esInv ? 'var(--ink-2)' : '#fff';
+  btnMan.style.color = esInv ? 'var(--ink-2)' : 'var(--on-ink)';
   btnMan.style.borderColor = esInv ? 'var(--border)' : 'var(--ink)';
   if(esInv) renderLineasVenta();
   calcVentaTotal();
@@ -4391,7 +4573,7 @@ function contenidoLineaVenta(i) {
       const subtotalManual = fmt((l.cant||1)*(l.precio||0));
       const nombreVal = (l.nombre||'').replace(/"/g, '&quot;');
       contenido = '<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--amber-bg);border-radius:8px;margin-bottom:8px">'
-        + '<span style="font-size:12px;font-weight:600;color:#92400E;flex:1">✏️ Producto manual</span>'
+        + '<span style="font-size:12px;font-weight:600;color:var(--amber-ink);flex:1">✏️ Producto manual</span>'
         + '<button type="button" onclick="desactivarManualLinea(' + i + ')" style="background:none;border:none;color:var(--ink-3);cursor:pointer;font-size:11px;text-decoration:underline">Buscar en catálogo</button>'
       + '</div>'
       + '<input type="text" class="f-input" placeholder="Nombre del producto" value="' + nombreVal + '" '
@@ -4424,9 +4606,9 @@ function contenidoLineaVenta(i) {
     } else {
       // Producto seleccionado — botones de tipo de precio
       let tiposBtns = '';
-      [['publico','Público','#2563EB','#EFF6FF'],
-       ['distribuidor','Dist.','#D97706','#FFFBEB'],
-       ['especial','Especial','#16A34A','#F0FDF4']
+      [['publico','Público','var(--blue)','var(--blue-bg)'],
+       ['distribuidor','Dist.','var(--amber)','var(--amber-bg)'],
+       ['especial','Especial','var(--green)','var(--green-bg)']
       ].forEach(function(arr) {
         const tipo = arr[0], label = arr[1], color = arr[2], bg = arr[3];
         const activo = l.tipoPrecio === tipo;
@@ -4452,11 +4634,11 @@ function contenidoLineaVenta(i) {
         ubicacionHtml = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">'
           + '<button type="button" onclick="seleccionarUbicacionLinea(' + i + ',\'jero\')" '
             + 'style="padding:6px 4px;border-radius:6px;border:2px solid ' + (l.ubicacion==='jero'?'var(--ink)':'var(--border)') + ';'
-            + 'background:' + (l.ubicacion==='jero'?'var(--ink)':'var(--surface)') + ';color:' + (l.ubicacion==='jero'?'#fff':'var(--ink-2)') + ';cursor:pointer;font-size:11px;font-weight:600" '
+            + 'background:' + (l.ubicacion==='jero'?'var(--ink)':'var(--surface)') + ';color:' + (l.ubicacion==='jero'?'var(--on-ink)':'var(--ink-2)') + ';cursor:pointer;font-size:11px;font-weight:600" '
             + (sj<=0?'disabled style="opacity:.4;cursor:not-allowed"':'') + '>👤 Jero (' + sj + ')</button>'
           + '<button type="button" onclick="seleccionarUbicacionLinea(' + i + ',\'angel\')" '
             + 'style="padding:6px 4px;border-radius:6px;border:2px solid ' + (l.ubicacion==='angel'?'var(--ink)':'var(--border)') + ';'
-            + 'background:' + (l.ubicacion==='angel'?'var(--ink)':'var(--surface)') + ';color:' + (l.ubicacion==='angel'?'#fff':'var(--ink-2)') + ';cursor:pointer;font-size:11px;font-weight:600" '
+            + 'background:' + (l.ubicacion==='angel'?'var(--ink)':'var(--surface)') + ';color:' + (l.ubicacion==='angel'?'var(--on-ink)':'var(--ink-2)') + ';cursor:pointer;font-size:11px;font-weight:600" '
             + (sa<=0?'disabled style="opacity:.4;cursor:not-allowed"':'') + '>👤 Ángel (' + sa + ')</button>'
         + '</div>';
       }
@@ -4954,7 +5136,7 @@ window.abrirAbono = (ventaId) => {
     <strong>${venta.producto}</strong><br>
     Total venta: ${fmt(venta.total)} · Pagado: ${fmt(venta.pagado||0)}<br>
     <span style="font-size:15px;font-weight:700">Saldo pendiente: ${fmt(venta.saldo||0)}</span>
-    ${venta.abonos?.length ? `<br><span style="font-size:11px;color:#92400E">${venta.abonos.length} abono(s) previo(s) registrado(s)</span>` : ''}
+    ${venta.abonos?.length ? `<br><span style="font-size:11px;color:var(--amber-ink)">${venta.abonos.length} abono(s) previo(s) registrado(s)</span>` : ''}
   `;
   document.getElementById('ab-fecha').value = today();
   document.getElementById('ab-valor').value = '';
@@ -5064,7 +5246,7 @@ window.setMetodoPagoCobro = (tipo) => {
     const on = t === tipo;
     el.style.border     = '2px solid ' + (on ? 'var(--ink)' : 'var(--border)');
     el.style.background = on ? 'var(--ink)' : 'var(--surface-2)';
-    el.style.color      = on ? '#fff' : 'var(--ink-2)';
+    el.style.color      = on ? 'var(--on-ink)' : 'var(--ink-2)';
   });
 };
 
@@ -5636,7 +5818,7 @@ function renderInventario() {
   function tarjetaStock(p) {
     const esAgotado = p.stock === 0;
     const bg = esAgotado ? 'var(--red-bg)' : 'var(--amber-bg)';
-    const border = esAgotado ? '#FECACA' : '#FDE68A';
+    const border = esAgotado ? 'var(--red-bd)' : 'var(--amber-bd)';
     const color = esAgotado ? 'var(--red)' : 'var(--amber)';
     const ico = esAgotado ? '🚫' : '⚠️';
     const label = esAgotado ? 'AGOTADO' : p.stock + ' uds.';
@@ -5878,9 +6060,9 @@ function renderInventario() {
       </td>
       <td>
         <div style="display:flex;flex-direction:column;gap:3px;font-size:12px">
-          <span><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#2563EB;margin-right:4px"></span>${p.pventa>0?fmt(p.pventa):'—'}</span>
-          <span><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#D97706;margin-right:4px"></span>${p.pdist>0?fmt(p.pdist):'—'}</span>
-          <span><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#16A34A;margin-right:4px"></span>${p.pesp>0?fmt(p.pesp):'—'}</span>
+          <span><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--blue);margin-right:4px"></span>${p.pventa>0?fmt(p.pventa):'—'}</span>
+          <span><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--amber);margin-right:4px"></span>${p.pdist>0?fmt(p.pdist):'—'}</span>
+          <span><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-right:4px"></span>${p.pesp>0?fmt(p.pesp):'—'}</span>
         </div>
       </td>
       <!-- 355. Valor total en stock — a costo y a precio público -->
@@ -5897,8 +6079,8 @@ function renderInventario() {
           <button class="btn btn-xs" onclick="editarProducto('${p.id}')">✏️ Editar</button>
           <button class="btn btn-xs" onclick="abrirAjuste('${p.id}','${p.nombre.replace(/'/g,"\\'")}',${p.stock})">± Stock</button>
           <!-- 469. Botones del sistema de lotes FIFO -->
-          <button class="btn btn-xs" style="color:var(--blue);border-color:#BFDBFE" onclick="abrirModalLote('${p.id}')">+ Lote</button>
-          ${(p.lotes && p.lotes.length > 0) ? '<button class="btn btn-xs" style="color:var(--lime);border-color:#C8E05A" onclick="verLotesProducto(\'' + p.id + '\')">📦 ' + p.lotes.length + '</button>' : ''}
+          <button class="btn btn-xs" style="color:var(--blue);border-color:var(--blue-bd)" onclick="abrirModalLote('${p.id}')">+ Lote</button>
+          ${(p.lotes && p.lotes.length > 0) ? '<button class="btn btn-xs" style="color:var(--lime);border-color:var(--lime-accent)" onclick="verLotesProducto(\'' + p.id + '\')">📦 ' + p.lotes.length + '</button>' : ''}
           <button class="btn btn-xs btn-danger" onclick="eliminarDoc('inventario','${p.id}')">✕</button>
         </div>
       </td>
@@ -5913,7 +6095,7 @@ function renderInventario() {
                   Detecta precios menores a 1000 y los multiplica por 1000
                   Solo aparece si hay productos con precios incorrectos -->
         ${DATA.inventario.some(p => p.pventa > 0 && p.pventa < 1000) ?
-          `<button class="btn btn-sm" style="color:var(--amber);border-color:#FDE68A" onclick="corregirPrecios()">
+          `<button class="btn btn-sm" style="color:var(--amber);border-color:var(--amber-bd)" onclick="corregirPrecios()">
             ⚠️ Corregir precios × 1000
           </button>` : ''}
         <button class="btn btn-lime btn-sm" onclick="abrirNuevoProducto()">+ Agregar producto</button>
@@ -5993,9 +6175,9 @@ window.actualizarTablaInventario = () => {
       + '<td style="color:var(--ink-3)">' + (p.marca||'') + '</td>'
       + '<td style="font-weight:600;color:' + stockColor + '">' + stockLabel + '</td>'
       + '<td><div style="display:flex;flex-direction:column;gap:2px">'
-        + '<span style="font-size:12px"><span style="color:#2563EB">●</span> ' + fmt(p.pventa||0) + '</span>'
-        + '<span style="font-size:12px"><span style="color:#D97706">●</span> ' + fmt(p.pdist||0) + '</span>'
-        + '<span style="font-size:12px"><span style="color:#16A34A">●</span> ' + (p.pesp ? fmt(p.pesp) : '—') + '</span>'
+        + '<span style="font-size:12px"><span style="color:var(--blue)">●</span> ' + fmt(p.pventa||0) + '</span>'
+        + '<span style="font-size:12px"><span style="color:var(--amber)">●</span> ' + fmt(p.pdist||0) + '</span>'
+        + '<span style="font-size:12px"><span style="color:var(--green)">●</span> ' + (p.pesp ? fmt(p.pesp) : '—') + '</span>'
       + '</div></td>'
       + '<td style="color:' + (margen!==null?margen>=30?'var(--green)':margen>=15?'var(--amber)':'var(--red)':'var(--ink-3)') + '">' + (margen!==null?margen+'%':'—') + '</td>'
       + '<td><div style="display:flex;gap:5px">'
@@ -6155,9 +6337,9 @@ function toast(msg, tipo='success') {
     document.body.appendChild(el);
   }
   const estilos = {
-    success: 'background:#F0FDF4;color:#166534;border:1px solid #BBF7D0',
-    error:   'background:#FEF2F2;color:#991B1B;border:1px solid #FECACA',
-    info:    'background:#EFF6FF;color:#1E40AF;border:1px solid #BFDBFE'
+    success: 'background:var(--green-bg);color:var(--green-ink);border:1px solid var(--green-bd)',
+    error:   'background:var(--red-bg);color:var(--red-ink);border:1px solid var(--red-bd)',
+    info:    'background:var(--blue-bg);color:var(--blue-ink);border:1px solid var(--blue-bd)'
   };
   el.style.cssText += ';' + estilos[tipo] || estilos.success;
   el.textContent = msg;
@@ -6294,7 +6476,7 @@ window.setUbicacionAjuste = (u) => {
     if(!btn) return;
     const activo = k === u;
     btn.style.background = activo ? 'var(--ink)' : 'var(--surface-2)';
-    btn.style.color = activo ? '#fff' : 'var(--ink-2)';
+    btn.style.color = activo ? 'var(--on-ink)' : 'var(--ink-2)';
     btn.style.borderColor = activo ? 'var(--ink)' : 'var(--border)';
   });
 };
@@ -6472,9 +6654,9 @@ function renderClientes() {
         return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">'
           + '<div>'
             + '<div style="font-size:13px;font-weight:600;color:var(--ink)">' + r.cliente + '</div>'
-            + '<div style="font-size:11px;color:var(--ink-3)">' + r.prodNombre + ' · <span style="color:' + (vencido?'var(--red)':'#1D4ED8') + ';font-weight:600">' + etiqueta + '</span></div>'
+            + '<div style="font-size:11px;color:var(--ink-3)">' + r.prodNombre + ' · <span style="color:' + (vencido?'var(--red)':'var(--blue-ink)') + ';font-weight:600">' + etiqueta + '</span></div>'
           + '</div>'
-          + '<button class="btn btn-xs" style="color:#1D4ED8;border-color:#BFDBFE" onclick="abrirRecordatorioRecompra(\'' + r.cliente.replace(/'/g,"\\'") + '\',\'' + r.prodId + '\')">💬 Recordatorio</button>'
+          + '<button class="btn btn-xs" style="color:var(--blue-ink);border-color:var(--blue-bd)" onclick="abrirRecordatorioRecompra(\'' + r.cliente.replace(/'/g,"\\'") + '\',\'' + r.prodId + '\')">💬 Recordatorio</button>'
         + '</div>';
       }).join('')}
     </div>` : '';
@@ -6504,7 +6686,7 @@ function renderClientes() {
     <div class="page-header">
       <div><div class="page-title">Clientes</div><div class="page-sub">${clientes.length} clientes · toca uno para ver su historial</div></div>
       ${gruposNombresRepetidos().length
-        ? `<button class="btn btn-sm" style="color:var(--amber);border-color:#FDE68A" onclick="abrirUnificarNombres()">🧹 Unificar nombres (${gruposNombresRepetidos().length})</button>`
+        ? `<button class="btn btn-sm" style="color:var(--amber);border-color:var(--amber-bd)" onclick="abrirUnificarNombres()">🧹 Unificar nombres (${gruposNombresRepetidos().length})</button>`
         : ''}
     </div>
     ${recomprasHtml}
@@ -6575,7 +6757,7 @@ window.abrirUnificarNombres = () => {
     return;
   }
   const aCambiar = grupos.reduce((s,g) => s + g.variantes.filter(v => v.nombre !== g.bueno).reduce((t,v) => t + v.ventas, 0), 0);
-  let html = '<div style="background:var(--amber-bg);border:1px solid #FDE68A;border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;font-size:13px;color:#92400E;line-height:1.45">'
+  let html = '<div style="background:var(--amber-bg);border:1px solid var(--amber-bd);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;font-size:13px;color:var(--amber-ink);line-height:1.45">'
     + '<strong>' + grupos.length + ' cliente' + (grupos.length>1?'s están':' está') + ' escrito de varias formas.</strong> '
     + 'Por eso aparece partido en Clientes, en Deudores y en el ranking de distribuidores. '
     + 'Unificar solo cambia el <strong>texto del nombre</strong> en ' + aCambiar + ' venta(s): no toca montos, ni fechas, ni saldos, ni borra nada.'
@@ -6693,11 +6875,11 @@ function renderGastos() {
     const mes = c.label.charAt(0).toUpperCase() + c.label.slice(1).replace(' de ', ' ');
     chipsG += '<button onclick="verCicloGastos(' + i + ')" style="padding:6px 13px;border-radius:20px;white-space:nowrap;cursor:pointer;font-size:12.5px;'
       + 'border:1.5px solid ' + (act?'var(--ink)':'var(--border)') + ';background:' + (act?'var(--ink)':'var(--surface)') + ';'
-      + 'color:' + (act?'#fff':'var(--ink-2)') + ';font-weight:' + (act?'600':'400') + '">' + (i===0?'Este ciclo':mes) + '</button>';
+      + 'color:' + (act?'var(--on-ink)':'var(--ink-2)') + ';font-weight:' + (act?'600':'400') + '">' + (i===0?'Este ciclo':mes) + '</button>';
   }
   chipsG += '<button onclick="verCicloGastos(-1)" style="padding:6px 13px;border-radius:20px;white-space:nowrap;cursor:pointer;font-size:12.5px;'
     + 'border:1.5px solid ' + (verTodoG?'var(--ink)':'var(--border)') + ';background:' + (verTodoG?'var(--ink)':'var(--surface)') + ';'
-    + 'color:' + (verTodoG?'#fff':'var(--ink-2)') + ';font-weight:' + (verTodoG?'600':'400') + '">Todo</button>';
+    + 'color:' + (verTodoG?'var(--on-ink)':'var(--ink-2)') + ';font-weight:' + (verTodoG?'600':'400') + '">Todo</button>';
   const selectorGastosHtml = '<div style="display:flex;gap:7px;overflow-x:auto;padding-bottom:4px;margin-bottom:14px">' + chipsG + '</div>';
 
   // 773-a. La cuenta del ciclo. Mismo renglón que el resultado de Inicio (769),
@@ -7052,7 +7234,7 @@ function renderProveedores() {
             + '<td><span class="status-chip ' + est.cls + '">' + est.l + '</span></td>'
             + '<td style="font-weight:600;color:var(--lime)">' + fmt(ped.total) + '</td>'
             + '<td>' + (saldoPed>0 ? '<span style="color:var(--red);font-weight:600">'+fmt(saldoPed)+'</span>' : '<span style="color:var(--green)">Pagado</span>') + '</td>'
-            + '<td>' + (saldoPed>0 ? '<button class="btn btn-xs" style="color:var(--amber);border-color:#FDE68A" onclick="abrirAbonoPedido(\''+ped.id+'\')">💰 Abonar</button>' : '') + '</td>'
+            + '<td>' + (saldoPed>0 ? '<button class="btn btn-xs" style="color:var(--amber);border-color:var(--amber-bd)" onclick="abrirAbonoPedido(\''+ped.id+'\')">💰 Abonar</button>' : '') + '</td>'
           + '</tr>';
         }).join('');
         historialHtml = '<div class="table-wrap" style="margin-top:12px"><table class="tbl">'
@@ -7083,7 +7265,7 @@ function renderProveedores() {
         </div>` : ''}
       <div class="list-card-actions">
         <button class="btn btn-sm" onclick="toggleDetalleProveedor('${p.id}')">${isOpen?'▲ Ocultar':'▼ Ver pedidos ('+p.pedidos.length+')'}</button>
-        ${p.saldoPendiente>0 ? `<button class="btn btn-sm" style="color:#16A34A;border-color:#BBF7D0" onclick="abrirRecordatorioPagoProveedor('${p.id}')">💬 Recordatorio</button>` : ''}
+        ${p.saldoPendiente>0 ? `<button class="btn btn-sm" style="color:var(--green);border-color:var(--green-bd)" onclick="abrirRecordatorioPagoProveedor('${p.id}')">💬 Recordatorio</button>` : ''}
         <button class="btn btn-sm btn-danger" onclick="eliminarDoc('proveedores','${p.id}')">Eliminar</button>
       </div>
       ${historialHtml}
@@ -7185,7 +7367,7 @@ function renderPedidos() {
       <div class="list-card-actions">
         ${otrosEst}
         <button class="btn btn-sm" onclick="editarPedido('${p.id}')">✏️ Editar</button>
-        ${saldo > 0 ? `<button class="btn btn-sm" style="color:var(--amber);border-color:#FDE68A" onclick="abrirAbonoPedido('${p.id}')">💰 Abonar</button>` : ''}
+        ${saldo > 0 ? `<button class="btn btn-sm" style="color:var(--amber);border-color:var(--amber-bd)" onclick="abrirAbonoPedido('${p.id}')">💰 Abonar</button>` : ''}
         <button class="btn btn-sm btn-danger" onclick="eliminarDoc('pedidos','${p.id}')">Eliminar</button>
       </div>
     </div>`;
@@ -7234,7 +7416,7 @@ window.setEstadoPagoPedido = (estado) => {
     if(!btn) return;
     const activo = k === estado;
     btn.style.background = activo ? 'var(--ink)' : 'var(--surface-2)';
-    btn.style.color = activo ? '#fff' : 'var(--ink-2)';
+    btn.style.color = activo ? 'var(--on-ink)' : 'var(--ink-2)';
     btn.style.borderColor = activo ? 'var(--ink)' : 'var(--border)';
   });
   const grupo = document.getElementById('pe-abono-grupo');
@@ -7915,7 +8097,7 @@ function crecimientoHtml() {
     const alt = Math.max(4, Math.round((m.vendido / max) * 100));
     // El mes en curso va rayado: aún no terminó, su barra no es definitiva.
     const relleno = m.enCurso
-      ? 'background:repeating-linear-gradient(135deg,var(--lime-accent) 0 7px,#E3F09A 7px 14px);border:1.5px solid var(--lime)'
+      ? 'background:repeating-linear-gradient(135deg,var(--lime-accent) 0 7px,var(--lime-soft) 7px 14px);border:1.5px solid var(--lime)'
       : 'background:linear-gradient(180deg,var(--lime-accent) 0%,#A8C63A 100%)';
     return '<div onclick="verCicloInicio(' + m.offset + ')" title="' + m.completo + ': ' + fmt(m.vendido) + '"'
       + ' style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:flex-end;cursor:pointer">'
@@ -8128,12 +8310,12 @@ function renderInicio() {
     </button>`;
 
   let alertasHtml = '';
-  if(mora.length) alertasHtml += alerta('var(--red)','var(--red-bg)','#FECACA','⏰',
+  if(mora.length) alertasHtml += alerta('var(--red)','var(--red-bg)','var(--red-bd)','⏰',
     mora.length + ' deudor' + (mora.length>1?'es':'') + ' en mora · ' + fmt(moraTotal), 'deudores');
-  if(recompras.length) alertasHtml += alerta('#1D4ED8','var(--blue-bg)','#BFDBFE','🔄',
+  if(recompras.length) alertasHtml += alerta('var(--blue-ink)','var(--blue-bg)','var(--blue-bd)','🔄',
     recompras.length + ' cliente' + (recompras.length>1?'s':'') + ' por recomprar', 'clientes');
   if(!alertasHtml) alertasHtml = `
-    <div style="display:flex;align-items:center;gap:9px;background:var(--green-bg);border:1px solid #BBF7D0;border-radius:var(--radius);padding:11px 13px">
+    <div style="display:flex;align-items:center;gap:9px;background:var(--green-bg);border:1px solid var(--green-bd);border-radius:var(--radius);padding:11px 13px">
       <span style="font-size:15px">✅</span>
       <span style="font-size:13px;font-weight:600;color:var(--green)">Todo al día — nadie en mora</span>
     </div>`;
@@ -8271,7 +8453,7 @@ function renderInicio() {
       + 'padding:6px 13px;border-radius:20px;white-space:nowrap;cursor:pointer;font-size:12.5px;'
       + 'border:1.5px solid ' + (activo ? 'var(--ink)' : 'var(--border)') + ';'
       + 'background:' + (activo ? 'var(--ink)' : 'var(--surface)') + ';'
-      + 'color:' + (activo ? '#fff' : 'var(--ink-2)') + ';'
+      + 'color:' + (activo ? 'var(--on-ink)' : 'var(--ink-2)') + ';'
       + 'font-weight:' + (activo ? '600' : '400') + '">'
       + (i === 0 ? 'Este ciclo' : mes)
     + '</button>';
@@ -8511,8 +8693,8 @@ window.abrirDetalleInicio = (tipo) => {
       .filter(c => c.fecha >= ciclo.inicio && c.fecha <= ciclo.fin)
       .sort((a,b) => b.fecha > a.fecha ? 1 : -1);
     const total = cobros.reduce((s,c) => s + ingresoVenta(c), 0);
-    html += '<div style="background:var(--blue-bg);border:1px solid #BFDBFE;border-radius:var(--radius);'
-      + 'padding:11px 13px;margin-bottom:4px;font-size:12.5px;color:#1E3A8A;line-height:1.45">'
+    html += '<div style="background:var(--blue-bg);border:1px solid var(--blue-bd);border-radius:var(--radius);'
+      + 'padding:11px 13px;margin-bottom:4px;font-size:12.5px;color:var(--blue-ink);line-height:1.45">'
       + 'Plata que entró al banco pagando cuentas de meses anteriores. <strong>No suma en "Vendido"</strong>: '
       + 'esa venta ya se contó el día que salió la mercancía. Sumarla otra vez sería contar el mismo peso dos veces.'
       + '</div>';
@@ -8582,7 +8764,7 @@ function renderMetas() {
       const puntoEquilibrio = baseFija / margenPctPromedio;
       const yaSuperoEquilibrio = tv >= puntoEquilibrio;
       equilibrioHtml = `
-        <div style="background:${yaSuperoEquilibrio?'#F0FDF4':'var(--surface-2)'};border:1px solid ${yaSuperoEquilibrio?'#BBF7D0':'var(--border)'};border-radius:10px;padding:10px 12px;margin-bottom:12px">
+        <div style="background:${yaSuperoEquilibrio?'var(--green-bg)':'var(--surface-2)'};border:1px solid ${yaSuperoEquilibrio?'var(--green-bd)':'var(--border)'};border-radius:10px;padding:10px 12px;margin-bottom:12px">
           <div style="font-size:11px;font-weight:700;color:${yaSuperoEquilibrio?'var(--green)':'var(--ink-2)'};text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px">
             ${yaSuperoEquilibrio?'✅ Punto de equilibrio superado':'⚖️ Punto de equilibrio'}
           </div>
@@ -8606,7 +8788,7 @@ function renderMetas() {
     if(Number(m.ventasMeta||0) > 0) {
       if(metaCumplida) {
         faltanteHtml = `
-        <div style="background:var(--lime-bg);border:1px solid #C8E05A;border-radius:10px;padding:10px 12px;margin-bottom:12px;display:flex;align-items:center;gap:8px">
+        <div style="background:var(--lime-bg);border:1px solid var(--lime-accent);border-radius:10px;padding:10px 12px;margin-bottom:12px;display:flex;align-items:center;gap:8px">
           <span style="font-size:16px">🎉</span>
           <span style="font-size:12px;font-weight:700;color:var(--ink)">¡Meta cumplida! Superaste por ${fmt(tv-m.ventasMeta)}</span>
         </div>`;
@@ -8615,11 +8797,11 @@ function renderMetas() {
         const diasRestantes = Math.max(1, Math.floor((new Date(rangoFin) - hoy) / 86400000) + 1);
         const ritmoDiario = faltante / diasRestantes;
         faltanteHtml = `
-        <div style="background:var(--amber-bg);border:1px solid #FDE68A;border-radius:10px;padding:10px 12px;margin-bottom:12px">
-          <div style="font-size:12px;font-weight:700;color:#92400E;margin-bottom:2px">
+        <div style="background:var(--amber-bg);border:1px solid var(--amber-bd);border-radius:10px;padding:10px 12px;margin-bottom:12px">
+          <div style="font-size:12px;font-weight:700;color:var(--amber-ink);margin-bottom:2px">
             Faltan ${fmt(faltante)} para cumplir la meta
           </div>
-          <div style="font-size:11px;color:#92400E">
+          <div style="font-size:11px;color:var(--amber-ink)">
             ${diasRestantes} día${diasRestantes>1?'s':''} restantes · necesitas vender ${fmt(ritmoDiario)}/día
           </div>
         </div>`;
@@ -8950,7 +9132,7 @@ function renderLineasCombo() {
       + '<div style="display:grid;grid-template-columns:1fr 70px 32px;gap:8px;align-items:start">'
         + '<div>' + buscadorOResultado + '</div>'
         + '<input type="number" class="f-input" value="' + (l.cant||1) + '" min="1" style="font-size:13px;text-align:center" data-idx="' + i + '" data-tipo="cant" oninput="actualizarLineaCombo(this);calcSumaIndividual()">'
-        + '<button type="button" onclick="quitarLineaCombo(' + i + ')" style="width:32px;height:38px;border:1px solid #FECACA;border-radius:8px;background:var(--red-bg);color:var(--red);cursor:pointer;font-size:14px">✕</button>'
+        + '<button type="button" onclick="quitarLineaCombo(' + i + ')" style="width:32px;height:38px;border:1px solid var(--red-bd);border-radius:8px;background:var(--red-bg);color:var(--red);cursor:pointer;font-size:14px">✕</button>'
       + '</div>'
     + '</div>';
   }).join('');
@@ -9085,10 +9267,10 @@ window.setTipoCombo = (tipo) => {
   const btnF = document.getElementById('btn-combo-fijo');
   const btnV = document.getElementById('btn-combo-var');
   btnF.style.background = esFijo ? 'var(--ink)' : 'var(--surface-2)';
-  btnF.style.color = esFijo ? '#fff' : 'var(--ink-2)';
+  btnF.style.color = esFijo ? 'var(--on-ink)' : 'var(--ink-2)';
   btnF.style.borderColor = esFijo ? 'var(--ink)' : 'var(--border)';
   btnV.style.background = esFijo ? 'var(--surface-2)' : 'var(--ink)';
-  btnV.style.color = esFijo ? 'var(--ink-2)' : '#fff';
+  btnV.style.color = esFijo ? 'var(--ink-2)' : 'var(--on-ink)';
   btnV.style.borderColor = esFijo ? 'var(--border)' : 'var(--ink)';
 };
 
@@ -9127,7 +9309,7 @@ function renderLineasVentaCombo() {
         data-idx="${i}" data-tipo="cant"
         oninput="actualizarLineaVC(this)">
       <button type="button" onclick="quitarLineaVentaCombo(${i})"
-        style="width:32px;height:38px;border:1px solid #FECACA;border-radius:8px;background:var(--red-bg);color:var(--red);cursor:pointer;font-size:14px">✕</button>
+        style="width:32px;height:38px;border:1px solid var(--red-bd);border-radius:8px;background:var(--red-bg);color:var(--red);cursor:pointer;font-size:14px">✕</button>
     </div>`).join('');
   document.getElementById('vc-lineas').innerHTML = html;
 }
@@ -9380,7 +9562,7 @@ function mostrarBannerDeshacer(mensaje) {
   if(!el) {
     el = document.createElement('div');
     el.id = 'undo-banner';
-    el.style.cssText = 'position:fixed;bottom:20px;right:20px;background:var(--ink);color:#fff;padding:10px 14px;border-radius:10px;font-size:13px;font-weight:500;z-index:10000;display:flex;align-items:center;gap:12px;box-shadow:0 4px 12px rgba(0,0,0,.25)';
+    el.style.cssText = 'position:fixed;bottom:20px;right:20px;background:var(--ink);color:var(--on-ink);padding:10px 14px;border-radius:10px;font-size:13px;font-weight:500;z-index:10000;display:flex;align-items:center;gap:12px;box-shadow:0 4px 12px rgba(0,0,0,.25)';
     document.body.appendChild(el);
   }
   el.innerHTML = mensaje + ' <button onclick="deshacerEliminacion()" style="background:var(--lime-accent);color:var(--ink);border:none;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer">Deshacer</button>';
@@ -9501,7 +9683,7 @@ function renderActividad() {
 
   const chip = (id, txt) => '<button onclick="filtrarActividad(\'' + id + '\')" style="padding:5px 12px;border-radius:20px;'
     + 'white-space:nowrap;cursor:pointer;font-size:12px;border:1.5px solid ' + (actividadFiltro===id?'var(--ink)':'var(--border)') + ';'
-    + 'background:' + (actividadFiltro===id?'var(--ink)':'var(--surface)') + ';color:' + (actividadFiltro===id?'#fff':'var(--ink-2)') + ';'
+    + 'background:' + (actividadFiltro===id?'var(--ink)':'var(--surface)') + ';color:' + (actividadFiltro===id?'var(--on-ink)':'var(--ink-2)') + ';'
     + 'font-weight:' + (actividadFiltro===id?'600':'400') + '">' + txt + '</button>';
 
   // Agrupadas por día: una lista plana de 400 apuntes no se lee.
@@ -9691,7 +9873,7 @@ window.navegarANotif = (notifId, seccion, itemId) => {
           <label class="f-label">¿Quién?</label>
           <div style="display:flex;gap:8px">
             <button type="button" id="cons-jero" onclick="setConsumidor('jero')"
-              style="flex:1;padding:9px;border-radius:var(--radius);border:2px solid var(--ink);background:var(--ink);color:#fff;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s">
+              style="flex:1;padding:9px;border-radius:var(--radius);border:2px solid var(--ink);background:var(--ink);color:var(--on-ink);font-size:13px;font-weight:600;cursor:pointer;transition:all .15s">
               👤 Jero
             </button>
             <button type="button" id="cons-angel" onclick="setConsumidor('angel')"
@@ -9748,7 +9930,7 @@ window.setConsumidor = (quien) => {
     if(!btn) return;
     const activo = k === quien;
     btn.style.background = activo ? 'var(--ink)' : 'var(--surface-2)';
-    btn.style.color = activo ? '#fff' : 'var(--ink-2)';
+    btn.style.color = activo ? 'var(--on-ink)' : 'var(--ink-2)';
     btn.style.borderColor = activo ? 'var(--ink)' : 'var(--border)';
   });
 };
@@ -9883,7 +10065,7 @@ function renderDeudores() {
           + '<div style="color:var(--ink-3)">' + (v.fecha||'') + ' · Total: ' + fmt(v.total) + '</div></div>'
           + '<div style="display:flex;align-items:center;gap:8px">'
             + '<span style="font-weight:700;color:var(--red)">' + fmt(v.saldo) + '</span>'
-            + '<button class="btn btn-xs" style="color:var(--amber);border-color:#FDE68A" onclick="abrirAbono(\'' + v.id + '\')">+ Abono</button>'
+            + '<button class="btn btn-xs" style="color:var(--amber);border-color:var(--amber-bd)" onclick="abrirAbono(\'' + v.id + '\')">+ Abono</button>'
           + '</div></div>';
       });
       // 406. Badge de mora + botón de recordatorio WhatsApp — solo si está en mora
@@ -9892,7 +10074,7 @@ function renderDeudores() {
         : (d.diasMora > 0 ? '<div style="font-size:10px;color:var(--ink-3);margin-top:3px">' + d.diasMora + ' día' + (d.diasMora!==1?'s':'') + ' desde la venta más antigua</div>' : '');
       const nombreSeg = d.cliente.replace(/'/g,"\\'");
       const btnRecordatorio = d.enMora
-        ? '<button class="btn btn-sm" style="color:#16A34A;border-color:#BBF7D0;margin-top:8px" onclick="abrirRecordatorioCobro(\'' + nombreSeg + '\')">💬 Generar recordatorio</button>'
+        ? '<button class="btn btn-sm" style="color:var(--green);border-color:var(--green-bd);margin-top:8px" onclick="abrirRecordatorioCobro(\'' + nombreSeg + '\')">💬 Generar recordatorio</button>'
         : '';
       htmlDeudores += '<div class="list-card">'
         + '<div class="list-card-header">'
@@ -9938,7 +10120,7 @@ function renderDeudores() {
     const esJero = c.quien === 'jero';
     filasConsumo += '<tr>'
       + '<td style="color:var(--ink-3)">' + (c.fecha||'') + '</td>'
-      + '<td><span style="display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;background:' + (esJero?'#EFF6FF':'#F0FDF4') + ';color:' + (esJero?'#1D4ED8':'#16A34A') + '">'
+      + '<td><span style="display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;background:' + (esJero?'var(--blue-bg)':'var(--green-bg)') + ';color:' + (esJero?'var(--blue-ink)':'var(--green)') + '">'
         + (esJero?'👤 Jero':'👤 Ángel') + '</span></td>'
       + '<td style="font-weight:500">' + (c.nombre||'') + '</td>'
       + '<td style="text-align:center">' + (c.cant||0) + '</td>'
@@ -9967,8 +10149,8 @@ function renderDeudores() {
       + '<button class="btn btn-sm btn-lime" onclick="abrirModalConsumo()">+ Registrar consumo</button>'
     + '</div>'
     + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">'
-      + '<div class="metric-card"><div class="metric-label">Jero debe</div><div class="metric-value" style="font-size:18px;color:#1D4ED8">' + fmt(totalJero) + '</div><div class="metric-sub">a precio de costo</div></div>'
-      + '<div class="metric-card"><div class="metric-label">Ángel debe</div><div class="metric-value" style="font-size:18px;color:#16A34A">' + fmt(totalAngel) + '</div><div class="metric-sub">a precio de costo</div></div>'
+      + '<div class="metric-card"><div class="metric-label">Jero debe</div><div class="metric-value" style="font-size:18px;color:var(--blue-ink)">' + fmt(totalJero) + '</div><div class="metric-sub">a precio de costo</div></div>'
+      + '<div class="metric-card"><div class="metric-label">Ángel debe</div><div class="metric-value" style="font-size:18px;color:var(--green)">' + fmt(totalAngel) + '</div><div class="metric-sub">a precio de costo</div></div>'
       + '<div class="metric-card"><div class="metric-label">Total consumo</div><div class="metric-value" style="font-size:18px;color:var(--blue)">' + fmt(totalConsumos) + '</div><div class="metric-sub">' + DATA.consumos.length + ' registros</div></div>'
     + '</div>'
     + '<div class="card">' + tablaConsumo + '</div>';
@@ -10397,7 +10579,7 @@ window.abrirLimpiarVinculos = () => {
       + '</tr>';
     });
     cont.innerHTML =
-      '<div style="background:var(--amber-bg);border:1px solid #FDE68A;border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;font-size:13px;color:#92400E;line-height:1.45">'
+      '<div style="background:var(--amber-bg);border:1px solid var(--amber-bd);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;font-size:13px;color:var(--amber-ink);line-height:1.45">'
         + '<strong>' + malas.length + ' venta' + (malas.length>1?'s':'') + ' por ' + fmt(total) + '</strong> '
         + 'están contando dentro del historial de un distribuidor que no les corresponde. '
         + 'Quedaron así por el error del selector que ya se corrigió. '
@@ -10569,7 +10751,7 @@ function renderLineasConsignacion() {
               + (l.precioVenta !== Number(prod.pdist||0) ? '<button type="button" onclick="restaurarPrecioDistribuidor(' + i + ')" style="font-size:9px;color:var(--blue);background:none;border:none;cursor:pointer;text-decoration:underline;padding:0">usar dist.</button>' : '')
             + '</label>'
             + '<input type="number" class="f-input" value="' + (l.precioVenta||0) + '" data-idx="' + i + '" data-tipo="precio" oninput="actualizarDatosLineaConsig(this)" style="font-size:13px;padding:7px 8px">'
-            + '<div style="font-size:10px;margin-top:3px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#D97706;margin-right:3px"></span><span style="color:var(--ink-3)">Distribuidor: ' + fmt(prod.pdist||0) + '</span></div>'
+            + '<div style="font-size:10px;margin-top:3px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--amber);margin-right:3px"></span><span style="color:var(--ink-3)">Distribuidor: ' + fmt(prod.pdist||0) + '</span></div>'
           + '</div>'
           + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Subtotal</label>'
             + '<div style="font-size:13px;font-weight:700;color:var(--lime);padding:7px 0">' + fmt((l.cant||1)*(l.precioVenta||0)) + '</div></div>'
@@ -10746,7 +10928,7 @@ window.setTipoReporteConsig = (tipo) => {
     if(!btn) return;
     const activo = k === tipo;
     btn.style.background = activo ? 'var(--ink)' : 'var(--surface-2)';
-    btn.style.color = activo ? '#fff' : 'var(--ink-2)';
+    btn.style.color = activo ? 'var(--on-ink)' : 'var(--ink-2)';
     btn.style.borderColor = activo ? 'var(--ink)' : 'var(--border)';
   });
   document.getElementById('rc-venta-campos').style.display = tipo === 'venta' ? 'block' : 'none';
@@ -10759,7 +10941,7 @@ window.setEstadoPagoConsig = (estado) => {
     if(!btn) return;
     const activo = k === estado;
     btn.style.background = activo ? 'var(--ink)' : 'var(--surface-2)';
-    btn.style.color = activo ? '#fff' : 'var(--ink-2)';
+    btn.style.color = activo ? 'var(--on-ink)' : 'var(--ink-2)';
     btn.style.borderColor = activo ? 'var(--ink)' : 'var(--border)';
   });
   const grupoAbono = document.getElementById('rc-abono-grupo');
@@ -10807,7 +10989,7 @@ window.abrirReportarConsignacion = (tiendaId, prodId) => {
   document.getElementById('rc-precio').value = masReciente.precioSugerido || '';
   previoCOP('rc-precio','prev-rc-precio');
   document.getElementById('rc-precio-dist-ref').innerHTML =
-    '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#D97706;margin-right:3px"></span>'
+    '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--amber);margin-right:3px"></span>'
     + 'Se dejó a distribuidor: ' + fmt(masReciente.precioSugerido || prodItem?.pdist || 0);
   document.getElementById('rc-fecha').value = today();
   document.getElementById('rc-pagado').value = '';
@@ -11112,7 +11294,7 @@ function renderConsignacion() {
                   + '<div style="font-size:11px;color:var(--ink-3)">Dejado: ' + fechaMasAntigua + ' · ' + cantidadActualTotal + ' de ' + cantidadInicialTotal + ' disponibles'
                     + (entregas.length > 1 ? ' (' + entregas.length + ' entregas)' : '') + '</div>'
                 + '</div>'
-                + '<button class="btn btn-xs" style="color:var(--blue);border-color:#BFDBFE" onclick="abrirReportarConsignacion(\'' + t.id + '\',\'' + prodId + '\')">Reportar</button>'
+                + '<button class="btn btn-xs" style="color:var(--blue);border-color:var(--blue-bd)" onclick="abrirReportarConsignacion(\'' + t.id + '\',\'' + prodId + '\')">Reportar</button>'
               + '</div>'
               + filasEntregas
             + '</div>';
@@ -11715,14 +11897,14 @@ window.previsualizarGastosImport = () => {
 
   const choques = gastosImportGrupos.filter(g => g.estado === 'choque');
   if(choques.length) {
-    html += '<div style="background:var(--amber-bg);border:1px solid #FDE68A;border-radius:var(--radius);padding:11px 13px;margin-bottom:12px;font-size:12.5px;color:#92400E;line-height:1.45">'
+    html += '<div style="background:var(--amber-bg);border:1px solid var(--amber-bd);border-radius:var(--radius);padding:11px 13px;margin-bottom:12px;font-size:12.5px;color:var(--amber-ink);line-height:1.45">'
       + '<strong>' + choques.length + ' no cuadran con lo que ya tienes.</strong> '
       + 'Mismo proveedor, a pocos días, pero por otro valor — casi seguro es la misma compra registrada con cifras distintas. '
       + 'No las subo: primero decide cuál número es el bueno, si no te quedan las dos y la mercancía se cuenta doble.</div>';
   }
 
   if(sinFecha.length) {
-    html += '<div style="background:var(--amber-bg);border:1px solid #FDE68A;border-radius:var(--radius);padding:11px 13px;margin-bottom:12px;font-size:12.5px;color:#92400E;line-height:1.45">'
+    html += '<div style="background:var(--amber-bg);border:1px solid var(--amber-bd);border-radius:var(--radius);padding:11px 13px;margin-bottom:12px;font-size:12.5px;color:var(--amber-ink);line-height:1.45">'
       + '<strong>' + sinFecha.length + ' fila(s) traen la fecha ilegible</strong> ('
       + sinFecha.slice(0,3).map(f => '"' + (f.fechaCruda||'vacía') + '"').join(', ')
       + (sinFecha.length>3 ? ' y más' : '') + '). No las adivino. '
@@ -11733,7 +11915,7 @@ window.previsualizarGastosImport = () => {
     + '<th>Fecha</th><th>Concepto</th><th>Categoría</th><th>Tipo</th><th style="text-align:right">Valor</th><th></th></tr></thead><tbody>';
   gastosImportGrupos.forEach(g => {
     const b = g.estado === 'falta'
-      ? '<span style="padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;background:#F0FDF4;color:var(--green)">Se sube</span>'
+      ? '<span style="padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;background:var(--green-bg);color:var(--green)">Se sube</span>'
       : g.estado === 'choque'
       ? '<span style="padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;background:var(--amber-bg);color:var(--amber)">No cuadra</span>'
       : '<span style="padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;background:var(--surface-3);color:var(--ink-3)">Ya está</span>';
@@ -11999,8 +12181,8 @@ window.abrirVentasSinCosto = () => {
       + '<div class="empty-state-text">Todas las ventas tienen su costo</div>'
       + '<div class="empty-state-sub">El margen que ves es el margen real</div></div>';
   } else {
-    html = '<div style="background:var(--amber-bg);border:1px solid #FDE68A;border-radius:var(--radius);'
-      + 'padding:12px 14px;margin-bottom:14px;font-size:12.5px;color:#92400E;line-height:1.5">'
+    html = '<div style="background:var(--amber-bg);border:1px solid var(--amber-bd);border-radius:var(--radius);'
+      + 'padding:12px 14px;margin-bottom:14px;font-size:12.5px;color:var(--amber-ink);line-height:1.5">'
       + '<strong>' + sinCostoPropuestas.length + ' venta(s) por ' + fmt(total) + ' no tienen costo guardado.</strong> '
       + 'La app no sabe cuánto costó esa mercancía, así que las cuenta con 100% de margen. '
       + 'La plata está bien; lo que se ve mejor de lo que es, es el margen.'
@@ -12171,7 +12353,7 @@ window.previsualizarImportacion = () => {
   //      vendido importa más que la lista misma.
   if(cobrosImport.length) {
     const faltanC = cobrosImport.filter(c => c.estado === 'falta');
-    html += '<div style="background:var(--blue-bg);border:1px solid #BFDBFE;border-radius:var(--radius);padding:11px 13px;margin-bottom:12px;font-size:12.5px;color:#1E3A8A;line-height:1.45">'
+    html += '<div style="background:var(--blue-bg);border:1px solid var(--blue-bd);border-radius:var(--radius);padding:11px 13px;margin-bottom:12px;font-size:12.5px;color:var(--blue-ink);line-height:1.45">'
       + '<strong>' + cobrosImport.length + ' fila(s) de la hoja no son ventas, son cobros.</strong> '
       + 'Están pagando mercancía que ya se vendió (y ya se contó) en un mes anterior. '
       + 'Si entraran como venta, el mismo peso quedaría contado dos veces. '
@@ -12187,7 +12369,7 @@ window.previsualizarImportacion = () => {
         + '<td style="font-size:11px;color:var(--ink-3)">' + (c.tipoMov === 'reembolso' ? 'Reembolso socio' : 'Abono a cuenta') + '</td>'
         + '<td style="text-align:right;font-weight:600;color:var(--blue)">' + fmt(c.valor) + '</td>'
         + '<td>' + (c.estado === 'falta'
-            ? '<span style="padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;background:var(--blue-bg);color:#1D4ED8">Se sube</span>'
+            ? '<span style="padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;background:var(--blue-bg);color:var(--blue-ink)">Se sube</span>'
             : '<span style="padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;background:var(--surface-3);color:var(--ink-3)">Ya está</span>') + '</td>'
       + '</tr>').join('')
       + '</tbody></table></div>';
@@ -12195,7 +12377,7 @@ window.previsualizarImportacion = () => {
   }
 
   if(parcial.length) {
-    html += '<div style="background:var(--amber-bg);border:1px solid #FDE68A;border-radius:var(--radius);padding:11px 13px;margin-bottom:12px;font-size:12.5px;color:#92400E;line-height:1.45">'
+    html += '<div style="background:var(--amber-bg);border:1px solid var(--amber-bd);border-radius:var(--radius);padding:11px 13px;margin-bottom:12px;font-size:12.5px;color:var(--amber-ink);line-height:1.45">'
       + '<strong>' + parcial.length + ' hay que mirarlas a ojo.</strong> O ese día el cliente ya tiene ventas en la app por menos plata, '
       + 'o hay una venta suya por el mismo monto a uno o dos días de distancia — casi seguro es la misma con la fecha corrida. '
       + 'No se suben: duplicar una venta ensucia la contabilidad y cuesta mucho más encontrarlo después que meterla a mano.</div>';
@@ -12205,7 +12387,7 @@ window.previsualizarImportacion = () => {
     + '<th>Fecha</th><th>Cliente</th><th>Productos</th><th style="text-align:right">Hoja</th><th style="text-align:right">App</th><th></th>'
     + '</tr></thead><tbody>';
   importGrupos.forEach(g => {
-    const b = g.estado === 'falta'   ? badge('Se sube','var(--green)','#F0FDF4')
+    const b = g.estado === 'falta'   ? badge('Se sube','var(--green)','var(--green-bg)')
             : g.estado === 'ya'      ? badge('Ya está','var(--ink-3)','var(--surface-3)')
             : g.estado === 'posible' ? badge('¿Repetida?','var(--amber)','var(--amber-bg)')
             :                          badge('Revisar','var(--amber)','var(--amber-bg)');
@@ -12399,8 +12581,9 @@ function historialPorCicloDist(ventasDelDist, nCiclos) {
 // Paleta de series. Orden fijo: el color sigue al distribuidor, no a su
 // puesto en el ranking, para que filtrar un mes no repinte a los demás.
 // Validada para daltonismo sobre fondo blanco (ΔE adyacente ≥ 9.1).
-const COLORES_DIST = ['#2a78d6','#eb6834','#1baf7a','#eda100','#e87ba4','#008300'];
-const COLOR_OTROS  = '#9CA3AF';
+// 794. Los colores salen del tema activo (ver coloresDeSerie), no de una
+//      lista fija: así la gráfica se oscurece con la app.
+
 const MAX_SERIES_DIST = 6;   // del 7º en adelante se doblan en "Otros"
 const MESES_COMPARATIVO = 6; // columnas visibles por defecto
 
@@ -12460,7 +12643,8 @@ function comparativoDistribuidores() {
   if(totalSueltas > 0) conDatos.push({ id:'__sueltas', nombre:'Sin vincular', meses: mesesSueltas, total: totalSueltas, suelta:true });
 
   // Color por entidad: los MAX_SERIES_DIST primeros por total; el resto gris.
-  conDatos.forEach((f, i) => { f.color = (!f.suelta && i < MAX_SERIES_DIST) ? COLORES_DIST[i] : COLOR_OTROS; });
+  const paleta = coloresDeSerie();
+  conDatos.forEach((f, i) => { f.color = (!f.suelta && i < MAX_SERIES_DIST) ? paleta.series[i] : paleta.otros; });
 
   const totalesMes = ciclos.map((c, i) => conDatos.reduce((s,f) => s + f.meses[i], 0));
   return { ciclos, filas: conDatos, totalesMes, total: totalesMes.reduce((a,b)=>a+b,0), hayMas: nDisponibles > nMostrar };
@@ -12748,7 +12932,7 @@ function filasBuscador() {
     ].filter(Boolean).join(' · ');
     return '<div class="bus-fila' + (i === busIndice ? ' activa' : '') + '" data-i="' + i + '"'
       + ' onclick="abrirDesdeBuscador(' + i + ')" onmousemove="resaltarBuscador(' + i + ')">'
-      + '<div class="avatar"' + (dist ? ' style="background:#EFF6FF;color:var(--blue)"' : '') + '>' + escTxt(iniciales) + '</div>'
+      + '<div class="avatar"' + (dist ? ' style="background:var(--blue-bg);color:var(--blue)"' : '') + '>' + escTxt(iniciales) + '</div>'
       + '<div style="flex:1;min-width:0">'
         + '<div style="font-size:13.5px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
           + escTxt(x.nombre) + '</div>'
@@ -12758,7 +12942,7 @@ function filasBuscador() {
       + (dist && x.sueltas > 0
           ? '<span class="badge" style="background:var(--amber-bg);color:var(--amber)" title="Ventas con este nombre que no están vinculadas a su registro">⚠️ ' + x.sueltas + ' sin vincular</span>'
           : '')
-      + '<span class="badge" style="background:' + (dist ? '#EFF6FF' : 'var(--lime-bg)') + ';color:' + (dist ? 'var(--blue)' : 'var(--lime)') + '">'
+      + '<span class="badge" style="background:' + (dist ? 'var(--blue-bg)' : 'var(--lime-bg)') + ';color:' + (dist ? 'var(--blue)' : 'var(--lime)') + '">'
         + (dist ? '🏋️ Distribuidor' : '👤 Cliente') + '</span>'
     + '</div>';
   }).join('');
@@ -13247,16 +13431,61 @@ function bloqueoInformeHtml(r) {
         + 'Se puede cerrar cuando termine, el ' + fCorta(r.fin) + '.</span>'
     + '</div>';
   }
-  return '<div style="display:flex;align-items:center;gap:10px;background:var(--amber-bg);border:1px solid #FDE68A;'
+  return '<div style="display:flex;align-items:center;gap:10px;background:var(--amber-bg);border:1px solid var(--amber-bd);'
     + 'border-radius:var(--radius);padding:11px 13px;margin-bottom:16px">'
     + '<span style="font-size:15px">' + (reabierto ? '🔓' : '📂') + '</span>'
-    + '<span style="flex:1;min-width:0;font-size:12.5px;color:#92400E;line-height:1.4">'
+    + '<span style="flex:1;min-width:0;font-size:12.5px;color:var(--amber-ink);line-height:1.4">'
       + (reabierto
           ? '<strong>Reabierto</strong> el ' + (reabierto.reabiertoEn||'') + (reabierto.reabiertoPor ? ' por ' + escTxt(reabierto.reabiertoPor) : '') + '. Acuérdate de volver a cerrarlo.'
           : '<strong>Sin cerrar.</strong> Mientras no lo cierres, cualquiera puede editar sus ventas y gastos y este informe puede cambiar.')
     + '</span>'
     + '<button class="btn btn-sm btn-lime" style="white-space:nowrap" onclick="cerrarMesDesdeInformes(\'' + escAttr(mesStr) + '\')">🔒 Cerrar mes</button>'
   + '</div>';
+}
+
+// ============================================================
+// 793. INTERRUPTOR DE TEMA
+//
+// Tres estados y no dos: lo normal es seguir al sistema operativo —si el
+// celular se pone oscuro de noche, la app también— y las otras dos son
+// decisiones explícitas de Ángel que mandan sobre eso.
+//
+// 794. La paleta de las gráficas se lee del CSS, no de una constante en JS.
+//      Si estuviera escrita en el código habría que mantener dos listas de
+//      colores en sitios distintos y acordarse de cambiar las dos. Leyendo
+//      los tokens, la gráfica cambia de tema sola.
+// ============================================================
+const TEMAS = ['auto', 'light', 'dark'];
+const ETIQUETA_TEMA = { auto:'🌗 Tema: automático', light:'☀️ Tema: claro', dark:'🌙 Tema: oscuro' };
+
+function temaGuardado() {
+  try { return localStorage.getItem('duppla-tema') || 'auto'; } catch(e) { return 'auto'; }
+}
+
+function aplicarTema(t) {
+  if(t === 'auto') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme', t);
+  try { t === 'auto' ? localStorage.removeItem('duppla-tema') : localStorage.setItem('duppla-tema', t); } catch(e) {}
+  const btn = document.getElementById('btn-tema');
+  if(btn) btn.textContent = ETIQUETA_TEMA[t];
+  // Las gráficas ya pintadas llevan los colores metidos en el style de cada
+  // barra, así que no se enteran solas: hay que volver a dibujar la página.
+  if(currentPage) renderPage(currentPage);
+}
+
+window.cambiarTema = () => {
+  const actual = temaGuardado();
+  aplicarTema(TEMAS[(TEMAS.indexOf(actual) + 1) % TEMAS.length]);
+};
+
+// 794. Los colores de serie, leídos del tema activo.
+function coloresDeSerie() {
+  const cs = getComputedStyle(document.documentElement);
+  const leer = (n, porDefecto) => (cs.getPropertyValue(n) || '').trim() || porDefecto;
+  return {
+    series: [1,2,3,4,5,6].map((i, k) => leer('--serie-' + i, ['#2a78d6','#eb6834','#1baf7a','#eda100','#e87ba4','#008300'][k])),
+    otros: leer('--serie-otros', '#9CA3AF')
+  };
 }
 
 // ============================================================
@@ -13369,21 +13598,21 @@ function renderInformes() {
     const mes = c.label.charAt(0).toUpperCase() + c.label.slice(1).replace(' de ', ' ');
     chips += '<button onclick="verCicloInformes(' + i + ')" style="padding:6px 13px;border-radius:20px;white-space:nowrap;'
       + 'cursor:pointer;font-size:12.5px;border:1.5px solid ' + (act?'var(--ink)':'var(--border)') + ';'
-      + 'background:' + (act?'var(--ink)':'var(--surface)') + ';color:' + (act?'#fff':'var(--ink-2)') + ';'
+      + 'background:' + (act?'var(--ink)':'var(--surface)') + ';color:' + (act?'var(--on-ink)':'var(--ink-2)') + ';'
       + 'font-weight:' + (act?'600':'400') + '">' + (i===0?'Este ciclo':mes) + '</button>';
   }
   const todo = informesOffset === -1;
   chips += '<button onclick="verCicloInformes(-1)" style="padding:6px 13px;border-radius:20px;white-space:nowrap;'
     + 'cursor:pointer;font-size:12.5px;border:1.5px solid ' + (todo?'var(--ink)':'var(--border)') + ';'
-    + 'background:' + (todo?'var(--ink)':'var(--surface)') + ';color:' + (todo?'#fff':'var(--ink-2)') + ';'
+    + 'background:' + (todo?'var(--ink)':'var(--surface)') + ';color:' + (todo?'var(--on-ink)':'var(--ink-2)') + ';'
     + 'font-weight:' + (todo?'600':'400') + '">Todo</button>';
 
   // ---- Aviso honesto: un informe que calla lo que no sabe no sirve ----
   const aviso = F.ventasSinCosto > 0
-    ? '<div style="display:flex;gap:9px;align-items:flex-start;background:var(--amber-bg);border:1px solid #FDE68A;'
+    ? '<div style="display:flex;gap:9px;align-items:flex-start;background:var(--amber-bg);border:1px solid var(--amber-bd);'
       + 'border-radius:var(--radius);padding:11px 13px;margin-bottom:16px">'
       + '<span style="font-size:14px">⚠️</span>'
-      + '<span style="font-size:12px;color:#92400E;line-height:1.45">'
+      + '<span style="font-size:12px;color:var(--amber-ink);line-height:1.45">'
         + '<strong>' + F.ventasSinCosto + ' venta' + (F.ventasSinCosto!==1?'s':'') + ' sin costo registrado.</strong> '
         + 'Esas ventas entran completas como utilidad bruta, así que el margen de este informe está por encima del real. '
         + 'Se corrige poniéndoles el costo en Ventas.</span>'
@@ -13741,14 +13970,14 @@ function renderDistribuidores() {
       + 'padding:6px 13px;border-radius:20px;white-space:nowrap;cursor:pointer;font-size:12.5px;'
       + 'border:1.5px solid ' + (activo?'var(--ink)':'var(--border)') + ';'
       + 'background:' + (activo?'var(--ink)':'var(--surface)') + ';'
-      + 'color:' + (activo?'#fff':'var(--ink-2)') + ';font-weight:' + (activo?'600':'400') + '">'
+      + 'color:' + (activo?'var(--on-ink)':'var(--ink-2)') + ';font-weight:' + (activo?'600':'400') + '">'
       + (i === 0 ? 'Este ciclo' : mes) + '</button>';
   }
   chipsDist += '<button onclick="verCicloDistribuidores(-1)" style="'
     + 'padding:6px 13px;border-radius:20px;white-space:nowrap;cursor:pointer;font-size:12.5px;'
     + 'border:1.5px solid ' + (verTodo?'var(--ink)':'var(--border)') + ';'
     + 'background:' + (verTodo?'var(--ink)':'var(--surface)') + ';'
-    + 'color:' + (verTodo?'#fff':'var(--ink-2)') + ';font-weight:' + (verTodo?'600':'400') + '">Todo</button>';
+    + 'color:' + (verTodo?'var(--on-ink)':'var(--ink-2)') + ';font-weight:' + (verTodo?'600':'400') + '">Todo</button>';
   const selectorDistHtml = '<div style="display:flex;gap:7px;overflow-x:auto;padding-bottom:4px;margin-bottom:14px">' + chipsDist + '</div>';
 
   // 774. Se quitaron "Total canal dist." y "Vinculado": el comparativo de
@@ -13769,8 +13998,8 @@ function renderDistribuidores() {
   // 380. Toggle de orden — "¿cuál distribuidor vale la pena?" se responde rankeando por margen
   const togglesHtml =
     '<div style="display:flex;justify-content:flex-end;gap:4px;margin-bottom:12px">'
-      + '<button onclick="window.distRankingPor=\'total\';renderDistribuidores()" style="padding:4px 11px;border-radius:14px;border:1px solid ' + (ordenDist==='total'?'var(--ink)':'var(--border)') + ';background:' + (ordenDist==='total'?'var(--ink)':'transparent') + ';color:' + (ordenDist==='total'?'#fff':'var(--ink-3)') + ';font-size:11px;font-weight:600;cursor:pointer">Por valor comprado</button>'
-      + '<button onclick="window.distRankingPor=\'margen\';renderDistribuidores()" style="padding:4px 11px;border-radius:14px;border:1px solid ' + (ordenDist==='margen'?'var(--ink)':'var(--border)') + ';background:' + (ordenDist==='margen'?'var(--ink)':'transparent') + ';color:' + (ordenDist==='margen'?'#fff':'var(--ink-3)') + ';font-size:11px;font-weight:600;cursor:pointer">Por margen real</button>'
+      + '<button onclick="window.distRankingPor=\'total\';renderDistribuidores()" style="padding:4px 11px;border-radius:14px;border:1px solid ' + (ordenDist==='total'?'var(--ink)':'var(--border)') + ';background:' + (ordenDist==='total'?'var(--ink)':'transparent') + ';color:' + (ordenDist==='total'?'var(--on-ink)':'var(--ink-3)') + ';font-size:11px;font-weight:600;cursor:pointer">Por valor comprado</button>'
+      + '<button onclick="window.distRankingPor=\'margen\';renderDistribuidores()" style="padding:4px 11px;border-radius:14px;border:1px solid ' + (ordenDist==='margen'?'var(--ink)':'var(--border)') + ';background:' + (ordenDist==='margen'?'var(--ink)':'transparent') + ';color:' + (ordenDist==='margen'?'var(--on-ink)':'var(--ink-3)') + ';font-size:11px;font-weight:600;cursor:pointer">Por margen real</button>'
     + '</div>';
 
   let cardsHtml = '';
@@ -13841,7 +14070,7 @@ function renderDistribuidores() {
               + '<td style="font-weight:600;color:var(--lime)">' + fmt(ingresoVenta(v)) + '</td>'
               + '<td style="color:' + (margenV===null?'var(--ink-3)':margenV>=0?'var(--green)':'var(--red)') + '">' + (margenV===null?'N/D':fmt(margenV)) + '</td>'
               + '<td><span style="padding:2px 8px;border-radius:12px;font-size:10px;font-weight:600;background:'
-                + (pendiente?'var(--amber-bg)':'#F0FDF4') + ';color:' + (pendiente?'var(--amber)':'var(--green)') + '">'
+                + (pendiente?'var(--amber-bg)':'var(--green-bg)') + ';color:' + (pendiente?'var(--amber)':'var(--green)') + '">'
                 + (pendiente?'Pendiente':'Pagado') + '</span></td>'
               + '<td><button class="btn btn-xs btn-danger" onclick="desvincularVentaDistribuidor(\'' + v.id + '\')" title="Quitar esta venta de este distribuidor">Desvincular</button></td>'
             + '</tr>';
@@ -13886,7 +14115,7 @@ function renderDistribuidores() {
             + (isOpen?'▲ Ocultar':'▼ Ver historial ('+d.ventas.length+')') + '</button>'
           + '<button class="btn btn-sm" onclick="editarDistribuidor(\'' + d.id + '\')">✏️ Editar</button>'
           + '<button class="btn btn-sm btn-danger" onclick="eliminarDistribuidor(\'' + d.id + '\')">✕</button>'
-        + (d.saldoPendiente > 0 ? '<button class="btn btn-sm" style="color:var(--blue);border-color:#BFDBFE" onclick="generarCuentaDeCobro(\'' + d.id + '\')">📄 Cuenta de cobro</button>' : '')
+        + (d.saldoPendiente > 0 ? '<button class="btn btn-sm" style="color:var(--blue);border-color:var(--blue-bd)" onclick="generarCuentaDeCobro(\'' + d.id + '\')">📄 Cuenta de cobro</button>' : '')
         + '</div>'
         + (isOpen ? historialHtml : '')
       + '</div>';
@@ -13926,7 +14155,7 @@ function renderDistribuidores() {
       // 684. Acceso a la limpieza masiva de vínculos (ver comentario 683).
       //      Solo aparece si de verdad hay algo mal vinculado.
       + (ventasMalVinculadas().length
-          ? '<button class="btn btn-sm" style="color:var(--red);border-color:#FECACA" onclick="abrirLimpiarVinculos()">🧹 Revisar vínculos (' + ventasMalVinculadas().length + ')</button>'
+          ? '<button class="btn btn-sm" style="color:var(--red);border-color:var(--red-bd)" onclick="abrirLimpiarVinculos()">🧹 Revisar vínculos (' + ventasMalVinculadas().length + ')</button>'
           : '')
       + '<button class="btn btn-lime btn-sm" onclick="abrirNuevoDistribuidor()">+ Agregar</button>'
       + '</div>'
