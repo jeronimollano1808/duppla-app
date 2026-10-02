@@ -856,5 +856,46 @@ Y un mes tiene **un** registro de cierre: al volver a cerrar se actualiza el mis
 **Límite honesto, anotado como pendiente y no como resuelto:** se bloquea lo que mueve los estados financieros fechados (ventas, gastos, abonos). Cambiar el **costo de un producto en Inventario** todavía puede mover el margen de un mes cerrado, porque `calcularMargenVenta` cae al costo del producto cuando la línea no lo tiene. Para cerrarlo de verdad habría que congelar el costo dentro de cada línea de venta al cerrar el mes.
 
 
+### 14.25 Bitácora: quién tocó qué y cuándo (comentarios 785–786)
+
+Siguiente de la lista premium, y la pareja natural del congelado de meses: **784 protege lo cerrado, esto cubre lo abierto.**
+
+**El hueco que tapa.** Duppla la manejan dos socios sobre la misma base. La papelera guardaba lo borrado, pero **una edición no dejaba rastro de ninguna clase** — y editar un total es justo lo que más mueve la contabilidad. Si un número de un mes cambiaba, no había forma de saber quién lo cambió ni qué decía antes: solo quedaba la discusión.
+
+**785. Lo que se guarda es el ANTES y el DESPUÉS de cada campo**, no "hubo un cambio". Un apunte que dice *"Ángel editó una venta"* no sirve para nada. El que sirve dice:
+
+> ✏️ **angel certuche** editó una venta: SEBASTIAN BEDOYA · $260.000 · 11 may
+> Precio unitario   ~~$260.000~~ → **$130.000**
+
+Ese ejemplo no es inventado: es exactamente el arreglo del comentario 764, el del unitario inflado que daba márgenes del 114%. Si la bitácora hubiera existido entonces, encontrar el origen habría tomado un minuto en vez de media sesión.
+
+**Qué se audita y por qué:**
+
+| Colección | Motivo |
+|---|---|
+| Ventas (crear, editar, borrar) | Es el ingreso. |
+| Gastos (crear, editar, borrar) | Es el egreso. |
+| Abonos | Plata que entra y cambia el saldo de una venta. |
+| **Inventario** | El **costo** de un producto mueve el margen de TODAS sus ventas pasadas, incluidas las de meses cerrados — es justo el hueco que quedó anotado en 784. |
+| Cierres | Cerrar y reabrir un mes. |
+| Papelera | Restaurar, y sobre todo el borrado definitivo, que es irreversible. |
+
+Decisiones que importan:
+
+- **Es append-only.** No hay forma de editar ni borrar un apunte desde la app. Una bitácora que se puede retocar no es una bitácora.
+- **Si la bitácora falla, la operación de negocio NO se cae.** `registrarEnBitacora` traga el error y lo deja en consola. Perder un apunte es malo; perder la venta que el usuario acaba de registrar por culpa del apunte sería peor.
+- **Un apunte vacío no se escribe.** Si se abre una venta y se guarda sin cambiar nada, no queda registro: ensuciar la lista con ruido es la forma más rápida de que nadie la lea.
+- **Los ids se guardan ya traducidos** (`distribuidorId` → "OLIMPO GYM"). Si mañana se borra ese distribuidor, el apunte viejo sigue diciendo algo.
+- **El oyente está limitado a 400 movimientos.** La bitácora crece sin tope; traerla entera en cada apertura desde el celular sería un impuesto diario por un dato que se consulta de vez en cuando. Lo viejo sigue en Firestore.
+
+**Una limpieza que salió de aquí:** las tres ramas de `guardarVenta` (manual, un producto, varios) escribían con el mismo par `updateDoc`/`addDoc` copiado tres veces. Ahora pasan por `escribirVenta()`. Antes había **tres oportunidades de olvidarse de una** al tocar algo; ahora hay una.
+
+**786. La página Actividad.** *"Qué pasó aquí"* y *"qué se borró"* son la misma pregunta con distinto alcance, así que la papelera se absorbió dentro de Actividad en vez de añadir una entrada más a un menú que ya estaba largo (ver 774). La página `papelera` y `showPage('papelera')` siguen existiendo.
+
+El feed va agrupado por día, con filtros (Todo · Plata · Solo ediciones · Solo borrados) y tiempos en palabras (*"hace 2 horas"*): un sello de fecha exacto no dice nada a simple vista.
+
+**Regla que sale de aquí:** *en un sistema con más de un dueño, cualquier campo que mueva plata necesita un antes y un después guardado.* No por desconfianza — por memoria. A los tres meses nadie recuerda por qué un número es el que es, y sin el rastro la única salida es volver a cuadrarlo todo a mano.
+
+
 ---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*

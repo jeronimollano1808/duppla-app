@@ -921,6 +921,8 @@ body{
     <div class="page" id="page-distribuidores"></div>
     <!-- 622. Página de papelera -->
     <div class="page" id="page-papelera"></div>
+    <!-- 786. Actividad: la bitácora y la papelera, que son la misma pregunta. -->
+    <div class="page" id="page-actividad"></div>
 
 <!-- 329. MODAL: NUEVO / EDITAR DISTRIBUIDOR -->
 <div class="modal-bg" id="modal-distribuidor">
@@ -2430,7 +2432,8 @@ let DATA = {
   cierres:[],  // 415. cierres: snapshots mensuales inmutables (corte contable)
   tiendasConsignacion:[], consignaciones:[],  // 488. consignación física en tiendas
   gastosRecurrentes:[],  // 597. plantillas de gastos fijos mensuales (arriendo, nómina, etc.)
-  papelera:[]  // 619. registros eliminados, recuperables por 7 días
+  papelera:[],  // 619. registros eliminados, recuperables por 7 días
+  bitacora:[]   // 785. quién tocó qué y cuándo
 };
 let currentPage = 'inicio';  // 663. Página activa — arrancamos en Inicio
 let ajusteProductoId = null;    // ID del producto que se está ajustando
@@ -2966,7 +2969,10 @@ const MENU = [
   // 489. Consignación — tiendas físicas que tienen productos sin haberlos comprado aún
   { id:'consignacion', label:'Consignación', ico:'🏪', group:'Negocio' },
   // 622. Papelera — registros eliminados recuperables por 7 días
-  { id:'papelera', label:'Papelera', ico:'🗑️', group:'Operaciones' },
+  // 786. Se absorbe dentro de Actividad: "qué pasó aquí" y "qué se borró" son
+  //      la misma pregunta hecha con distinto alcance, y el menú ya está largo.
+  //      La página vieja sigue existiendo y showPage('papelera') sigue sirviendo.
+  { id:'actividad', label:'Actividad', ico:'📋', group:'Operaciones' },
 ];
 
 // ============================================================
@@ -3073,6 +3079,16 @@ function startListeners() {
       if(col === 'papelera') limpiarPapeleraVieja();
     });
   });
+  // 785. La bitácora crece sin tope: no entra en el bucle de colecciones
+  //      completas, va con su propio oyente limitado a los últimos 400
+  //      movimientos. Lo viejo sigue en Firestore, pero no se trae a memoria
+  //      en cada apertura desde el celular.
+  const bq = query(collection(db,'bitacora'), orderBy('createdAt','desc'), limit(400));
+  onSnapshot(bq, snap => {
+    DATA.bitacora = snap.docs.map(d => ({id:d.id, ...d.data()}));
+    if(currentPage === 'actividad') renderActividad();
+  });
+
   // Oyente especial para notificaciones (últimas 30)
   const nq = query(collection(db,'notificaciones'), orderBy('createdAt','desc'), limit(30));
   let firstLoad = true;
@@ -3146,7 +3162,8 @@ function renderPage(id) {
     deudores:renderDeudores,
     distribuidores:renderDistribuidores,
     consignacion:renderConsignacion,
-    papelera:renderPapelera
+    papelera:renderPapelera,
+    actividad:renderActividad
   };
   if(renders[id]) renders[id]();
 }
@@ -4600,6 +4617,26 @@ window.calcSaldo = () => {
   }
 };
 
+// 785. Las tres ramas de guardarVenta (manual, un producto, varios) escribían
+//      con el mismo par updateDoc/addDoc copiado tres veces. Ahora pasan por
+//      aquí: una sola escritura y un solo sitio donde queda el apunte de
+//      bitácora. Antes había tres oportunidades de olvidarse de una.
+async function escribirVenta(editId, datosVenta, ventaOriginal) {
+  if(editId) {
+    await updateDoc(doc(db,'ventas',editId), datosVenta);
+    const cambios = diferencias(ventaOriginal, datosVenta, CAMPOS_AUDITADOS.ventas);
+    // Si no cambió nada de fondo, no se ensucia la bitácora con un apunte vacío.
+    if(cambios.length) {
+      await registrarEnBitacora({ accion:'editó', coleccion:'ventas', docId:editId,
+        titulo: tituloRegistro('ventas', { ...ventaOriginal, ...datosVenta }), cambios });
+    }
+  } else {
+    const ref = await addDoc(collection(db,'ventas'), { ...datosVenta, abonos:[], createdAt:serverTimestamp() });
+    await registrarEnBitacora({ accion:'creó', coleccion:'ventas', docId: ref.id,
+      titulo: tituloRegistro('ventas', datosVenta), cambios: [] });
+  }
+}
+
 window.guardarVenta = async () => {
   // 634. Modo edición (ver editarVentaMultiple) — mismo modal de "Nueva
   // venta", pero actualiza la venta existente en vez de crear una nueva.
@@ -4718,8 +4755,7 @@ window.guardarVenta = async () => {
         ubicacionStock:null, loteConsumo:null,
         distribuidorId: distribuidorId || null
       };
-      if(editId) await updateDoc(doc(db,'ventas',editId), datosVenta);
-      else await addDoc(collection(db,'ventas'), { ...datosVenta, abonos:[], createdAt:serverTimestamp() });
+      await escribirVenta(editId, datosVenta, ventaOriginal);
     } else if(lineasValidas.length === 1) {
       const l = lineasValidas[0];
       const prod = DATA.inventario.find(p => p.id === l.prodId);
@@ -4752,8 +4788,7 @@ window.guardarVenta = async () => {
         ubicacionStock: ubicacionFinal1, // 454. Registramos de dónde salió, para trazabilidad
         distribuidorId: distribuidorId || null
       };
-      if(editId) await updateDoc(doc(db,'ventas',editId), datosVenta);
-      else await addDoc(collection(db,'ventas'), { ...datosVenta, abonos:[], createdAt:serverTimestamp() });
+      await escribirVenta(editId, datosVenta, ventaOriginal);
     } else {
       // 289. Venta múltiple — descontamos stock de cada producto y registramos una entrada
       const productosVenta = [];
@@ -4796,8 +4831,7 @@ window.guardarVenta = async () => {
         costoUnit:null, ubicacionStock:null, loteConsumo:null,
         distribuidorId: distribuidorId || null
       };
-      if(editId) await updateDoc(doc(db,'ventas',editId), datosVenta);
-      else await addDoc(collection(db,'ventas'), { ...datosVenta, abonos:[], createdAt:serverTimestamp() });
+      await escribirVenta(editId, datosVenta, ventaOriginal);
     }
 
     // Notificación
@@ -4957,6 +4991,16 @@ window.guardarAbono = async () => {
     saldo: nuevoSaldo,
     estadoPago: nuevoEstado,
     abonos
+  });
+
+  // 785. Bitácora del abono: es plata que entra y cambia el saldo de la venta.
+  await registrarEnBitacora({
+    accion:'creó', coleccion:'abonos', docId: abonoVentaId,
+    titulo: 'Abono de ' + (venta.cliente || 'cliente') + ' · ' + fmt(valor),
+    cambios: [
+      { campo:'valor', etiqueta:'Abono', antes:'—', despues: fmt(valor) },
+      { campo:'saldo', etiqueta:'Saldo de la venta', antes: fmt(venta.saldo||0), despues: fmt(nuevoSaldo) }
+    ]
   });
 
   // 126. Notificamos al otro socio del abono recibido
@@ -6135,13 +6179,21 @@ window.guardarProducto = async () => {
       datos.stockAngel = saNuevo;
     }
     await updateDoc(doc(db,'inventario',prodId), datos);
+    // 785. El costo de un producto es el dato más peligroso de la app: mueve
+    //      el margen de TODAS sus ventas pasadas, incluidas las de meses ya
+    //      cerrados (ver el límite anotado en 784). Por eso se audita.
+    const cambiosP = diferencias(prodActual, datos, CAMPOS_AUDITADOS.inventario);
+    if(cambiosP.length) await registrarEnBitacora({ accion:'editó', coleccion:'inventario', docId:prodId,
+      titulo: tituloRegistro('inventario', { ...prodActual, ...datos }), cambios: cambiosP });
     toast('✅ Producto actualizado correctamente');
   } else {
     // 448. Producto nuevo: todo el stock inicial se asigna a Jero por defecto
     datos.stockJero = stockTotal;
     datos.stockAngel = 0;
     datos.createdAt = serverTimestamp();
-    await addDoc(collection(db,'inventario'), datos);
+    const refP = await addDoc(collection(db,'inventario'), datos);
+    await registrarEnBitacora({ accion:'creó', coleccion:'inventario', docId: refP.id,
+      titulo: tituloRegistro('inventario', datos), cambios: [] });
     toast('✅ Producto agregado al inventario');
   }
 
@@ -6783,9 +6835,15 @@ window.guardarGasto = async () => {
 
   if(gastoId) {
     await updateDoc(doc(db,'gastos',gastoId), datos);
+    // 785. Bitácora del gasto editado.
+    const cambios = diferencias(gastoOriginal, datos, CAMPOS_AUDITADOS.gastos);
+    if(cambios.length) await registrarEnBitacora({ accion:'editó', coleccion:'gastos', docId:gastoId,
+      titulo: tituloRegistro('gastos', { ...gastoOriginal, ...datos }), cambios });
   } else {
     datos.createdAt = serverTimestamp();
-    await addDoc(collection(db,'gastos'), datos);
+    const ref = await addDoc(collection(db,'gastos'), datos);
+    await registrarEnBitacora({ accion:'creó', coleccion:'gastos', docId: ref.id,
+      titulo: tituloRegistro('gastos', datos), cambios: [] });
   }
   closeModal('modal-gasto');
   document.getElementById('g-id').value = '';
@@ -9263,6 +9321,14 @@ async function confirmarEliminacionPendiente() {
   // devolvemos a Duppla lo que seguía disponible sin vender en la tienda.
   if(col === 'consignaciones') await restaurarStockConsignacion(snapshot);
 
+  // 785. Bitácora del borrado. Va ANTES de mover a la papelera: si algo
+  //      falla en el camino, por lo menos queda constancia del intento.
+  await registrarEnBitacora({
+    accion:'eliminó', coleccion: col, docId: id,
+    titulo: tituloRegistro(col, snapshot) || '(registro sin descripción)',
+    cambios: []
+  });
+
   // 619. En vez de borrar para siempre, guardamos una copia en 'papelera'
   // por 7 días (ver limpiarPapeleraVieja) para poder restaurarla.
   if(snapshot) {
@@ -9355,6 +9421,141 @@ async function limpiarPapeleraVieja() {
   }
 }
 
+// ============================================================
+// 786. PÁGINA ACTIVIDAD — la bitácora y la papelera, juntas
+//
+// "Qué pasó aquí" y "qué se borró" son la misma pregunta con distinto
+// alcance, así que van en la misma pantalla y no en dos entradas del menú
+// —que además ya estaba largo (ver 774)—.
+// ============================================================
+let actividadTab = 'bitacora';
+let actividadFiltro = 'todo';
+window.verTabActividad = (t) => { actividadTab = t; renderActividad(); };
+window.filtrarActividad = (f) => { actividadFiltro = f; renderActividad(); };
+
+const COLOR_ACCION = {
+  'creó':'var(--green)', 'editó':'var(--blue)', 'eliminó':'var(--red)',
+  'eliminó para siempre':'var(--red)', 'restauró':'var(--amber)',
+  'cerró':'var(--ink)', 'reabrió':'var(--amber)'
+};
+const ICONO_ACCION = {
+  'creó':'＋', 'editó':'✏️', 'eliminó':'🗑️', 'eliminó para siempre':'⛔',
+  'restauró':'↩️', 'cerró':'🔒', 'reabrió':'🔓'
+};
+const NOMBRE_COLECCION = {
+  ventas:'una venta', gastos:'un gasto', inventario:'un producto', abonos:'un abono',
+  cierres:'un mes', distribuidores:'un distribuidor', pedidos:'un pedido',
+  consumos:'un consumo', combos:'un combo', metas:'una meta',
+  consignaciones:'una consignación', proveedores:'un proveedor', papelera:'un registro'
+};
+
+// Hace cuánto, en palabras. Un sello de fecha exacto no dice nada a simple
+// vista; "hace 2 horas" sí.
+function haceCuanto(seg) {
+  if(!seg) return '';
+  const min = Math.floor((Date.now() - seg * 1000) / 60000);
+  if(min < 1) return 'hace un momento';
+  if(min < 60) return 'hace ' + min + ' minuto' + (min !== 1 ? 's' : '');
+  const h = Math.floor(min / 60);
+  if(h < 24) return 'hace ' + h + ' hora' + (h !== 1 ? 's' : '');
+  const d = Math.floor(h / 24);
+  if(d < 30) return 'hace ' + d + ' día' + (d !== 1 ? 's' : '');
+  return 'hace ' + Math.floor(d / 30) + ' mes' + (Math.floor(d / 30) !== 1 ? 'es' : '');
+}
+
+const soloNombre = (correo) => String(correo || '').split('@')[0].replace(/[._]/g, ' ');
+
+function renderActividad() {
+  const apuntes = [...DATA.bitacora]
+    .sort((a,b) => (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0))
+    .filter(a => actividadFiltro === 'todo'
+      || (actividadFiltro === 'dinero' && ['ventas','gastos','abonos'].includes(a.coleccion))
+      || (actividadFiltro === 'ediciones' && a.accion === 'editó')
+      || (actividadFiltro === 'borrados' && String(a.accion).startsWith('eliminó')));
+
+  const chip = (id, txt) => '<button onclick="filtrarActividad(\'' + id + '\')" style="padding:5px 12px;border-radius:20px;'
+    + 'white-space:nowrap;cursor:pointer;font-size:12px;border:1.5px solid ' + (actividadFiltro===id?'var(--ink)':'var(--border)') + ';'
+    + 'background:' + (actividadFiltro===id?'var(--ink)':'var(--surface)') + ';color:' + (actividadFiltro===id?'#fff':'var(--ink-2)') + ';'
+    + 'font-weight:' + (actividadFiltro===id?'600':'400') + '">' + txt + '</button>';
+
+  // Agrupadas por día: una lista plana de 400 apuntes no se lee.
+  let feed = '', diaActual = '';
+  apuntes.forEach(a => {
+    if(a.fecha !== diaActual) {
+      diaActual = a.fecha;
+      feed += '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;'
+        + 'color:var(--ink-3);margin:18px 0 8px">' + (a.fecha === today() ? 'Hoy' : fCorta(a.fecha)) + '</div>';
+    }
+    const color = COLOR_ACCION[a.accion] || 'var(--ink-2)';
+    const cambios = (a.cambios || []).map(c =>
+      '<div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;font-size:11.5px;padding:3px 0">'
+      + '<span style="color:var(--ink-3);min-width:96px">' + escTxt(c.etiqueta) + '</span>'
+      + '<span style="color:var(--ink-3);text-decoration:line-through">' + escTxt(c.antes) + '</span>'
+      + '<span style="color:var(--ink-3)">→</span>'
+      + '<span style="color:var(--ink);font-weight:600">' + escTxt(c.despues) + '</span>'
+    + '</div>').join('');
+
+    feed += '<div class="card" style="padding:12px 14px;margin-bottom:8px;border-left:3px solid ' + color + '">'
+      + '<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">'
+        + '<span style="font-size:13px">' + (ICONO_ACCION[a.accion] || '•') + '</span>'
+        + '<span style="font-size:13px;color:var(--ink);line-height:1.4;flex:1;min-width:0">'
+          + '<strong>' + escTxt(soloNombre(a.usuario)) + '</strong> '
+          + '<span style="color:' + color + ';font-weight:600">' + escTxt(a.accion) + '</span> '
+          + (NOMBRE_COLECCION[a.coleccion] || a.coleccion) + ': ' + escTxt(a.titulo || '')
+        + '</span>'
+        + '<span style="font-size:10.5px;color:var(--ink-3);white-space:nowrap">' + haceCuanto(a.createdAt?.seconds) + '</span>'
+      + '</div>'
+      + (cambios ? '<div style="margin-top:7px;padding-top:7px;border-top:1px solid var(--border)">' + cambios + '</div>' : '')
+    + '</div>';
+  });
+
+  if(!apuntes.length) {
+    feed = '<div class="card"><div class="empty-state" style="padding:30px"><div class="empty-state-icon">📋</div>'
+      + '<div class="empty-state-text">' + (DATA.bitacora.length ? 'Nada con ese filtro' : 'Todavía no hay movimientos registrados') + '</div>'
+      + '<div class="empty-state-sub">' + (DATA.bitacora.length ? 'Prueba con otro filtro' : 'Desde ahora, cada cambio que hagan tú o Jero queda apuntado aquí') + '</div></div></div>';
+  }
+
+  // ---- Papelera, dentro de la misma pantalla ----
+  const items = [...DATA.papelera].sort((a,b) => (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0));
+  const papelera = items.length
+    ? '<div class="list-cards">' + items.map(item => {
+        const creadoMs = (item.createdAt?.seconds||0) * 1000;
+        const quedan = Math.max(0, PAPELERA_DIAS_RETENCION - (creadoMs ? Math.floor((Date.now() - creadoMs) / 86400000) : 0));
+        return '<div class="list-card"><div class="list-card-header"><div>'
+          + '<div class="list-card-title">' + (PAPELERA_LABELS[item.coleccion] || item.coleccion) + '</div>'
+          + '<div class="list-card-sub">' + describirRegistroPapelera(item.coleccion, item.datos) + '</div>'
+          + '<div style="font-size:10px;color:var(--ink-3);margin-top:3px">Se borra definitivo en ' + quedan + ' día' + (quedan!==1?'s':'') + '</div>'
+        + '</div></div><div class="list-card-actions">'
+          + '<button class="btn btn-sm btn-lime" onclick="restaurarDePapelera(\'' + escAttr(item.id) + '\')">↩️ Restaurar</button>'
+          + '<button class="btn btn-sm btn-danger" onclick="purgarDePapelera(\'' + escAttr(item.id) + '\')">Eliminar definitivo</button>'
+        + '</div></div>';
+      }).join('') + '</div>'
+    : '<div class="card"><div class="empty-state" style="padding:30px"><div class="empty-state-icon">🗑️</div>'
+      + '<div class="empty-state-text">La papelera está vacía</div></div></div>';
+
+  const tab = (id, txt, n) => '<button onclick="verTabActividad(\'' + id + '\')" style="flex:1;padding:9px;border:none;cursor:pointer;'
+    + 'background:' + (actividadTab===id?'var(--surface)':'transparent') + ';border-radius:8px;font-family:inherit;'
+    + 'font-size:13px;font-weight:' + (actividadTab===id?'700':'500') + ';color:' + (actividadTab===id?'var(--ink)':'var(--ink-3)') + ';'
+    + (actividadTab===id?'box-shadow:var(--shadow-sm)':'') + '">' + txt + (n ? ' <span style="opacity:.6">(' + n + ')</span>' : '') + '</button>';
+
+  document.getElementById('page-actividad').innerHTML =
+    '<div class="page-header"><div>'
+      + '<div class="page-title">Actividad</div>'
+      + '<div class="page-sub">Todo lo que se ha tocado en la app, y lo que se borró</div>'
+    + '</div></div>'
+    + '<div style="display:flex;gap:4px;background:var(--surface-3);padding:4px;border-radius:10px;margin-bottom:16px">'
+      + tab('bitacora','📋 Movimientos') + tab('papelera','🗑️ Papelera', items.length)
+    + '</div>'
+    + (actividadTab === 'bitacora'
+        ? '<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:4px">'
+            + chip('todo','Todo') + chip('dinero','Plata') + chip('ediciones','Solo ediciones') + chip('borrados','Solo borrados')
+          + '</div>'
+          + '<div style="font-size:11.5px;color:var(--ink-3);line-height:1.45;margin:8px 0 2px">'
+            + 'Cada cambio queda apuntado con quién lo hizo y qué decía antes. Nadie puede editar ni borrar esta lista.</div>'
+          + feed
+        : papelera);
+}
+
 function renderPapelera() {
   const items = [...DATA.papelera].sort((a,b) => (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0));
   const rows = items.map(item => {
@@ -9395,12 +9596,19 @@ window.restaurarDePapelera = async (papeleraId) => {
   if(!idOriginal) { alert('Este registro no tiene ID original — no se puede restaurar automáticamente'); return; }
   await setDoc(doc(db, item.coleccion, idOriginal), datosSinId);
   await deleteDoc(doc(db,'papelera',papeleraId));
+  await registrarEnBitacora({ accion:'restauró', coleccion:item.coleccion, docId:idOriginal,
+    titulo: tituloRegistro(item.coleccion, item.datos) || '(registro restaurado)', cambios: [] });
   toast('✅ Registro restaurado');
 };
 
 window.purgarDePapelera = async (papeleraId) => {
   if(!confirm('¿Eliminar definitivamente? Ya no se podrá recuperar.')) return;
+  const item = DATA.papelera.find(x => x.id === papeleraId);
   await deleteDoc(doc(db,'papelera',papeleraId));
+  // 785. Un borrado definitivo es irreversible: con más razón queda escrito.
+  await registrarEnBitacora({ accion:'eliminó para siempre', coleccion: item?.coleccion || 'papelera',
+    docId: item?.datos?.id || papeleraId,
+    titulo: tituloRegistro(item?.coleccion, item?.datos) || '(registro purgado)', cambios: [] });
   toast('Eliminado definitivamente');
 };
 
@@ -12611,6 +12819,8 @@ window.reabrirMes = async (mesStr) => {
     reabiertoPor: auth.currentUser?.email || 'desconocido',
     reabiertoEn: today()
   });
+  await registrarEnBitacora({ accion:'reabrió', coleccion:'cierres', docId: mesStr,
+    titulo: 'Mes ' + nombre, cambios: [] });
   toast('🔓 ' + nombre + ' reabierto — acuérdate de volver a cerrarlo');
 };
 
@@ -12638,6 +12848,11 @@ window.cerrarMesDesdeInformes = async (mesStr) => {
   };
   if(previo) await updateDoc(doc(db, 'cierres', previo.id), datos);
   else await addDoc(collection(db, 'cierres'), { ...datos, createdAt: serverTimestamp() });
+  await registrarEnBitacora({ accion:'cerró', coleccion:'cierres', docId: mesStr, titulo: 'Mes ' + nombre,
+    cambios: [
+      { campo:'vendido', etiqueta:'Vendido', antes:'—', despues: fmt(F.vendido) },
+      { campo:'utilidadNeta', etiqueta:'Utilidad neta', antes:'—', despues: fmt(F.utilidadNeta) }
+    ] });
   toast('🔒 ' + nombre + ' cerrado');
 };
 
@@ -12677,6 +12892,102 @@ function bloqueoInformeHtml(r) {
     + '<button class="btn btn-sm btn-lime" style="white-space:nowrap" onclick="cerrarMesDesdeInformes(\'' + escAttr(mesStr) + '\')">🔒 Cerrar mes</button>'
   + '</div>';
 }
+
+// ============================================================
+// 785. BITÁCORA — quién tocó qué y cuándo
+//
+// Duppla la manejan dos socios sobre la misma base. Hasta ahora, si un
+// número de un mes cambiaba, no había forma de saber quién lo cambió ni
+// qué decía antes: solo quedaba la discusión. La papelera guardaba lo
+// borrado, pero una EDICIÓN no deja rastro de ninguna clase — y editar un
+// total es justo lo que más mueve la contabilidad.
+//
+// El congelado de meses (784) protege lo cerrado. Esto cubre lo abierto.
+//
+// Guarda el ANTES y el DESPUÉS de cada campo que cambió, no solo que "hubo
+// un cambio": un registro que dice "Ángel editó una venta" no sirve para
+// nada. El que sirve dice "el total pasó de $94.992 a $949.920".
+//
+// Es append-only: no hay forma de editar ni borrar un apunte desde la app.
+// Una bitácora que se puede retocar no es una bitácora.
+// ============================================================
+const ETIQUETAS_CAMPO = {
+  fecha:'Fecha', cliente:'Cliente', total:'Total', pagado:'Pagado', saldo:'Saldo',
+  canal:'Canal', producto:'Producto', cant:'Cantidad', precio:'Precio unitario',
+  costoUnit:'Costo unitario', nota:'Nota', metodoPago:'Método de pago',
+  estadoPago:'Estado de pago', distribuidorId:'Distribuidor', prodId:'Producto vinculado',
+  desc:'Descripción', valor:'Valor', cat:'Categoría', esFijo:'Gasto fijo',
+  nombre:'Nombre', costo:'Costo', pventa:'Precio público', pdist:'Precio distribuidor',
+  pesp:'Precio especial', stock:'Stock', alias:'Otros nombres', marca:'Marca',
+  stockMinimo:'Stock mínimo', duracionDias:'Duración (días)'
+};
+
+const MONETARIOS = ['total','pagado','saldo','valor','costo','costoUnit','precio','pventa','pdist','pesp'];
+
+function valorLegible(campo, v) {
+  if(v === undefined || v === null || v === '') return '—';
+  if(typeof v === 'boolean') return v ? 'Sí' : 'No';
+  if(MONETARIOS.includes(campo) && Number.isFinite(Number(v))) return fmt(Number(v));
+  if(campo === 'cat') return CATS[v] || String(v);
+  if(campo === 'distribuidorId') return (DATA.distribuidores.find(d => d.id === v)?.nombre) || String(v);
+  if(campo === 'prodId') return (DATA.inventario.find(x => x.id === v)?.nombre) || String(v);
+  return String(v);
+}
+
+// Qué cambió de verdad. Compara en crudo para no perder un cambio por
+// culpa del formato, pero guarda ya legible para no depender de que el
+// producto o el distribuidor sigan existiendo cuando se lea el apunte.
+function diferencias(antes, despues, campos) {
+  const out = [];
+  campos.forEach(c => {
+    const a = antes ? antes[c] : undefined;
+    const b = despues ? despues[c] : undefined;
+    const iguales = (a === b)
+      || (a === undefined && b === '') || (a === '' && b === undefined)
+      || (Number.isFinite(Number(a)) && Number.isFinite(Number(b)) && Number(a) === Number(b));
+    if(iguales) return;
+    out.push({ campo: c, etiqueta: ETIQUETAS_CAMPO[c] || c, antes: valorLegible(c, a), despues: valorLegible(c, b) });
+  });
+  return out;
+}
+
+async function registrarEnBitacora(apunte) {
+  try {
+    await addDoc(collection(db,'bitacora'), {
+      fecha: today(),
+      usuario: auth.currentUser?.email || 'desconocido',
+      accion: apunte.accion,          // 'creó' | 'editó' | 'eliminó' | 'restauró' | 'cerró' | 'reabrió'
+      coleccion: apunte.coleccion,
+      docId: apunte.docId || '',
+      titulo: apunte.titulo || '',
+      cambios: apunte.cambios || [],
+      createdAt: serverTimestamp()
+    });
+  } catch(e) {
+    // 785. Si la bitácora falla, NO se cae la operación de negocio. Perder un
+    //      apunte es malo; perder la venta que el usuario acaba de registrar
+    //      por culpa del apunte sería peor.
+    console.warn('No se pudo registrar en la bitácora:', e);
+  }
+}
+
+// Un resumen de una línea para identificar el registro sin abrirlo.
+function tituloRegistro(col, d) {
+  if(!d) return '';
+  if(col === 'ventas') return (d.cliente || 'Sin cliente') + ' · ' + fmt(ingresoVenta(d)) + ' · ' + (d.fecha || '');
+  if(col === 'gastos') return (d.desc || 'Gasto') + ' · ' + fmt(d.valor) + ' · ' + (d.fecha || '');
+  if(col === 'inventario') return d.nombre || 'Producto';
+  if(col === 'distribuidores') return d.nombre || 'Distribuidor';
+  if(col === 'cierres') return 'Mes ' + (d.mes || '');
+  return d.nombre || d.desc || d.cliente || '';
+}
+
+const CAMPOS_AUDITADOS = {
+  ventas: ['fecha','cliente','canal','producto','cant','total','pagado','saldo','precio','costoUnit','prodId','distribuidorId','metodoPago','nota'],
+  gastos: ['fecha','cat','desc','valor','esFijo'],
+  inventario: ['nombre','alias','marca','costo','pventa','pdist','pesp','stock','stockMinimo','duracionDias'],
+  distribuidores: ['nombre','tipo','ciudad','telefono']
+};
 
 function renderInformes() {
   const r = rangoInformes();
