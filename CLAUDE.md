@@ -758,5 +758,47 @@ También se quitaron de esa página las tarjetas **"Total canal dist."** y **"Vi
 **Por qué no se borró de verdad:** ahí es donde se arregla un costo y se crea un producto, y el costo es de lo que cuelga todo el sistema de márgenes que costó una sesión entera cuadrar (14.10–14.18). Quitarlo del camino diario es higiene; quitarlo del todo sería dejar sin herramienta la única palanca que corrige los márgenes. *Sacar algo de la vista no es lo mismo que quitarle a alguien la forma de arreglarlo.*
 
 
+### 14.23 Que se sienta premium (comentarios 775–779)
+
+Pedido de Ángel: *"quiero que la plataforma se vea más premium, que tengan detalles los botones, que haya al tocar los botones animaciones básicas pero evidentes... que cuando le dé a Duppla se vea el crecimiento o decrecimiento mes a mes... que cuando le dé click a un nombre salga cuántas veces y qué nos ha comprado, como un historial; también con los distribuidores, separado por mes."*
+
+**775. Botones con tres capas.** Reposo (borde y sombra suaves, degradado de 1px arriba: el botón se ve como un objeto), hover (sube 1px, la sombra crece) y `:active` (se hunde y suelta una onda radial desde el centro).
+
+Dos decisiones que no son de gusto:
+
+- **Todo el hover va dentro de `@media (hover:hover)`.** En un celular el navegador simula el hover al tocar y lo deja pegado: el botón se queda "iluminado" después de soltarlo. Separarlo hace que en móvil solo exista el `:active`, que es lo correcto.
+- **`-webkit-tap-highlight-color:transparent`.** El flash gris del navegador pisaba la animación propia. Lo de "evidente" se juega entero en el `:active`, porque en un teléfono es el único estado que existe.
+
+Las curvas son `cubic-bezier(.34,1.56,.64,1)` — rebote corto. Un botón que baja y sube linealmente se siente barato. Y todo está bajo `prefers-reduced-motion`: a quien pidió menos movimiento se le apagan las animaciones pero **no** los estados (color, sombra siguen), para que la interfaz siga respondiendo.
+
+**776. El logo lleva a Inicio.** Es lo que todo el mundo intenta en cualquier app y aquí no hacía nada.
+
+**777. Crecimiento mes a mes, en Inicio.** Columnas de los últimos 6 ciclos con el % de variación bajo cada una, y un titular en una frase.
+
+**La trampa de este gráfico, y la razón por la que casi todo tablero miente el día 5:** el mes en curso no es comparable con un mes cerrado. Si hoy es 8 y comparas lo que llevas contra el mes anterior entero, siempre pareces en caída libre. Así que:
+
+| | Se compara contra |
+|---|---|
+| Mes cerrado | el mes anterior **completo** |
+| Mes en curso | los **mismos días corridos** del mes anterior |
+
+Es la misma regla que ya usaba la tarjeta de Vendido (693). La barra del mes en curso va **rayada**, para que se lea de inmediato que no terminó, y el pie lo dice con palabras. En las pruebas: con 600.000 en 9 días contra un mes anterior de 1.000.000 (400.000 en sus primeros 9), el gráfico dice **+50%**; comparando contra el mes entero habría dicho −40%. Es la diferencia entre creer que vas creciendo o que te estás hundiendo.
+
+Detalle: `delta` es `null` cuando no hay base — de 0 a algo no es "infinito por ciento", es el primer mes con ventas. Caer a cero sí da −100%.
+
+**778. La ficha de comprador.** Una sola función, dos puertas. Un cliente y un distribuidor **no se diferencian en lo que uno quiere saber de ellos**: cuánto ha comprado, cada cuánto vuelve, qué se lleva y si debe. Se diferencian en cómo se les factura. Por eso `fichaCompradorHtml(ventas)` es única y hay dos aperturas (`abrirFichaCliente`, `abrirFichaDistribuidor`) más una tercera para las ventas sin vincular. Si mañana cambia el formato, no hay que acordarse de cambiarlo en dos lados.
+
+La ficha trae: veces que compró y cada cuánto vuelve, total y ticket promedio, margen que deja, última compra y días sin comprar, lo que debe; **mes a mes** con barras; **qué se lleva** (producto, unidades, pedidos, valor); y **todas las compras** con su estado.
+
+Dos cosas que parecen detalle y no lo son:
+
+- *Cada cuánto vuelve* se mide sobre **días distintos**, no sobre número de ventas. Tres ventas el mismo día son una visita, no tres.
+- En la tabla de clientes el botón es **la fila entera**, no el nombre. Pedir puntería sobre un nombre en un celular es pedir demasiado.
+
+**779. El nombre nunca va crudo en un `onclick`.** `RAICES O'BRIEN` rompía el atributo y dejaba el botón muerto; con la comilla en el sitio justo, un nombre podría inyectar código. `escAttr` escapa el backslash **primero** (si no, se re-escapa lo ya escapado) y luego comilla, `&`, `<`, `>`; `escTxt` para lo que se pinta. Probados los dos.
+
+**Regla que sale de aquí:** *un dato que viene de lo que el usuario escribió —un nombre de cliente, una descripción de gasto— se escapa siempre al construir HTML, aunque "nadie va a escribir eso".* En esta app los nombres los teclea una persona apurada facturando, y los apóstrofes existen.
+
+
 ---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*

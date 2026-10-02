@@ -214,6 +214,14 @@ body{
    8. NAVEGACIÓN DEL SIDEBAR
    Botones de menú con estado activo e ícono + texto
    ============================================================ */
+/* 776. Logo clicable: cursor, hundido al tocar y el cuadro "D" se gira
+   un pelo. Un guiño, no una cabriola. */
+.logo-link{cursor:pointer;-webkit-tap-highlight-color:transparent;
+  transition:transform .18s cubic-bezier(.34,1.56,.64,1),opacity .18s ease}
+.logo-link:active{transform:scale(.96)}
+.logo-link:focus-visible{outline:none;opacity:.8}
+.logo-link .sidebar-logo-mark,.logo-link .mobile-logo-mark{transition:transform .25s cubic-bezier(.34,1.56,.64,1)}
+@media (hover:hover){ .logo-link:hover .sidebar-logo-mark,.logo-link:hover .mobile-logo-mark{transform:rotate(-6deg) scale(1.06)} }
 .sidebar-nav{flex:1;padding:10px 8px;overflow-y:auto}
 /* 256. Títulos de sección del nav — blancos con baja opacidad en sidebar oscuro */
 .nav-section-title{
@@ -229,7 +237,9 @@ body{
   margin-bottom:1px;text-align:left;
   transition:all .12s;
 }
-.nav-btn:hover{background:rgba(255,255,255,.07);color:rgba(255,255,255,.85)}
+.nav-btn{-webkit-tap-highlight-color:transparent;transition:background .16s ease,color .16s ease,transform .16s cubic-bezier(.34,1.56,.64,1),padding-left .16s ease}
+@media (hover:hover){ .nav-btn:hover{background:rgba(255,255,255,.07);color:rgba(255,255,255,.85);padding-left:13px} }
+.nav-btn:active{transform:scale(.97)}
 /* 257. Estado activo: barra izquierda lima + fondo translúcido */
 .nav-btn.active{
   background:rgba(200,224,90,.1);
@@ -296,7 +306,20 @@ body{
    ============================================================ */
 .main{margin-left:240px;padding:28px;min-height:100vh}
 .page{display:none}
-.page.active{display:block}
+/* 775. Cambiar de página ya no es un corte seco: entra desde 6px abajo.
+   220ms — lo suficiente para notarlo, no tanto como para estorbar a
+   quien navega rápido entre pestañas. */
+.page.active{display:block;animation:pageIn .22s cubic-bezier(.22,1,.36,1)}
+@keyframes pageIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+/* 775. Quien pidió menos movimiento en su sistema operativo no lo pidió
+   de adorno. Se apagan todas las animaciones de golpe, pero los estados
+   (color, sombra) se conservan: la interfaz sigue respondiendo. */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;
+    transition-duration:.01ms!important;scroll-behavior:auto!important}
+  .btn:hover,.card[onclick]:hover,.metric-card:hover,.btn:active{transform:none!important}
+}
 
 /* ============================================================
    12. ENCABEZADOS DE PÁGINA
@@ -321,7 +344,21 @@ body{
   padding:20px;
   margin-bottom:16px;
   box-shadow:var(--shadow-sm);
+  /* 775. Las tarjetas también respiran: transición lista aunque la tarjeta
+     no sea clicable, para que nada "salte" al cambiar de estado. */
+  transition:transform .18s cubic-bezier(.34,1.56,.64,1), box-shadow .18s ease, border-color .18s ease;
 }
+/* 775. Solo las tarjetas que SÍ hacen algo al tocarlas se levantan. Un
+   hover en una tarjeta muerta promete una acción que no existe. */
+.card[onclick],.card[role="button"]{-webkit-tap-highlight-color:transparent}
+@media (hover:hover){
+  .card[onclick]:hover,.card[role="button"]:hover{
+    transform:translateY(-2px);border-color:var(--border-2);
+    box-shadow:0 10px 24px -8px rgba(17,24,39,.16),0 2px 6px rgba(17,24,39,.05);
+  }
+}
+.card[onclick]:active,.card[role="button"]:active{transform:translateY(0) scale(.992);box-shadow:var(--shadow-sm)}
+.card[onclick]:focus-visible,.card[role="button"]:focus-visible{outline:none;border-color:var(--lime);box-shadow:0 0 0 3px rgba(90,138,31,.22)}
 .card-title{font-size:11px;font-weight:700;color:var(--ink-3);margin-bottom:14px;text-transform:uppercase;letter-spacing:.08em}
 
 /* ============================================================
@@ -343,7 +380,8 @@ body{
   box-shadow:var(--shadow-sm);
   transition:all .15s;
 }
-.metric-card:hover{box-shadow:var(--shadow);transform:translateY(-1px)}
+.metric-card{transition:transform .18s cubic-bezier(.34,1.56,.64,1),box-shadow .18s ease}
+@media (hover:hover){ .metric-card:hover{box-shadow:0 10px 22px -10px rgba(17,24,39,.18);transform:translateY(-2px)} }
 .metric-label{font-size:10px;font-weight:700;color:var(--ink-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px}
 .metric-value{font-size:26px;font-weight:800;color:var(--ink);line-height:1;font-family:'Inter',sans-serif}
 .metric-sub{font-size:11px;color:var(--ink-3);margin-top:5px}
@@ -373,6 +411,28 @@ body{
   transition:background .1s;
 }
 .tbl tbody tr:last-child{border-bottom:none}
+.tbl tbody tr{transition:background .14s ease}
+/* 778. Fila que abre una ficha. La flecha aparece sola al pasar por
+   encima en escritorio y se queda tenue en celular, donde no hay hover
+   que la revele. */
+.fila-click{cursor:pointer;-webkit-tap-highlight-color:transparent}
+.fila-click .ver-mas{color:var(--ink-3);font-size:14px;opacity:.35;transition:opacity .15s ease,transform .15s ease}
+@media (hover:hover){
+  .fila-click:hover{background:var(--lime-bg)!important}
+  .fila-click:hover .ver-mas{opacity:1;transform:translateX(3px)}
+}
+.fila-click:active{background:var(--surface-3)!important}
+/* 778. Nombre clicable fuera de una tabla. Subrayado que crece desde la
+   izquierda, para que se note que es un enlace sin pintarlo de azul. */
+.nombre-link{cursor:pointer;-webkit-tap-highlight-color:transparent;position:relative}
+.nombre-link::after{content:'';position:absolute;left:0;bottom:-2px;height:1.5px;width:0;
+  background:var(--lime);transition:width .2s ease}
+@media (hover:hover){
+  .nombre-link:hover::after{width:100%}
+  .nombre-link:hover .ver-mas{opacity:1;transform:translateX(3px)}
+}
+.nombre-link:active{opacity:.6}
+.nombre-link:focus-visible{outline:2px solid var(--lime);outline-offset:3px;border-radius:3px}
 .tbl tbody tr:hover{background:var(--surface-2)}
 .tbl td{
   padding:11px 12px;color:var(--ink);
@@ -402,35 +462,73 @@ body{
    17. BOTONES
    Sistema de botones con variantes primary, secondary, danger
    ============================================================ */
+/* ============================================================
+   775. BOTONES — DETALLE Y RESPUESTA AL TACTO
+   Ángel: "que tengan detalles los botones, que haya al tocarlos
+   animaciones básicas pero evidentes".
+   Tres capas, en este orden:
+     · reposo  — borde y sombra suaves; el botón se ve como un objeto
+     · hover   — sube 1px y la sombra crece (solo con mouse)
+     · :active — se HUNDE y suelta una onda desde el centro
+   Lo de "evidente" se juega en el :active, que es lo único que existe
+   en un celular: ahí no hay hover. Por eso también se apaga el
+   resaltado gris del navegador, que pisaba nuestra animación.
+   Las curvas son cubic-bezier con rebote corto: un botón que baja y
+   sube linealmente se siente barato.
+   ============================================================ */
 .btn{
+  position:relative;overflow:hidden;isolation:isolate;
   padding:8px 14px;border-radius:var(--radius);
   border:1px solid var(--border-2);
-  background:var(--surface);color:var(--ink);
-  cursor:pointer;font-size:13px;font-weight:500;
+  background:linear-gradient(180deg,#fff 0%,var(--surface-2) 100%);
+  color:var(--ink);
+  cursor:pointer;font-size:13px;font-weight:600;
   display:inline-flex;align-items:center;gap:5px;
-  font-family:inherit;transition:all .12s;
-  white-space:nowrap;
+  font-family:inherit;white-space:nowrap;
+  box-shadow:0 1px 2px rgba(17,24,39,.06),inset 0 1px 0 rgba(255,255,255,.7);
+  -webkit-tap-highlight-color:transparent;
+  transition:transform .16s cubic-bezier(.34,1.56,.64,1),
+             box-shadow .16s ease, background .16s ease, border-color .16s ease, color .16s ease;
 }
-.btn:hover{background:var(--surface-3)}
+/* La onda: un radial que vive escalado y transparente, y al pulsar
+   aparece de golpe en el centro y se expande al soltar. */
+.btn::after{
+  content:'';position:absolute;inset:0;z-index:-1;border-radius:inherit;
+  background:radial-gradient(circle at center,currentColor 12%,transparent 12.5%);
+  opacity:0;transform:scale(12);
+  transition:transform .55s ease-out, opacity .7s ease-out;
+}
+.btn:active::after{opacity:.22;transform:scale(0);transition:0s}
+@media (hover:hover){
+  .btn:hover{background:#fff;border-color:var(--ink-3);transform:translateY(-1px);
+    box-shadow:0 4px 10px rgba(17,24,39,.09),inset 0 1px 0 rgba(255,255,255,.8)}
+}
+.btn:active{transform:translateY(1px) scale(.975);
+  box-shadow:0 1px 2px rgba(17,24,39,.08) inset}
+.btn:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(90,138,31,.28),0 1px 2px rgba(17,24,39,.06)}
+.btn:disabled{opacity:.5;cursor:not-allowed;transform:none!important;box-shadow:none}
 .btn-primary{
-  background:var(--ink);color:#fff;
+  background:linear-gradient(180deg,#1F2937 0%,var(--ink) 100%);color:#fff;
   border-color:var(--ink);
+  box-shadow:0 2px 6px rgba(17,24,39,.22),inset 0 1px 0 rgba(255,255,255,.14);
 }
-.btn-primary:hover{opacity:.85}
+@media (hover:hover){ .btn-primary:hover{background:linear-gradient(180deg,#374151 0%,#1F2937 100%);border-color:var(--ink);
+  box-shadow:0 5px 14px rgba(17,24,39,.3),inset 0 1px 0 rgba(255,255,255,.18)} }
 /* 260. Botón lime — acción principal con verde DUPPLA y tipografía bold */
 .btn-lime{
-  background:linear-gradient(135deg,#C8E05A 0%,#B0CB40 100%);
+  background:linear-gradient(180deg,#D4E873 0%,#B0CB40 100%);
   color:#0F1117;
-  border-color:var(--lime-accent);
+  border-color:#A6C035;
   font-weight:700;
   letter-spacing:.02em;
-  box-shadow:0 2px 8px rgba(200,224,90,.25);
+  box-shadow:0 2px 8px rgba(176,203,64,.3),inset 0 1px 0 rgba(255,255,255,.55);
 }
-.btn-lime:hover{opacity:.9;box-shadow:0 4px 12px rgba(200,224,90,.35)}
-.btn-danger{color:var(--red);border-color:#FECACA;background:var(--surface)}
-.btn-danger:hover{background:var(--red-bg)}
-.btn-sm{padding:5px 10px;font-size:12px;border-radius:8px}
-.btn-xs{padding:3px 8px;font-size:11px;border-radius:6px}
+@media (hover:hover){ .btn-lime:hover{background:linear-gradient(180deg,#DCEE8C 0%,#BBD64C 100%);border-color:#A6C035;
+  box-shadow:0 6px 18px rgba(176,203,64,.42),inset 0 1px 0 rgba(255,255,255,.6)} }
+.btn-danger{color:var(--red);border-color:#FECACA;background:linear-gradient(180deg,#fff 0%,#FFF7F7 100%)}
+@media (hover:hover){ .btn-danger:hover{background:var(--red-bg);border-color:#F87171;color:#B91C1C} }
+.btn-sm{padding:6px 11px;font-size:12px;border-radius:8px}
+.btn-xs{padding:4px 9px;font-size:11px;border-radius:7px;font-weight:600}
 
 /* ============================================================
    18. FORMULARIOS
@@ -468,9 +566,11 @@ body{
   padding:24px;width:100%;max-width:480px;
   max-height:90vh;overflow-y:auto;
   box-shadow:var(--shadow-lg);
-  animation:modalIn .2s ease;
+  animation:modalIn .26s cubic-bezier(.22,1,.36,1);
 }
-@keyframes modalIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes modalIn{from{opacity:0;transform:translateY(14px) scale(.97)}to{opacity:1;transform:none}}
+.modal-bg.open{animation:fadeIn .18s ease}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
 .modal-header{
   display:flex;justify-content:space-between;
   align-items:center;margin-bottom:20px;
@@ -482,7 +582,9 @@ body{
   width:28px;height:28px;border-radius:6px;
   display:flex;align-items:center;justify-content:center;
 }
-.modal-close:hover{background:var(--border);color:var(--ink)}
+.modal-close{transition:background .15s ease,color .15s ease,transform .15s cubic-bezier(.34,1.56,.64,1);-webkit-tap-highlight-color:transparent}
+.modal-close:hover{background:var(--border);color:var(--ink);transform:rotate(90deg)}
+.modal-close:active{transform:scale(.9)}
 .modal-footer{display:flex;gap:8px;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)}
 
 /* 657. Piloto "minimalista" — más compacto y con menos texto de apoyo.
@@ -721,7 +823,10 @@ body{
        32. SIDEBAR — MENÚ LATERAL
        ============================================================ -->
   <div class="sidebar" id="sidebar">
-    <div class="sidebar-header">
+    <!-- 776. El logo lleva a Inicio. Es lo que todo el mundo intenta en
+         cualquier app, y aquí no hacía nada. -->
+    <div class="sidebar-header logo-link" role="button" tabindex="0" onclick="showPage('inicio')"
+      onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();showPage('inicio')}">
       <div class="sidebar-logo-mark">D</div>
       <div>
         <div class="sidebar-logo-text">DUPPLA</div>
@@ -764,7 +869,8 @@ body{
        33. HEADER MÓVIL
        ============================================================ -->
   <div class="mobile-header">
-    <div class="mobile-logo">
+    <div class="mobile-logo logo-link" role="button" tabindex="0" onclick="showPage('inicio')"
+      onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();showPage('inicio')}">
       <div class="mobile-logo-mark">D</div>
       <div class="mobile-logo-text">DUPPLA</div>
     </div>
@@ -6268,14 +6374,18 @@ function renderClientes() {
       }).join('')}
     </div>` : '';
 
+  // 778. Tocar un cliente abre su ficha: cuántas veces compró, qué se
+  //      lleva, mes a mes y qué debe. La fila entera es el botón — pedir
+  //      puntería sobre el nombre en un celular es pedir demasiado.
   const rows = clientes.map(c => {
     const initials = c.nombre.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
     const fav = Object.entries(c.fav).sort((a,b)=>b[1]-a[1])[0];
-    return `<tr>
+    return `<tr class="fila-click" onclick="abrirFichaCliente('${escAttr(c.nombre)}')" title="Ver historial de ${escAttr(c.nombre)}">
       <td>
         <div style="display:flex;align-items:center;gap:9px">
           <div class="avatar">${initials}</div>
-          <span style="font-weight:500">${c.nombre}</span>
+          <span style="font-weight:600;color:var(--ink)">${escTxt(c.nombre)}</span>
+          <span class="ver-mas">›</span>
         </div>
       </td>
       <td>${c.compras}</td>
@@ -6287,7 +6397,7 @@ function renderClientes() {
 
   document.getElementById('page-clientes').innerHTML = `
     <div class="page-header">
-      <div><div class="page-title">Clientes</div><div class="page-sub">${clientes.length} clientes registrados</div></div>
+      <div><div class="page-title">Clientes</div><div class="page-sub">${clientes.length} clientes · toca uno para ver su historial</div></div>
       ${gruposNombresRepetidos().length
         ? `<button class="btn btn-sm" style="color:var(--amber);border-color:#FDE68A" onclick="abrirUnificarNombres()">🧹 Unificar nombres (${gruposNombresRepetidos().length})</button>`
         : ''}
@@ -7588,6 +7698,136 @@ function ciclosDisponibles() {
   return 24;
 }
 
+// ============================================================
+// 777. CRECIMIENTO MES A MES — lo primero que cuenta la historia
+//
+// Ángel: "quiero que cuando yo le dé a Duppla se vea el crecimiento o
+// decrecimiento mes a mes".
+//
+// La trampa de este gráfico, y la razón por la que casi todos los
+// tableros mienten en el día 5: el mes en curso NO es comparable con un
+// mes cerrado. Si hoy es 8 de octubre y comparas lo que llevas contra
+// todo septiembre, siempre vas a parecer en caída libre.
+//
+// Así que el mes en curso se compara contra los MISMOS días corridos del
+// mes anterior —la misma regla que ya usaba la tarjeta de Vendido (693)—
+// y se dibuja rayado, para que se lea de inmediato que todavía no
+// terminó. Los meses cerrados sí se comparan enteros contra enteros.
+// ============================================================
+const masDias = (f, n) => { const [a,m,d] = f.split('-').map(Number); return fechaLocal(new Date(a, m-1, d + n)); };
+const diasEntreFechas = (f1, f2) => {
+  const [a1,m1,d1] = f1.split('-').map(Number);
+  const [a2,m2,d2] = f2.split('-').map(Number);
+  return Math.round((new Date(a2,m2-1,d2) - new Date(a1,m1-1,d1)) / 86400000);
+};
+
+function crecimientoMesAMes(nMeses) {
+  const nDisp = ciclosDisponibles();
+  const nVer = Math.min(nDisp, Math.max(1, nMeses) - 1);
+  const vendidoEntre = (ini, fin) => DATA.ventas
+    .filter(v => v.fecha >= ini && v.fecha <= fin)
+    .reduce((s,v) => s + ingresoVenta(v), 0);
+
+  const meses = [];
+  for(let i = nVer; i >= 0; i--) {
+    const c = getCicloActual(i);
+    const cAnt = getCicloActual(i + 1);
+    const enCurso = i === 0;
+
+    const vendido = vendidoEntre(c.inicio, c.fin);
+
+    // Contra qué se compara. Un mes cerrado, contra el anterior completo.
+    // El mes en curso, contra el anterior recortado a los días que llevamos.
+    let base, nota;
+    if(enCurso) {
+      const corridos = Math.max(0, diasEntreFechas(c.inicio, today()));
+      const corte = masDias(cAnt.inicio, corridos);
+      base = vendidoEntre(cAnt.inicio, corte < cAnt.fin ? corte : cAnt.fin);
+      nota = 'vs los mismos ' + (corridos + 1) + ' días del mes pasado';
+    } else {
+      base = vendidoEntre(cAnt.inicio, cAnt.fin);
+      nota = 'vs el mes anterior completo';
+    }
+
+    // Sin base no hay porcentaje: de 0 a algo no es "infinito por ciento",
+    // es simplemente el primer mes con ventas.
+    const delta = base > 0 ? Math.round(((vendido - base) / base) * 100) : null;
+
+    meses.push({
+      offset: i, enCurso, vendido, base, delta, nota,
+      etiqueta: enCurso ? 'Este mes' : c.label.replace(/ de \d+$/, '').slice(0,3),
+      completo: enCurso ? 'Este ciclo' : c.label.charAt(0).toUpperCase() + c.label.slice(1).replace(' de ', ' '),
+      anio: c.inicio.slice(0,4)
+    });
+  }
+  if(new Set(meses.map(m => m.anio)).size > 1) {
+    meses.forEach(m => { if(!m.enCurso) m.etiqueta += " '" + m.anio.slice(2); });
+  }
+  return meses;
+}
+
+function crecimientoHtml() {
+  const meses = crecimientoMesAMes(6);
+  const conVentas = meses.filter(m => m.vendido > 0);
+  if(conVentas.length < 2) return '';
+
+  const max = Math.max(...meses.map(m => m.vendido), 1);
+  const actual = meses[meses.length - 1];
+
+  // El titular dice en una frase lo que el gráfico dice en seis columnas.
+  let titular;
+  if(actual.delta === null) {
+    titular = 'Todavía no hay con qué comparar este mes.';
+  } else if(actual.delta > 0) {
+    titular = 'Vas <strong style="color:var(--green)">' + actual.delta + '% arriba</strong> de lo que ibas a esta misma altura del mes pasado.';
+  } else if(actual.delta < 0) {
+    titular = 'Vas <strong style="color:var(--red)">' + Math.abs(actual.delta) + '% abajo</strong> de lo que ibas a esta misma altura del mes pasado.';
+  } else {
+    titular = 'Vas <strong>igual</strong> que a esta misma altura del mes pasado.';
+  }
+
+  const chip = (d) => {
+    if(d === null) return '<span style="font-size:10px;color:var(--ink-3)">—</span>';
+    const sube = d > 0, igual = d === 0;
+    const col = igual ? 'var(--ink-3)' : sube ? 'var(--green)' : 'var(--red)';
+    const bg  = igual ? 'var(--surface-3)' : sube ? 'var(--green-bg)' : 'var(--red-bg)';
+    return '<span style="display:inline-flex;align-items:center;gap:2px;font-size:10px;font-weight:700;'
+      + 'padding:2px 6px;border-radius:20px;background:' + bg + ';color:' + col + ';white-space:nowrap">'
+      + (igual ? '=' : sube ? '▲' : '▼') + (igual ? '' : Math.abs(d) + '%') + '</span>';
+  };
+
+  const columnas = meses.map(m => {
+    const alt = Math.max(4, Math.round((m.vendido / max) * 100));
+    // El mes en curso va rayado: aún no terminó, su barra no es definitiva.
+    const relleno = m.enCurso
+      ? 'background:repeating-linear-gradient(135deg,var(--lime-accent) 0 7px,#E3F09A 7px 14px);border:1.5px solid var(--lime)'
+      : 'background:linear-gradient(180deg,var(--lime-accent) 0%,#A8C63A 100%)';
+    return '<div onclick="verCicloInicio(' + m.offset + ')" title="' + m.completo + ': ' + fmt(m.vendido) + '"'
+      + ' style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:flex-end;cursor:pointer">'
+      + '<div style="font-size:9.5px;font-weight:700;color:var(--ink-2);text-align:center;margin-bottom:4px;'
+        + 'white-space:nowrap;font-variant-numeric:tabular-nums">' + fmtCorto(m.vendido) + '</div>'
+      + '<div style="height:' + alt + '%;border-radius:5px 5px 2px 2px;' + relleno + '"></div>'
+    + '</div>';
+  }).join('');
+
+  const pies = meses.map(m =>
+    '<div style="flex:1;min-width:0;text-align:center">'
+    + '<div style="font-size:10.5px;color:' + (m.enCurso ? 'var(--ink)' : 'var(--ink-3)') + ';font-weight:' + (m.enCurso ? '700' : '400') + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + m.etiqueta + '</div>'
+    + '<div style="margin-top:3px">' + chip(m.delta) + '</div>'
+  + '</div>').join('');
+
+  return '<div class="card" style="padding:16px;margin-bottom:16px">'
+    + '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2);margin-bottom:5px">'
+      + '📈 Cómo vamos mes a mes</div>'
+    + '<div style="font-size:13px;color:var(--ink-2);line-height:1.45;margin-bottom:13px">' + titular + '</div>'
+    + '<div style="display:flex;gap:7px;align-items:stretch;height:118px">' + columnas + '</div>'
+    + '<div style="display:flex;gap:7px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">' + pies + '</div>'
+    + '<div style="font-size:11px;color:var(--ink-3);margin-top:11px;line-height:1.4">'
+      + 'La barra rayada es el mes en curso: todavía no termina, por eso se compara contra '
+      + 'los mismos días del mes pasado y no contra el mes entero.</div>'
+  + '</div>';
+}
+
 function renderInicio() {
   const ciclo = getCicloActual(inicioCicloOffset);
   const cicloAnt = getCicloActual(inicioCicloOffset + 1);
@@ -7911,6 +8151,12 @@ function renderInicio() {
             ? (mora.length ? 'var(--red)' : 'var(--green)')
             : (porCobrar > 0 ? 'var(--red)' : 'var(--green)'), 'cobrar')}
     </div>
+
+    ${/* 777. El crecimiento va justo debajo de los números del ciclo: primero
+          qué pasó este mes, enseguida si eso es mejor o peor que el anterior.
+          Solo en el ciclo en curso — en un ciclo cerrado la pregunta "¿cómo
+          vamos?" ya no tiene sentido. */''}
+    ${esCicloActual ? crecimientoHtml() : ''}
 
     <div style="display:flex;flex-direction:column;gap:12px">
       ${equilibrioHtml}
@@ -9303,7 +9549,12 @@ function renderDeudores() {
         + '<div class="list-card-header">'
           + '<div style="display:flex;align-items:center;gap:10px">'
             + '<div class="avatar">' + initials + '</div>'
-            + '<div><div class="list-card-title">' + d.cliente + '</div>'
+            // 778. También desde Deudores: antes de llamar a cobrar conviene
+            //      saber cuánto ha comprado y cada cuánto vuelve.
+            + '<div><div class="list-card-title nombre-link" role="button" tabindex="0"'
+              + ' onclick="abrirFichaCliente(\'' + escAttr(d.cliente) + '\')"'
+              + ' style="display:inline-flex;align-items:center;gap:4px">'
+              + escTxt(d.cliente) + '<span class="ver-mas">›</span></div>'
               + '<div class="list-card-sub">' + d.ventas.length + ' venta(s) pendiente(s)</div>'
               + moraBadge
             + '</div>'
@@ -11911,11 +12162,15 @@ function comparativoDistHtml() {
     + ciclos.map(c => '<th style="text-align:right;white-space:nowrap">' + c.etiqueta + '</th>').join('')
     + '<th style="text-align:right">Total</th>';
 
+  // 778. Cada fila abre la ficha de ese distribuidor: su historial completo,
+  //      mes a mes, igual que el de un cliente.
   const filasHtml = filas.map(f =>
-    '<tr>'
+    '<tr class="fila-click" onclick="' + (f.suelta ? 'abrirFichaSinVincular()' : "abrirFichaDistribuidor('" + escAttr(f.id) + "')") + '"'
+      + ' title="Ver historial de ' + escAttr(f.nombre) + '">'
     + '<td style="position:sticky;left:0;background:var(--surface);font-weight:600;white-space:nowrap">'
       + '<span style="display:inline-block;width:8px;height:8px;border-radius:3px;background:' + f.color + ';margin-right:6px"></span>'
-      + (f.suelta ? '<span style="color:var(--amber)">' + f.nombre + '</span>' : f.nombre)
+      + (f.suelta ? '<span style="color:var(--amber)">' + escTxt(f.nombre) + '</span>' : escTxt(f.nombre))
+      + '<span class="ver-mas" style="margin-left:5px">›</span>'
     + '</td>'
     + f.meses.map(v => '<td style="text-align:right;font-variant-numeric:tabular-nums;'
         + (v > 0 ? 'color:var(--ink-2)' : 'color:var(--border-2)') + '">'
@@ -11941,7 +12196,7 @@ function comparativoDistHtml() {
           : '')
     + '</div>'
     + '<div style="font-size:11.5px;color:var(--ink-3);margin-bottom:13px;line-height:1.4">'
-      + 'Toca un mes para ver el detalle de ese ciclo más abajo.</div>'
+      + 'Toca un nombre para ver su historial completo, o un mes para ver ese ciclo abajo.</div>'
     + '<div style="display:flex;gap:7px;align-items:stretch;height:155px">' + columnas + '</div>'
     + '<div style="display:flex;gap:7px;margin-top:7px;padding-top:7px;border-top:1px solid var(--border)">' + etiquetasMes + '</div>'
     + '<div style="display:flex;flex-wrap:wrap;gap:10px 16px;margin:13px 0 4px">' + leyenda + '</div>'
@@ -11951,6 +12206,179 @@ function comparativoDistHtml() {
     + '</table></div>'
   + '</div>';
 }
+
+// ============================================================
+// 778. FICHA DE COMPRADOR — el historial de quien sea
+//
+// Ángel: "quiero que cuando le dé click a un nombre salga cuántas veces
+// y qué nos ha comprado, como un historial; también quiero que pase así
+// con los distribuidores, separado por mes".
+//
+// Son la misma ficha. Un cliente y un distribuidor se diferencian en cómo
+// se les factura, no en lo que uno quiere saber de ellos: cuánto ha
+// comprado, cada cuánto vuelve, qué se lleva y si debe algo. Por eso hay
+// UNA función y dos puertas de entrada — si mañana cambia el formato, no
+// hay que acordarse de cambiarlo en dos lados.
+//
+// 779. El nombre nunca se mete crudo en un onclick. "RAICES O'BRIEN"
+//      rompía el atributo y el botón quedaba muerto; con la comilla en el
+//      sitio justo, un nombre podría inyectar código. Se escapa siempre.
+// ============================================================
+const escAttr = (v) => String(v == null ? '' : v)
+  .replace(/\\/g, '\\\\').replace(/'/g, "\\'")
+  .replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+  .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const escTxt = (v) => String(v == null ? '' : v)
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+// Las líneas de producto de una venta, sea simple, múltiple o combo.
+function lineasDeVenta(v) {
+  if(v.esMultiple && Array.isArray(v.productosVenta) && v.productosVenta.length) {
+    return v.productosVenta.map(l => ({ nombre: l.nombre || '(sin nombre)', cant: Number(l.cant || 1) }));
+  }
+  return [{ nombre: v.producto || '(sin nombre)', cant: Number(v.cant || 1) }];
+}
+
+function fichaCompradorHtml(ventas) {
+  if(!ventas.length) {
+    return '<div class="empty-state" style="padding:30px"><div class="empty-state-icon">🧾</div>'
+      + '<div class="empty-state-text">Todavía no tiene compras registradas</div></div>';
+  }
+
+  const orden = [...ventas].sort((a,b) => b.fecha > a.fecha ? 1 : -1);
+  const total   = ventas.reduce((s,v) => s + ingresoVenta(v), 0);
+  const debe    = Math.round(ventas.reduce((s,v) => s + saldoReal(v), 0));
+  const ticket  = Math.round(total / ventas.length);
+  const primera = orden[orden.length - 1].fecha;
+  const ultima  = orden[0].fecha;
+  const diasSinComprar = Math.max(0, diasEntreFechas(ultima, today()));
+
+  let margen = 0, margenConocido = false;
+  ventas.forEach(v => { const m = calcularMargenVenta(v); if(m !== null) { margen += m; margenConocido = true; } });
+
+  // Cada cuánto vuelve: solo tiene sentido con dos compras o más, y se mide
+  // entre días distintos — tres ventas el mismo día son una sola visita.
+  const dias = [...new Set(ventas.map(v => v.fecha))].sort();
+  const cadaCuanto = dias.length > 1
+    ? Math.round(diasEntreFechas(dias[0], dias[dias.length - 1]) / (dias.length - 1))
+    : null;
+
+  const dato = (etiqueta, valor, sub, color) =>
+    '<div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px">'
+    + '<div style="font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)">' + etiqueta + '</div>'
+    + '<div style="font-size:17px;font-weight:800;color:' + (color || 'var(--ink)') + ';margin-top:2px;font-variant-numeric:tabular-nums">' + valor + '</div>'
+    + (sub ? '<div style="font-size:10.5px;color:var(--ink-3);margin-top:2px">' + sub + '</div>' : '')
+  + '</div>';
+
+  const resumen = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:9px;margin-bottom:18px">'
+    + dato('Veces que compró', ventas.length, dias.length !== ventas.length ? 'en ' + dias.length + ' días distintos' : (cadaCuanto !== null ? 'vuelve cada ' + cadaCuanto + ' días' : 'primera compra'))
+    + dato('Total comprado', fmt(total), 'ticket promedio ' + fmt(ticket), 'var(--lime)')
+    + dato('Margen que deja', margenConocido ? fmt(margen) : 'N/D', margenConocido && total > 0 ? Math.round((margen/total)*100) + '% de lo que compra' : 'sin costo registrado', margenConocido ? (margen >= 0 ? 'var(--green)' : 'var(--red)') : 'var(--ink-3)')
+    + dato('Última compra', fCorta(ultima), diasSinComprar === 0 ? 'hoy' : 'hace ' + diasSinComprar + ' día' + (diasSinComprar !== 1 ? 's' : ''), diasSinComprar > 45 ? 'var(--amber)' : 'var(--ink)')
+    + (debe > 0 ? dato('Debe', fmt(debe), 'pendiente de pago', 'var(--red)') : '')
+  + '</div>';
+
+  // ---- Mes a mes ----
+  const nCiclos = ciclosDisponibles();
+  const porMes = [];
+  for(let i = 0; i <= nCiclos; i++) {
+    const c = getCicloActual(i);
+    const vs = ventas.filter(v => v.fecha >= c.inicio && v.fecha <= c.fin);
+    if(!vs.length) continue;
+    porMes.push({
+      etiqueta: i === 0 ? 'Este mes' : c.label.charAt(0).toUpperCase() + c.label.slice(1).replace(' de ', ' '),
+      n: vs.length,
+      total: vs.reduce((s,v) => s + ingresoVenta(v), 0),
+      ventas: vs
+    });
+  }
+  const maxMes = Math.max(...porMes.map(m => m.total), 1);
+  const mesesHtml = '<div style="margin-bottom:18px">'
+    + '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2);margin-bottom:10px">📅 Mes a mes</div>'
+    + porMes.map(m =>
+        '<div style="margin-bottom:10px">'
+        + '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:12.5px;margin-bottom:4px">'
+          + '<span style="color:var(--ink-2);font-weight:600">' + m.etiqueta + '</span>'
+          + '<span style="white-space:nowrap"><strong style="color:var(--ink);font-variant-numeric:tabular-nums">' + fmt(m.total) + '</strong>'
+            + '<span style="color:var(--ink-3);font-size:11px"> · ' + m.n + ' compra' + (m.n !== 1 ? 's' : '') + '</span></span>'
+        + '</div>'
+        + '<div style="height:7px;background:var(--surface-3);border-radius:20px;overflow:hidden">'
+          + '<div style="height:100%;width:' + Math.max(3, Math.round((m.total/maxMes)*100)) + '%;'
+            + 'background:linear-gradient(90deg,var(--lime-accent),#A8C63A);border-radius:20px"></div>'
+        + '</div>'
+      + '</div>').join('')
+  + '</div>';
+
+  // ---- Qué compra ----
+  const prods = {};
+  ventas.forEach(v => {
+    const lineas = lineasDeVenta(v);
+    const ing = ingresoVenta(v);
+    lineas.forEach(l => {
+      prods[l.nombre] = prods[l.nombre] || { nombre: l.nombre, cant: 0, veces: 0, valor: 0 };
+      prods[l.nombre].cant  += l.cant;
+      prods[l.nombre].veces += 1;
+      prods[l.nombre].valor += ing / lineas.length;
+    });
+  });
+  const listaProds = Object.values(prods).sort((a,b) => b.valor - a.valor);
+  const prodsHtml = '<div style="margin-bottom:18px">'
+    + '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2);margin-bottom:9px">🛍️ Qué se lleva</div>'
+    + '<div class="table-wrap"><table class="tbl">'
+      + '<thead><tr><th>Producto</th><th style="text-align:right">Unid.</th><th style="text-align:right">Pedidos</th><th style="text-align:right">Valor</th></tr></thead>'
+      + '<tbody>' + listaProds.map(pr =>
+          '<tr><td style="font-weight:500">' + escTxt(pr.nombre) + '</td>'
+          + '<td style="text-align:right;font-variant-numeric:tabular-nums">' + pr.cant + '</td>'
+          + '<td style="text-align:right;color:var(--ink-3)">' + pr.veces + '</td>'
+          + '<td style="text-align:right;font-weight:600;font-variant-numeric:tabular-nums">' + fmt(Math.round(pr.valor)) + '</td></tr>'
+        ).join('') + '</tbody>'
+    + '</table></div>'
+  + '</div>';
+
+  // ---- Todas las compras ----
+  const comprasHtml = '<div>'
+    + '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2);margin-bottom:9px">🧾 Todas las compras</div>'
+    + '<div class="table-wrap"><table class="tbl">'
+      + '<thead><tr><th>Fecha</th><th>Producto</th><th style="text-align:right">Total</th><th>Estado</th></tr></thead>'
+      + '<tbody>' + orden.map(v => {
+          const saldo = saldoReal(v);
+          return '<tr><td style="color:var(--ink-3);white-space:nowrap">' + fCorta(v.fecha) + '</td>'
+            + '<td style="font-weight:500">' + escTxt(lineasDeVenta(v).map(l => l.cant + '× ' + l.nombre).join(' · ')) + '</td>'
+            + '<td style="text-align:right;font-weight:600;font-variant-numeric:tabular-nums">' + fmt(ingresoVenta(v)) + '</td>'
+            + '<td><span class="badge" style="background:' + (saldo > 0 ? 'var(--amber-bg)' : 'var(--green-bg)') + ';color:' + (saldo > 0 ? 'var(--amber)' : 'var(--green)') + '">'
+              + (saldo > 0 ? 'Debe ' + fmt(saldo) : 'Pagado') + '</span></td></tr>';
+        }).join('') + '</tbody>'
+    + '</table></div>'
+  + '</div>';
+
+  return resumen + mesesHtml + prodsHtml + comprasHtml;
+}
+
+function abrirFicha(titulo, subtitulo, ventas) {
+  document.getElementById('det-title').textContent = titulo;
+  document.getElementById('det-sub').textContent = subtitulo;
+  document.getElementById('det-contenido').innerHTML = fichaCompradorHtml(ventas);
+  openModal('modal-detalle');
+}
+
+window.abrirFichaCliente = (nombre) => {
+  const ventas = DATA.ventas.filter(v => String(v.cliente || '').trim() === String(nombre).trim());
+  abrirFicha(nombre, ventas.length + ' compra' + (ventas.length !== 1 ? 's' : '') + ' registrada' + (ventas.length !== 1 ? 's' : ''), ventas);
+};
+
+window.abrirFichaDistribuidor = (id) => {
+  const d = DATA.distribuidores.find(x => x.id === id);
+  if(!d) return;
+  const ventas = DATA.ventas.filter(v => v.distribuidorId === id);
+  const tipo = { gimnasio:'Gimnasio', persona:'Persona distribuidora', tienda:'Tienda / Local' }[d.tipo] || 'Distribuidor';
+  abrirFicha(d.nombre, tipo + (d.ciudad ? ' · ' + d.ciudad : '') + (d.telefono ? ' · ' + d.telefono : ''), ventas);
+};
+
+// Las ventas de canal distribuidor que nunca se vincularon a un registro.
+window.abrirFichaSinVincular = () => {
+  const ventas = DATA.ventas.filter(v => v.canal === 'distribuidor' && !v.distribuidorId);
+  abrirFicha('Sin vincular', 'Ventas de distribuidor que no están asignadas a nadie', ventas);
+};
 
 function renderDistribuidores() {
   const tipoIco   = { gimnasio:'🏋️', persona:'👤', tienda:'🏪' };
@@ -12165,7 +12593,11 @@ function renderDistribuidores() {
               + ico + (medalla?'<span style="position:absolute;top:-6px;right:-6px;font-size:14px">'+medalla+'</span>':'')
             + '</div>'
             + '<div style="flex:1;min-width:0">'
-              + '<div style="font-size:14px;font-weight:700;color:var(--ink)">' + d.nombre + '</div>'
+              // 778. El nombre es el acceso a la ficha, también desde la tarjeta.
+              + '<div class="nombre-link" onclick="event.stopPropagation();abrirFichaDistribuidor(\'' + escAttr(d.id) + '\')"'
+                + ' role="button" tabindex="0" title="Ver historial de ' + escAttr(d.nombre) + '"'
+                + ' style="font-size:14px;font-weight:700;color:var(--ink);display:inline-flex;align-items:center;gap:4px">'
+                + escTxt(d.nombre) + '<span class="ver-mas">›</span></div>'
               + '<div style="font-size:11px;color:var(--ink-3);margin-top:2px">' + label
                 + (d.ciudad?' · '+d.ciudad:'') + (d.telefono?' · '+d.telefono:'') + '</div>'
               + (d.topProducto?'<div style="font-size:10px;color:var(--ink-3);margin-top:2px">Más compra: '+d.topProducto+'</div>':'')
