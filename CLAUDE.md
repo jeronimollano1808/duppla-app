@@ -961,7 +961,16 @@ La última fila es deliberada: un token calza si **alguna palabra empieza por é
 
 Cada resultado trae ya lo que uno iba a preguntar: cuántas compras, cuánto en total, cuándo fue la última y **cuánto debe** si debe algo. Con el buscador abierto y sin escribir nada, muestra a los que más compran.
 
+**791. Un arreglo que solo apareció al probarlo en producción.** La primera versión mostraba **"OLIMPO GYM." y "OLIMPO GYM" como dos resultados distintos**: el registro del distribuidor lleva punto y algunas ventas no. El dato es así, pero en pantalla parece un error de la app.
+
+Ahora se agrupa por una clave que ignora puntuación y la palabra DISTRIBUIDOR. Con dos cuidados que importan:
+
+- **Solo se agrupa lo idéntico salvo puntuación.** Una variante de verdad distinta —"OLIMPO GIMNASIO"— **sigue saliendo aparte a propósito**: es un nombre mal escrito que hay que unificar (para eso está la herramienta del 715), y esconderlo haría creer que no existe.
+- **Las cifras de un distribuidor son las de SU registro** (por `distribuidorId`), las mismas que muestran el comparativo y la ficha. Si el buscador sumara además las ventas sueltas con su nombre, tres pantallas darían tres números para la misma pregunta. Lo suelto se **avisa** en una etiqueta ámbar (*"⚠️ 2 sin vincular"*) en vez de sumarse en silencio.
+
 **Regla que sale de aquí:** *una función de búsqueda se diseña contra cómo se escribe de afán, no contra cómo está guardado el dato.* Las tildes, el orden de los apellidos y los apodos no son casos raros: son el caso normal.
+
+**Y la otra:** *cuando dos pantallas puedan responder distinto a la misma pregunta, una tiene que ceder y la otra avisar.* Sumar en silencio para que "cuadre" es cómo nacen los números que nadie puede defender.
 
 
 ---

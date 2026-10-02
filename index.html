@@ -12618,6 +12618,23 @@ function normalizarBusqueda(s) {
   return String(s||'').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
 }
 
+// 791. La clave con la que se agrupan dos filas que son la misma persona.
+//      En producción salían "OLIMPO GYM." y "OLIMPO GYM" como dos resultados
+//      distintos —el registro del distribuidor lleva punto y algunas ventas
+//      no— y eso parece un error de la app aunque el dato sea así. Se agrupa
+//      ignorando puntuación y la palabra DISTRIBUIDOR, igual que
+//      normalizarNombreHoja (707).
+//      OJO: agrupa SOLO lo idéntico salvo puntuación. Una variante de verdad
+//      distinta ("OLIMPO GIMNASIO") sigue saliendo aparte a propósito: es un
+//      nombre mal escrito que hay que unificar, y esconderlo haría creer que
+//      no existe.
+function claveBusqueda(s) {
+  return normalizarBusqueda(s)
+    .replace(/\bDISTRIBUIDOR(?:ES)?\b/g, '')
+    .replace(/[^A-Z0-9]+/g, ' ')
+    .trim();
+}
+
 // Un token de la consulta calza si alguna palabra del nombre empieza por él.
 // Así "crea" encuentra "CREATINA" pero "tina" no — buscar por el final de
 // una palabra casi nunca es lo que uno quiere y llena la lista de ruido.
@@ -12647,26 +12664,35 @@ function indiceBuscable() {
   DATA.ventas.forEach(v => {
     const nombre = String(v.cliente||'').trim();
     if(!nombre) return;
-    const k = normalizarBusqueda(nombre);
-    porNombre[k] = porNombre[k] || { nombre, tipo:'cliente', id:null, compras:0, total:0, ultima:'', debe:0 };
+    const k = claveBusqueda(nombre);
+    if(!k) return;
+    porNombre[k] = porNombre[k] || { nombre, tipo:'cliente', id:null, compras:0, total:0, ultima:'', debe:0, sueltas:0 };
     porNombre[k].compras++;
     porNombre[k].total += ingresoVenta(v);
     porNombre[k].debe += saldoReal(v);
     if(v.fecha > porNombre[k].ultima) porNombre[k].ultima = v.fecha;
+    // Venta con el nombre de un distribuidor pero sin vincular a su registro:
+    // no cuenta en su ficha, así que se avisa en vez de sumarla en silencio.
+    if(!v.distribuidorId) porNombre[k].sueltas++;
   });
-  // Un distribuidor registrado manda sobre la entrada por nombre: tiene ficha
-  // propia, teléfono y ciudad. Si no, el mismo gimnasio saldría dos veces.
+
+  // 791. Un distribuidor registrado manda sobre la entrada por nombre: tiene
+  //      ficha propia, ciudad y teléfono. Sus cifras son las de SU registro
+  //      (por distribuidorId), las mismas que muestran el comparativo y la
+  //      ficha — si aquí saliera otro número, una de las dos pantallas estaría
+  //      mintiendo. Lo que quedó suelto con su nombre se avisa aparte.
   DATA.distribuidores.forEach(d => {
-    const k = normalizarBusqueda(d.nombre);
+    const k = claveBusqueda(d.nombre);
     const suyas = DATA.ventas.filter(v => v.distribuidorId === d.id);
-    const base = porNombre[k] || { compras:0, total:0, ultima:'', debe:0 };
+    const previo = porNombre[k];
     porNombre[k] = {
       nombre: d.nombre, tipo:'distribuidor', id: d.id,
-      compras: Math.max(base.compras, suyas.length),
-      total: Math.max(base.total, suyas.reduce((s,v) => s + ingresoVenta(v), 0)),
-      debe: Math.max(base.debe, Math.round(suyas.reduce((s,v) => s + saldoReal(v), 0))),
-      ultima: suyas.reduce((f,v) => v.fecha > f ? v.fecha : f, base.ultima || ''),
-      ciudad: d.ciudad || '', telefono: d.telefono || ''
+      compras: suyas.length,
+      total: suyas.reduce((s,v) => s + ingresoVenta(v), 0),
+      debe: Math.round(suyas.reduce((s,v) => s + saldoReal(v), 0)),
+      ultima: suyas.reduce((f,v) => v.fecha > f ? v.fecha : f, ''),
+      ciudad: d.ciudad || '', telefono: d.telefono || '',
+      sueltas: previo ? previo.sueltas : 0
     };
   });
   return Object.values(porNombre);
@@ -12729,6 +12755,9 @@ function filasBuscador() {
         + '<div style="font-size:11px;color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + sub + '</div>'
       + '</div>'
       + (x.debe > 0 ? '<span class="badge" style="background:var(--red-bg);color:var(--red)">debe ' + fmt(x.debe) + '</span>' : '')
+      + (dist && x.sueltas > 0
+          ? '<span class="badge" style="background:var(--amber-bg);color:var(--amber)" title="Ventas con este nombre que no están vinculadas a su registro">⚠️ ' + x.sueltas + ' sin vincular</span>'
+          : '')
       + '<span class="badge" style="background:' + (dist ? '#EFF6FF' : 'var(--lime-bg)') + ';color:' + (dist ? 'var(--blue)' : 'var(--lime)') + '">'
         + (dist ? '🏋️ Distribuidor' : '👤 Cliente') + '</span>'
     + '</div>';
