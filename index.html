@@ -14170,9 +14170,12 @@ function renderResumenMes() {
       + '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2)">😴 Se vendían y este mes no</div>'
       + '<div style="font-size:11.5px;color:var(--ink-3);margin:3px 0 11px;line-height:1.45">'
         + (R.dormidos.length
-            ? '<strong>' + R.dormidos.length + ' producto' + (R.dormidos.length!==1?'s':'') + '</strong> que se vendía'
-              + (R.dormidos.length!==1?'n':'') + ' en los últimos ' + R.mesesReciente + ' meses y este mes quedó'
-              + (R.dormidos.length!==1?'aron':'') + ' en <strong>cero</strong>. '
+            // 811. Las frases se arman enteras, no pegando sufijos a un verbo.
+            //      "quedó" + "aron" daba «quedóaron» en producción. Conjugar
+            //      por concatenación funciona en inglés y casi nunca en español.
+            ? (R.dormidos.length === 1
+                ? '<strong>1 producto</strong> que se vendía en los últimos ' + R.mesesReciente + ' meses y este mes quedó en <strong>cero</strong>. '
+                : '<strong>' + R.dormidos.length + ' productos</strong> que se vendían en los últimos ' + R.mesesReciente + ' meses y este mes quedaron en <strong>cero</strong>. ')
               + 'No aparecen arriba porque no tienen ninguna venta que contar.'
             : 'Ninguno de los que se vendían en los últimos ' + R.mesesReciente + ' meses se quedó en cero. Bien.')
       + '</div>'
@@ -14180,12 +14183,19 @@ function renderResumenMes() {
           ? '<div class="table-wrap"><table class="tbl">'
             + '<thead><tr><th>Producto</th><th style="text-align:right">Este mes</th>'
               + '<th style="text-align:right">Vendidas antes</th><th>Última venta</th></tr></thead>'
-            + '<tbody>' + R.dormidos.map(d =>
+            // 811. Tope de 20 filas: van ordenados por el que se cayó MÁS
+            //      RECIENTE, así que las primeras son las que importan. En
+            //      producción salían 55 y nadie lee 55 filas.
+            + '<tbody>' + R.dormidos.slice(0, 20).map(d =>
                 '<tr><td style="font-weight:500">' + escTxt(d.nombre) + '</td>'
                 + '<td style="text-align:right;font-weight:700;color:var(--amber)">0</td>'
                 + '<td style="text-align:right;color:var(--ink-3);font-variant-numeric:tabular-nums">' + d.unidadesAntes + '</td>'
                 + '<td style="color:var(--ink-3);white-space:nowrap">' + (d.ultima ? fCorta(d.ultima) : '—') + '</td></tr>').join('')
             + '</tbody></table></div>'
+            + (R.dormidos.length > 20
+                ? '<div style="font-size:11.5px;color:var(--ink-3);margin-top:9px">Se muestran los 20 que se cayeron más '
+                  + 'recientemente, de ' + R.dormidos.length + ' en total.</div>'
+                : '')
           : '')
       + colaViejos
     + '</div>'

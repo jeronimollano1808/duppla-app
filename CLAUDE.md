@@ -1047,6 +1047,8 @@ La gráfica son **barras horizontales**: con quince nombres de producto, las ver
 
 Ahora son dos grupos: **los que se cayeron** —vendían en los últimos 3 ciclos y este mes quedaron en cero, que es lo accionable— van en la tabla, ordenados por el que se cayó más recientemente. Los que llevan más tiempo quietos se cuentan **en una línea** al pie: no se pierden, pero no es una novedad de este mes.
 
+**811. Dos detalles que solo aparecieron mirando la pantalla con datos de verdad.** El texto decía **«quedóaron»**: estaba conjugando el verbo pegando un sufijo (`'quedó' + (n!==1?'aron':'')`). Eso funciona en inglés y casi nunca en español — ahora las dos frases se escriben enteras. Y la tabla salía con **55 filas**; va con tope de 20, que son las que se cayeron más recientemente, y el resto se cuenta al pie.
+
 **Regla que sale de aquí:** *un permiso que solo existe en la interfaz no es un permiso, es una sugerencia.* Y cuando el despliegue de la parte que sí protege queda fuera del alcance de uno, lo honesto es decirlo en grande y dejar los pasos escritos — no entregarlo como si estuviera hecho.
 
 
