@@ -1095,5 +1095,26 @@ Y dice con esas palabras lo que de verdad mide: **quién metió la venta en la a
 Probado con 13 casos (`registradores`): tres autores conviviendo con ventas sin sello, sello en blanco contado como sin asignar, el invariante de que **la suma por autor da el total del mes**, ventas fiadas contadas completas, `pagado` acumulado mayor que el total, meses sin ningún sello, ventas de otros ciclos excluidas, y una venta múltiple contando **una vez** para su autor aunque aporte tres unidades.
 
 
+### 14.31 La dona: una sola gráfica de reparto (comentario 824)
+
+Ángel mandó una infografía de anillos y pidió "este tipo de gráficas" en productos vendidos y en distribuidores. Se construyó **una sola** —`donaHtml` + `repartoParaDona`— y la usan las dos pantallas, para que un anillo signifique siempre lo mismo.
+
+**Qué responde una dona y qué no.** Responde bien "de todo lo del periodo, cuánto se llevó cada quién". No responde comparar dos cosas parecidas —dos pedazos de 18% y 20% nadie los distingue a ojo— ni la evolución mes a mes. Por eso **la tabla se queda** en las dos pantallas: la dona es para el golpe de vista, la tabla para consultar. Y en Distribuidores la dona **no reemplaza** las columnas apiladas: son dos preguntas distintas (quién pesa / cómo va cada mes) y cada una tiene su forma.
+
+**En Resumen del mes** la dona sustituyó las barras horizontales de unidades, por decisión de Ángel. Mide **plata, no unidades**: un producto barato que sale mucho llenaba la barra y no es el que sostiene el mes. Las unidades siguen, en el renglón de cada producto de la leyenda.
+
+**Las reglas que no son de gusto:**
+
+- **Tope de 6 pedazos + "Otros".** Con setenta productos o catorce distribuidores, una dona de setenta tajadas es un disco de colores. Misma regla del 800.
+- **Hueco de 2–3px entre pedazos**, del color del fondo. Sin él, dos colores pegados se leen como uno solo.
+- **El nombre nunca va solo en el color.** Cada pedazo tiene su renglón con nombre, porcentaje y valor. Quien no distingue rojo de verde —y quien mira el celular al sol— lee la gráfica igual.
+- **El color sigue a la entidad, no a su puesto.** En Distribuidores la dona NO reparte colores otra vez: toma el `f.color` que ya trae cada fila, el mismo de las columnas y de la tabla. Si GO UP es azul arriba, es azul en la dona.
+- **Un color de aviso no puede ser también un color de serie.** "Sin vincular" iba a ir en ámbar, como en la tabla — pero el ámbar ya es la serie 4, y dos ámbares en el mismo anillo se leen como el mismo distribuidor. Va en **gris rayado** (un `<pattern>` a 45°) con ⚠️ en el nombre: la textura dice "esto es un cajón, no una entidad" sin gastar un color. Dos grises planos tampoco servían — se probó y "Otros" y "Sin vincular" quedaban idénticos en el anillo.
+
+**La paleta se validó con el script, no a ojo** (`validate_palette.js` de la skill de dataviz): las seis series pasan los cinco chequeos en claro y en oscuro, incluida la separación para daltonismo (ΔE adyacente 9,1 en claro / 8,4 en oscuro). El único WARN es de contraste contra el fondo claro en tres tonos, y lo cubre justo lo que ya hay: etiquetas visibles y tabla completa. El gris de "Otros" sale reprobado a propósito —no es un matiz categórico, es el gris de quitar énfasis—.
+
+**Y se miró renderizada**, que es lo que ningún validador hace: montada en un navegador con datos de prueba (12 productos, 9 distribuidores, ventas sin vincular), en claro y en oscuro, a 430px y a 1200px. De ahí salieron dos arreglos que no se ven en el código: los dos grises indistinguibles, y la leyenda estirándose hasta el borde en pantalla ancha —con el nombre a la izquierda y la cifra a media pantalla de distancia—, ahora con tope de 520px.
+
+
 ---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*
