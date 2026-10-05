@@ -547,6 +547,13 @@ body{
 .bus-fila.activa{background:var(--lime-bg);border-left-color:var(--lime)}
 .bus-fila:active{background:var(--surface-3)}
 
+/* 819. Concepto tocable dentro de un texto. Subrayado punteado: se nota que
+   se puede tocar sin gritarlo como un enlace azul. */
+.concepto{cursor:pointer;border-bottom:1px dotted var(--ink-3);-webkit-tap-highlight-color:transparent}
+@media (hover:hover){ .concepto:hover{border-bottom-color:var(--lime);color:var(--lime)} }
+.concepto:active{opacity:.6}
+.concepto:focus-visible{outline:2px solid var(--lime);outline-offset:2px;border-radius:3px}
+
 /* ============================================================
    804. MODO SOLO LECTURA
    La app escribe los manejadores en el atributo onclick, así que se
@@ -1138,7 +1145,8 @@ body.solo-lectura .barra-sesion{background:var(--blue-bg);border-bottom-color:va
     <!-- 328. Página de distribuidores -->
     <div class="page" id="page-distribuidores"></div>
     <!-- 622. Página de papelera -->
-    <div class="page" id="page-papelera"></div>
+    <!-- 817. `page-papelera` se borró: nada la abría y su contenido está
+         duplicado dentro de Actividad (786). -->
     <!-- 786. Actividad: la bitácora y la papelera, que son la misma pregunta. -->
     <div class="page" id="page-actividad"></div>
 
@@ -1624,54 +1632,43 @@ body.solo-lectura .barra-sesion{background:var(--blue-bg);border-bottom-color:va
       </div>
     </div>
 
-    <!-- 271. Toggle: inventario / manual / combo — 629. oculto al editar una
-         venta múltiple existente (el modo se fuerza a "inventario" para no
-         perder las líneas ya cargadas) -->
-    <div style="display:flex;gap:8px;margin-bottom:12px" id="v-modo-toggle">
-      <button type="button" id="btn-tipo-inv" onclick="setTipoProducto('inventario')"
-        style="flex:1;padding:8px;border-radius:var(--radius);border:2px solid var(--ink);background:var(--ink);color:var(--on-ink);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">
-        📦 Inventario
-      </button>
-      <button type="button" id="btn-tipo-manual" onclick="setTipoProducto('manual')"
-        style="flex:1;padding:8px;border-radius:var(--radius);border:2px solid var(--border);background:var(--surface-2);color:var(--ink-2);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">
-        ✏️ Manual
-      </button>
-      <button type="button" onclick="closeModal('modal-venta');abrirVenderCombo()"
-        style="flex:1;padding:8px;border-radius:var(--radius);border:2px solid var(--border);background:var(--surface-2);color:var(--ink-2);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">
-        🎁 Combo
-      </button>
-    </div>
+    <!--
+         821. Aquí había tres botones de modo (📦 Inventario / ✏️ Manual / 🎁 Combo)
+         y, debajo, un formulario manual completo escondido. Ángel: "hay
+         demasiados botones, necesito que me dejes seleccionar el producto que se
+         vendió, si son varios productos".
 
-    <!-- 272. MODO INVENTARIO — múltiples productos con buscador -->
+         Los tres salieron, y ninguno hacía falta:
+           · Combo → la pestaña Combos se quitó del menú en el 816. Un botón que
+             lleva a una pantalla que ya no existe en el menú es justo el huérfano
+             que Ángel pidió barrer.
+           · Manual → desde el 583 CADA línea puede ser manual ("Escribir uno que
+             no está en la lista"). El modo manual de arriba hacía lo mismo pero
+             peor: un solo producto, sin poder mezclarlo con los de catálogo, y
+             bloqueado al editar. Guardaba exactamente la misma forma de dato que
+             la línea manual (ver guardarVenta: `lineasValidas.length === 1 &&
+             esManual`), así que no se perdió ningún caso.
+           · Inventario → sin los otros dos, un toggle de una sola opción no es
+             un toggle: es un botón que no hace nada.
+
+         Queda un solo camino para registrar: buscar y escoger. Si no está en la
+         lista, se escribe ahí mismo.
+    -->
     <div id="seccion-inventario">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <label class="f-label" style="margin:0">Productos *</label>
-        <button type="button" class="btn btn-sm" onclick="agregarLineaVenta()">+ Producto</button>
+        <label class="f-label" style="margin:0">¿Qué se vendió? *</label>
+        <button type="button" class="btn btn-sm" onclick="agregarLineaVenta()">+ Otro producto</button>
       </div>
       <!-- 273. Buscador de producto — filtra en tiempo real mientras escribes -->
       <div id="v-lineas-container"></div>
     </div>
 
-    <!-- 274. MODO MANUAL — producto fuera del catálogo -->
-    <div id="seccion-manual" style="display:none">
-      <div class="f-group">
-        <label class="f-label">Nombre del producto *</label>
-        <input type="text" id="v-prod-manual" class="f-input" placeholder="Ej: Servicio de asesoría, Kit promocional...">
-      </div>
-      <div class="f-row">
-        <div class="f-group"><label class="f-label">Cantidad</label><input type="number" id="v-cant" class="f-input" value="1" min="1" oninput="calcVentaTotal()"></div>
-        <div class="f-group">
-          <label class="f-label">Precio unitario ($)</label>
-          <input type="number" id="v-precio" class="f-input" oninput="calcVentaTotal();previoCOP('v-precio','prev-vprecio')">
-          <div id="prev-vprecio" style="font-size:11px;margin-top:4px;font-weight:600"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 275. Total calculado -->
+    <!-- 275. Total calculado. 821. readonly + inputmode: nunca se escribe a
+         mano (sale de las líneas), pero si el móvil lo enfoca no debe sacar
+         el teclado de letras. -->
     <div class="f-group">
       <label class="f-label">Total ($)</label>
-      <input type="number" id="v-total" class="f-input" readonly style="opacity:.6;cursor:not-allowed">
+      <input type="number" inputmode="numeric" id="v-total" class="f-input" readonly style="opacity:.6;cursor:not-allowed">
       <div id="prev-vtotal" style="font-size:12px;margin-top:4px;font-weight:700;color:var(--lime)"></div>
     </div>
 
@@ -1707,21 +1704,21 @@ body.solo-lectura .barra-sesion{background:var(--blue-bg);border-bottom-color:va
       <div class="f-row" id="v-mixto-grupo" style="display:none">
         <div class="f-group" style="margin-bottom:0">
           <label class="f-label">💵 Efectivo ($)</label>
-          <input type="number" id="v-mixto-efectivo" class="f-input" placeholder="0" oninput="calcMixtoVenta()">
+          <input type="number" inputmode="numeric" id="v-mixto-efectivo" class="f-input" placeholder="0" oninput="calcMixtoVenta()">
         </div>
         <div class="f-group" style="margin-bottom:0">
           <label class="f-label">📲 Transferencia ($)</label>
-          <input type="number" id="v-mixto-transferencia" class="f-input" placeholder="0" oninput="calcMixtoVenta()">
+          <input type="number" inputmode="numeric" id="v-mixto-transferencia" class="f-input" placeholder="0" oninput="calcMixtoVenta()">
         </div>
       </div>
       <div class="f-row">
         <div class="f-group" style="margin-bottom:0">
           <label class="f-label">Pagó ahora ($)</label>
-          <input type="number" id="v-pagado" class="f-input" placeholder="0" oninput="calcSaldo()">
+          <input type="number" inputmode="numeric" id="v-pagado" class="f-input" placeholder="0" oninput="calcSaldo()">
         </div>
         <div class="f-group" style="margin-bottom:0">
           <label class="f-label">Saldo pendiente ($)</label>
-          <input type="number" id="v-saldo" class="f-input" readonly style="opacity:.6;cursor:not-allowed;background:var(--amber-bg)">
+          <input type="number" inputmode="numeric" id="v-saldo" class="f-input" readonly style="opacity:.6;cursor:not-allowed;background:var(--amber-bg)">
         </div>
       </div>
       <div id="v-estado-pago" style="margin-top:8px;font-size:12px;color:var(--ink-3)">
@@ -3215,10 +3212,15 @@ const MENU = [
   // --- Operación: de vez en cuando ---
   { id:'pedidos', label:'Pedidos', ico:'📦', group:'Operación' },
   { id:'proveedores', label:'Proveedores', ico:'🚚', group:'Operación' },
-  // 177. Combos
-  { id:'combos', label:'Combos', ico:'🎁', group:'Operación' },
+  // 816. Combos sale del menú. Ángel ya había dicho que los combos de la web
+  //      "pueden valer más o menos dependiendo de varias cosas", así que un
+  //      paquete con precio fijo guardado no encaja con cómo vende. Y una
+  //      venta de varios productos se registra igual sin combos.
+  //      La página y sus funciones siguen existiendo: las ventas marcadas
+  //      esCombo que ya están registradas NO se tocan y siguen contando en
+  //      todas las cuentas. Solo deja de haber por dónde crear más.
   // 786. Actividad se comió a Papelera (ver 786). La página vieja sigue
-  //      existiendo y showPage('papelera') sigue sirviendo.
+  //      La página suelta de Papelera se borró en el 817: estaba duplicada.
   { id:'actividad', label:'Actividad', ico:'📋', group:'Operación' },
   // 806. Usuarios — solo para admins (buildNav lo filtra).
   { id:'usuarios', label:'Usuarios', ico:'🔑', group:'Operación', soloAdmin:true },
@@ -3326,7 +3328,7 @@ function firmaRegistro() {
     creadoEnHora: new Date().toTimeString().slice(0,5)
   };
 }
-const autorDe = (r) => r?.creadoPor || 'Sin asignar';
+// 817. `autorDe` se borró: nunca se llegó a usar.
 
 // 808. De qué ubicación sale el stock por defecto. Si quien registra es
 //      Ángel, de lo de Ángel; si es Jero, de lo de Jero. Antes siempre
@@ -3607,7 +3609,6 @@ function renderPage(id) {
     deudores:renderDeudores,
     distribuidores:renderDistribuidores,
     consignacion:renderConsignacion,
-    papelera:renderPapelera,
     actividad:renderActividad
   };
   if(renders[id]) renders[id]();
@@ -3869,11 +3870,9 @@ function checkStockAlerts() {
 let busquedaVentas = '';
 let busquedaInventario = '';
 // 357. ID de la venta múltiple cuyo desglose está expandido en la tabla
-let ventaDetalleId = null;
-window.toggleDetalleVenta = (id) => {
-  ventaDetalleId = ventaDetalleId === id ? null : id;
-  renderVentas();
-};
+// 817. `ventaDetalleId` se borró con toggleDetalleVenta: solo lo escribía
+//      esa función y nadie lo leía.
+// 817. `toggleDetalleVenta` se borró: ningún botón la llamaba.
 
 // 302. Variables globales para métodos de pago — más confiables que dataset
 let metodoPagoVenta = 'efectivo';
@@ -3903,7 +3902,8 @@ const DUPPLA_DIA_INICIO_MES = 3;
 //      (31 días), para no perder las ventas del 3 de junio al cambiar de regla.
 // 726. Ya no se usa: la convención de ciclo es una sola (ver 725). Se deja
 //      declarada por si algún dato viejo la referencia.
-const DUPPLA_MES_TRANSICION = '2026-06';
+// 817. `DUPPLA_MES_TRANSICION` se borró: su propio comentario (726) ya
+//      decía que no se usaba desde la unificación del ciclo.
 
 function getPeriodoFechas() {
   // 231. Calcula el rango de fechas según el período seleccionado
@@ -4011,24 +4011,27 @@ function renderDashboard() {
   const pg = DATA.gastos.filter(g => g.fecha >= inicio && g.fecha <= fin);
 
   const tv = pv.reduce((s,v)=>s+ingresoVenta(v),0);
-  const tg = pg.reduce((s,g)=>s+Number(g.valor||0),0);
-  const util = tv - tg;
+
+  // 818. ANTES: `const util = tv - tg`, con `tg` = la suma de TODOS los gastos
+  //      del periodo, compra de mercancía incluida. Eso no es la utilidad: es
+  //      "lo que salió del banco", y mezclar las dos cosas hacía que el
+  //      Dashboard mostrara un número, Inicio otro y los Informes un tercero.
+  //      Ángel leía el que le tocaba según la pantalla.
+  //
+  //      Ahora los tres pasan por `estadoFinanciero`, que es el único motor:
+  //      utilidad neta = margen bruto − gastos de operación − financieros, y
+  //      la mercancía NO resta (es inventario, ver GLOSARIO.mercancia).
+  //      Un concepto, un nombre, un número.
+  const Fdash = estadoFinanciero(inicio, fin, {});
+  const util = Fdash.utilidadNeta;
+  const gananciaBruta = Fdash.utilidadBruta;
   const hoyV = DATA.ventas.filter(v => v.fecha === today());
   const totalHoy = hoyV.reduce((s,v)=>s+ingresoVenta(v),0);
   const carteraPeriodo = Math.round(pv.reduce((s,v)=>s+Number(v.saldo||0),0));
-
-  // 372. Ganancia bruta del período usando costo histórico (costoUnit) por venta
-  let costoVendidoPeriodo = 0;
-  pv.forEach(v => {
-    const margenReal = calcularMargenVenta(v);
-    if(margenReal !== null) {
-      costoVendidoPeriodo += Number(v.total||0) - margenReal;
-      return;
-    }
-    const prod = DATA.inventario.find(p => p.id === v.prodId);
-    if(prod?.costo) costoVendidoPeriodo += Number(prod.costo) * Number(v.cant||1);
-  });
-  const gananciaBruta = tv - costoVendidoPeriodo;
+  // 818. El cálculo del costo vendido que estaba aquí a mano (comentario 372)
+  //      se borró: `estadoFinanciero` hace exactamente lo mismo y además
+  //      respeta el costo congelado al cerrar el mes (787). Mantener la copia
+  //      significaba que un arreglo en el motor no llegaba al Dashboard.
 
   // 774. El banner de STOCK BAJO se eliminó del Dashboard (ver 774 en MENU).
   //      Era el bloque más grande de la página —una ficha por producto— para
@@ -4257,31 +4260,26 @@ function renderDashboard() {
       <button class="btn btn-sm" onclick="exportarReporte()">↓ CSV</button>
       <button class="btn btn-sm" onclick="exportarReportePDF()">↓ PDF</button>
     </div>
-    ${alertHtml}
+    ${/* 812. Aquí iba la interpolación de alertHtml, el banner de stock bajo.
+          En la limpieza del
+          774 se borró el cálculo y se dejó el uso, así que el template lanzaba
+          ReferenceError ANTES de asignar el innerHTML y el Dashboard quedaba
+          EN BLANCO. Semanas. Y se llevó por delante el acceso a las descargas
+          CSV y PDF, que viven en esta misma cabecera.
+          La lección: al borrar una variable hay que buscar su nombre en TODO
+          el archivo, no solo donde se calculaba. Un template literal no avisa
+          en tiempo de carga — revienta el día que alguien abre la página. */''}
     ${alertDeudoresHtml}
     ${alertRecomprasHtml}
     ${filtroHtml}
     <div class="metrics-grid">
-      <div class="metric-card">
-        <div class="metric-label">Ingresos</div>
-        <div class="metric-value" style="color:var(--lime)">${fmt(tv)}</div>
-        <div class="metric-sub">Hoy: ${fmt(totalHoy)}</div>
-      </div>
-      <div class="metric-card">
-        <div class="metric-label">Gastos</div>
-        <div class="metric-value" style="color:var(--red)">${fmt(tg)}</div>
-        <div class="metric-sub">${pg.length} registros</div>
-      </div>
-      <div class="metric-card" title="Ingresos menos TODOS los gastos del período, incluyendo pedidos a proveedor completos apenas se hacen (no cuando se venden). Un mes de compras grandes puede verse negativo aquí aunque el negocio esté sano.">
-        <div class="metric-label">Utilidad neta <span style="font-size:9px;color:var(--ink-3);cursor:help">ⓘ</span></div>
-        <div class="metric-value" style="color:${util>=0?'var(--green)':'var(--red)'}">${fmt(util)}</div>
-        <div class="metric-sub">${util>=0?'Positivo ✅':'Negativo ⚠️'}</div>
-      </div>
-      <div class="metric-card" title="Ingresos menos el costo SOLO de lo que ya se vendió (FIFO). No incluye gastos operativos ni pedidos aún sin vender — es el margen real por producto, no la caja del negocio.">
-        <div class="metric-label">Ganancia bruta <span style="font-size:9px;color:var(--ink-3);cursor:help">ⓘ</span></div>
-        <div class="metric-value" style="color:var(--blue)">${fmt(gananciaBruta)}</div>
-        <div class="metric-sub">Margen real de lo vendido</div>
-      </div>
+      ${tarjetaConcepto('vendido', fmt(tv), 'Hoy: ' + fmt(totalHoy), 'var(--lime)')}
+      ${tarjetaConcepto('gastos', fmt(Fdash.gastosOperacion + Fdash.gastosFinancieros),
+          Fdash.compras > 0 ? '+ ' + fmt(Fdash.compras) + ' de mercancía' : pg.length + ' registros', 'var(--red)')}
+      ${tarjetaConcepto('utilidadNeta', fmt(util),
+          Fdash.compras > 0 ? 'la mercancía no entra aquí' : (util>=0?'Positivo':'Negativo'),
+          util>=0?'var(--green)':'var(--red)')}
+      ${tarjetaConcepto('margenBruto', fmt(gananciaBruta), 'lo que dejó lo vendido', 'var(--blue)')}
       <div class="metric-card">
         <div class="metric-label">Ventas</div>
         <div class="metric-value">${pv.length}</div>
@@ -4626,17 +4624,12 @@ window.abrirModalVenta = () => {
     document.getElementById('v-edit-id').value = '';
     document.getElementById('modal-venta-title').textContent = 'Registrar venta';
     document.getElementById('btn-guardar-venta').textContent = 'Registrar venta';
-    document.getElementById('v-modo-toggle').style.display = 'flex';
     document.getElementById('v-fecha').value = today();
     document.getElementById('v-pagado').value = '';
     document.getElementById('v-saldo').value = '';
     document.getElementById('v-estado-pago').textContent = 'Completa el total para ver el estado de pago';
-    const mp = document.getElementById('v-prod-manual');
-    if(mp) mp.value = '';
-    const vc = document.getElementById('v-cant');
-    if(vc) vc.value = '1';
-    const vp = document.getElementById('v-precio');
-    if(vp) vp.value = '';
+    // 821. Ya no hay campos manuales de arriba que resetear (v-prod-manual,
+    //      v-cant, v-precio se fueron con el modo manual).
     document.getElementById('v-total').value = '';
     document.getElementById('prev-vtotal').textContent = '';
     // 657. FIX CRÍTICO — el modal reutilizado dejaba "pegados" el canal, el
@@ -4666,7 +4659,7 @@ window.abrirModalVenta = () => {
     if(mixtoGrupo) mixtoGrupo.style.display = 'none';
     document.getElementById('v-mixto-efectivo').value = '';
     document.getElementById('v-mixto-transferencia').value = '';
-    setTipoProducto('inventario');
+    prepararLineasVenta();   // 821
     setMetodoPago('efectivo');
   }, 30);
 };
@@ -4760,21 +4753,13 @@ window.calcMixtoCombo = () => {
   calcSaldoCombo();
 };
 
-window.setTipoProducto = (tipo) => {
-  const esInv = tipo === 'inventario';
-  document.getElementById('seccion-inventario').style.display = esInv ? 'block' : 'none';
-  document.getElementById('seccion-manual').style.display = esInv ? 'none' : 'block';
-  const btnInv = document.getElementById('btn-tipo-inv');
-  const btnMan = document.getElementById('btn-tipo-manual');
-  btnInv.style.background = esInv ? 'var(--ink)' : 'var(--surface-2)';
-  btnInv.style.color = esInv ? 'var(--on-ink)' : 'var(--ink-2)';
-  btnInv.style.borderColor = esInv ? 'var(--ink)' : 'var(--border)';
-  btnMan.style.background = esInv ? 'var(--surface-2)' : 'var(--ink)';
-  btnMan.style.color = esInv ? 'var(--ink-2)' : 'var(--on-ink)';
-  btnMan.style.borderColor = esInv ? 'var(--border)' : 'var(--ink)';
-  if(esInv) renderLineasVenta();
+// 821. `setTipoProducto` se borró junto con el toggle de modos. Lo único que
+//      hacía de verdad era pintar tres botones y mostrar/ocultar la sección
+//      manual; lo que queda —dibujar las líneas y recalcular— se llama directo.
+function prepararLineasVenta() {
+  renderLineasVenta();
   calcVentaTotal();
-};
+}
 
 // 278. Renderiza líneas de productos con buscador
 // 655. contenidoLineaVenta — parte de la línea de venta que cambia con la
@@ -4800,16 +4785,20 @@ function contenidoLineaVenta(i) {
       const subtotalManual = fmt((l.cant||1)*(l.precio||0));
       const nombreVal = (l.nombre||'').replace(/"/g, '&quot;');
       contenido = '<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--amber-bg);border-radius:8px;margin-bottom:8px">'
-        + '<span style="font-size:12px;font-weight:600;color:var(--amber-ink);flex:1">✏️ Producto manual</span>'
-        + '<button type="button" onclick="desactivarManualLinea(' + i + ')" style="background:none;border:none;color:var(--ink-3);cursor:pointer;font-size:11px;text-decoration:underline">Buscar en catálogo</button>'
+        + '<span style="font-size:12px;font-weight:600;color:var(--amber-ink);flex:1">✏️ Escrito a mano</span>'
+        + '<button type="button" onclick="desactivarManualLinea(' + i + ')" style="background:none;border:none;color:var(--ink-3);cursor:pointer;font-size:11px;text-decoration:underline">Buscar en la lista</button>'
       + '</div>'
       + '<input type="text" class="f-input" placeholder="Nombre del producto" value="' + nombreVal + '" '
         + 'data-idx="' + i + '" data-tipo="nombre" oninput="actualizarManualLinea(this)" style="font-size:13px;margin-bottom:8px">'
+      // 821. inputmode="numeric" en cantidad y precio. `type="number"` no basta:
+      //      en el teclado del móvil sigue saliendo la fila de símbolos y hay que
+      //      cambiar de teclado para escribir un precio. Ángel: "cuando yo esté
+      //      colocando el precio, despliégame el teclado que es solo números".
       + '<div style="display:grid;grid-template-columns:80px 1fr 1fr;gap:8px;align-items:end">'
         + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Cant.</label>'
-          + '<input type="number" class="f-input" value="' + (l.cant||1) + '" min="1" data-idx="' + i + '" data-tipo="cant" oninput="actualizarManualLinea(this)" style="font-size:13px;text-align:center;padding:7px 6px"></div>'
+          + '<input type="number" inputmode="numeric" class="f-input" value="' + (l.cant||1) + '" min="1" data-idx="' + i + '" data-tipo="cant" oninput="actualizarManualLinea(this)" style="font-size:13px;text-align:center;padding:7px 6px"></div>'
         + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Precio ($)</label>'
-          + '<input type="number" class="f-input" value="' + (l.precio||0) + '" data-idx="' + i + '" data-tipo="precio" oninput="actualizarManualLinea(this)" style="font-size:13px;padding:7px 8px"></div>'
+          + '<input type="number" inputmode="numeric" class="f-input" value="' + (l.precio||0) + '" data-idx="' + i + '" data-tipo="precio" oninput="actualizarManualLinea(this)" style="font-size:13px;padding:7px 8px"></div>'
         + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Subtotal</label>'
           + '<div style="font-size:13px;font-weight:700;color:var(--lime);padding:7px 0">' + subtotalManual + '</div></div>'
       + '</div>';
@@ -4823,13 +4812,19 @@ function contenidoLineaVenta(i) {
           return '<div onclick="seleccionarProductoLinea(' + i + ',\'' + p.id + '\')" '
             + 'style="padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px" '
             + 'onmouseover="this.style.background=\'var(--surface-2)\'" onmouseout="this.style.background=\'var(--surface)\'">'
+            // 821. Antes decía "Stock: N · $precio". El stock se quitó: el 814 lo
+            //      sacó de la pestaña Inventario porque nunca se hizo conteo
+            //      físico, y un número inventado al lado del producto solo sirve
+            //      para que alguien dude de una venta que ya ocurrió.
             + '<div style="font-weight:500;color:var(--ink)">' + p.nombre + '</div>'
-            + '<div style="color:var(--ink-3);font-size:11px">Stock: ' + p.stock + ' · ' + fmt(p.pventa) + '</div>'
+            + '<div style="color:var(--ink-3);font-size:11px">' + (p.marca ? p.marca + ' · ' : '') + fmt(p.pventa) + '</div>'
             + '</div>';
         });
       }
       contenido = '<div style="max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--surface);margin-bottom:8px">' + resultados + '</div>'
-        + '<button type="button" onclick="activarManualLinea(' + i + ')" style="background:none;border:none;color:var(--blue);cursor:pointer;font-size:11px;text-decoration:underline">📝 Agregar producto manual</button>';
+        // 821. Este enlace es ahora el ÚNICO camino a un producto fuera de
+        //      catálogo, así que dice qué resuelve y no cómo se llama por dentro.
+        + '<button type="button" onclick="activarManualLinea(' + i + ')" style="background:none;border:none;color:var(--blue);cursor:pointer;font-size:11.5px;text-decoration:underline">✏️ No está en la lista — escribirlo a mano</button>';
     } else {
       // Producto seleccionado — botones de tipo de precio
       let tiposBtns = '';
@@ -4858,16 +4853,25 @@ function contenidoLineaVenta(i) {
       let ubicacionHtml = '';
       if(tieneReparto) {
         // 808. Arranca en la ubicación de quien registra, no siempre en Jero.
+        // 821. Dos cambios, por la misma razón (el stock no es un dato real):
+        //      · se quitaron los contadores "(3)" del rótulo;
+        //      · se quitó el `disabled` cuando la ubicación marcaba 0 unidades.
+        //        Ese disabled era un bloqueo escondido del tipo que el 813
+        //        quitó del resto de la app: decidía por Ángel de dónde salió un
+        //        producto basándose en un conteo que nunca se hizo. Encima
+        //        estaba roto: metía un SEGUNDO atributo style en el mismo botón
+        //        y el navegador ignora el repetido, así que el botón se veía
+        //        normal pero no respondía. Peor combinación posible.
         if(!l.ubicacion) l.ubicacion = ubicacionConStock({stockJero:sj, stockAngel:sa}, l.cant);
-        ubicacionHtml = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">'
-          + '<button type="button" onclick="seleccionarUbicacionLinea(' + i + ',\'jero\')" '
-            + 'style="padding:6px 4px;border-radius:6px;border:2px solid ' + (l.ubicacion==='jero'?'var(--ink)':'var(--border)') + ';'
-            + 'background:' + (l.ubicacion==='jero'?'var(--ink)':'var(--surface)') + ';color:' + (l.ubicacion==='jero'?'var(--on-ink)':'var(--ink-2)') + ';cursor:pointer;font-size:11px;font-weight:600" '
-            + (sj<=0?'disabled style="opacity:.4;cursor:not-allowed"':'') + '>👤 Jero (' + sj + ')</button>'
-          + '<button type="button" onclick="seleccionarUbicacionLinea(' + i + ',\'angel\')" '
-            + 'style="padding:6px 4px;border-radius:6px;border:2px solid ' + (l.ubicacion==='angel'?'var(--ink)':'var(--border)') + ';'
-            + 'background:' + (l.ubicacion==='angel'?'var(--ink)':'var(--surface)') + ';color:' + (l.ubicacion==='angel'?'var(--on-ink)':'var(--ink-2)') + ';cursor:pointer;font-size:11px;font-weight:600" '
-            + (sa<=0?'disabled style="opacity:.4;cursor:not-allowed"':'') + '>👤 Ángel (' + sa + ')</button>'
+        const btnUbic = (clave, etiqueta) =>
+          '<button type="button" onclick="seleccionarUbicacionLinea(' + i + ',\'' + clave + '\')" '
+            + 'style="padding:6px 4px;border-radius:6px;border:2px solid ' + (l.ubicacion===clave?'var(--ink)':'var(--border)') + ';'
+            + 'background:' + (l.ubicacion===clave?'var(--ink)':'var(--surface)') + ';'
+            + 'color:' + (l.ubicacion===clave?'var(--on-ink)':'var(--ink-2)') + ';'
+            + 'cursor:pointer;font-size:11px;font-weight:600">👤 ' + etiqueta + '</button>';
+        ubicacionHtml = '<div style="font-size:10px;color:var(--ink-3);margin-bottom:4px">¿De dónde salió?</div>'
+          + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">'
+          + btnUbic('jero','Jero') + btnUbic('angel','Ángel')
         + '</div>';
       }
 
@@ -4879,9 +4883,9 @@ function contenidoLineaVenta(i) {
         + ubicacionHtml
         + '<div style="display:grid;grid-template-columns:80px 1fr 1fr;gap:8px;align-items:end">'
           + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Cant.</label>'
-            + '<input type="number" class="f-input" value="' + (l.cant||1) + '" min="1" data-idx="' + i + '" data-tipo="cant" oninput="actualizarDatosLinea(this)" style="font-size:13px;text-align:center;padding:7px 6px"></div>'
-          + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Precio ($)</label>'
-            + '<input type="number" class="f-input" value="' + (l.precio||0) + '" data-idx="' + i + '" data-tipo="precio" oninput="actualizarDatosLinea(this)" style="font-size:13px;padding:7px 8px"></div>'
+            + '<input type="number" inputmode="numeric" class="f-input" value="' + (l.cant||1) + '" min="1" data-idx="' + i + '" data-tipo="cant" oninput="actualizarDatosLinea(this)" style="font-size:13px;text-align:center;padding:7px 6px"></div>'
+          + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Precio ($)</label>'   /* 821. teclado numérico */
+            + '<input type="number" inputmode="numeric" class="f-input" value="' + (l.precio||0) + '" data-idx="' + i + '" data-tipo="precio" oninput="actualizarDatosLinea(this)" style="font-size:13px;padding:7px 8px"></div>'
           + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Subtotal</label>'
             + '<div style="font-size:13px;font-weight:700;color:var(--lime);padding:7px 0">' + subtotal + '</div></div>'
         + '</div>';
@@ -5016,23 +5020,16 @@ window.actualizarDatosLinea = (el) => {
 };
 
 
-// 290. fillVentaPrecio y seleccionarPrecio — mantenidas por compatibilidad
 //      Ya no se usan en el nuevo modal multi-producto pero pueden ser llamadas
 //      desde código antiguo. Las dejamos como no-ops seguras.
-window.fillVentaPrecio = () => {};
-window.seleccionarPrecio = (tipo) => {};
+// 817. `fillVentaPrecio` se borró: era un no-op "por compatibilidad".
+// 817. `seleccionarPrecio` se borró: también era un no-op.
 
 window.calcVentaTotal = () => {
-  // 284. Si estamos en modo inventario, sumamos todas las líneas
-  const esInv = document.getElementById('seccion-inventario')?.style.display !== 'none';
-  let total = 0;
-  if(esInv) {
-    total = ventaLineas.reduce((s,l) => s + ((l.cant||1)*(l.precio||0)), 0);
-  } else {
-    const c = Number(document.getElementById('v-cant')?.value)||0;
-    const p = Number(document.getElementById('v-precio')?.value)||0;
-    total = c * p;
-  }
+  // 284/821. El total es la suma de las líneas. Punto. Antes había que preguntar
+  //          antes si el formulario estaba en modo inventario o en modo manual,
+  //          y ese `if` era el único motivo por el que existía el toggle.
+  const total = ventaLineas.reduce((s,l) => s + ((l.cant||1)*(l.precio||0)), 0);
   document.getElementById('v-total').value = total;
   const prevTotal = document.getElementById('prev-vtotal');
   if(prevTotal) prevTotal.textContent = total > 0 ? '→ ' + fmt(total) + ' COP' : '';
@@ -5125,28 +5122,14 @@ window.guardarVenta = async () => {
   const mixtoEfectivo = metodoPago === 'mixto' ? Number(document.getElementById('v-mixto-efectivo').value)||0 : null;
   const mixtoTransferencia = metodoPago === 'mixto' ? Number(document.getElementById('v-mixto-transferencia').value)||0 : null;
 
-  const esManual = document.getElementById('seccion-manual').style.display !== 'none';
-
-  if(esManual) {
-    // 635. El modo manual no es alcanzable mientras se edita una venta
-    // múltiple (el toggle queda oculto) — si de alguna forma llega aquí,
-    // evitamos crear una venta duplicada en vez de actualizar la original.
-    if(editId) { alert('No se puede cambiar a modo manual mientras editas esta venta'); return; }
-    // Modo manual — un solo producto libre
-    const nombreManual = document.getElementById('v-prod-manual').value.trim();
-    const cant = Number(document.getElementById('v-cant')?.value)||1;
-    const precio = Number(document.getElementById('v-precio')?.value)||0;
-    if(!fecha||!nombreManual||!cant||!precio) { alert('Completa fecha, nombre del producto, cantidad y precio'); return; }
-    await addDoc(collection(db,'ventas'), { ...firmaRegistro(),
-      fecha, canal, producto:nombreManual, prodId:null, esManual:true,
-      cant, precio, total, cliente, nota, tipoPrecio:'publico',
-      metodoPago, pagado, saldo, estadoPago, abonos:[],
-      mixtoEfectivo, mixtoTransferencia, costoUnit:null, // 369. Sin costo conocido — fuera de catálogo
-      distribuidorId: distribuidorId || null, createdAt:serverTimestamp()
-    });
-    await pushNotif('💰 Nueva venta', nombreManual + (cliente?' — '+cliente:'') + ' · ' + fmt(total), 'venta', {seccion:'ventas'});
-
-  } else {
+  // 821. Aquí vivía la rama del "modo manual" de arriba: leía v-prod-manual /
+  //      v-cant / v-precio y escribía su propio addDoc. Se fue completa con el
+  //      toggle. Lo importante: NO se perdió el caso de uso. Una línea manual
+  //      única cae más abajo en `lineasValidas.length === 1 && esManual` y
+  //      escribe el MISMO documento (esManual:true, prodId:null, costoUnit:null),
+  //      con dos ventajas: se puede mezclar con productos de catálogo en la
+  //      misma venta, y se puede editar después (la rama vieja lo prohibía).
+  {
     // 636. Si estamos editando, devolvemos primero el stock de la venta
     // original — así las validaciones de abajo ven el stock real
     // disponible, sin importar si el producto/cantidad cambiaron o no.
@@ -5166,26 +5149,18 @@ window.guardarVenta = async () => {
 
     // Verificamos stock de todos los productos de catálogo (las líneas
     // manuales no tienen stock que descontar — 587)
+    // 813/823. Este bucle comprobaba el stock para poder bloquear la venta. El
+    //      813 quitó el bloqueo y dejó el bucle calculando tres variables que
+    //      nadie leía (`stockTotalProd`, `tieneUbicacionAsignada`,
+    //      `ubicacionLinea`). Lo único que seguía haciendo falta es avisar si
+    //      el producto de la línea ya no existe en el catálogo, porque eso sí
+    //      rompe el guardado de más abajo. Eso es lo que queda.
     for(const l of lineasValidas) {
       if(l.esManual) continue;
-      const prod = DATA.inventario.find(p => p.id === l.prodId);
-      if(!prod) { alert('Producto no encontrado: ' + l.nombre); return; }
-      // 537. FIX DEFINITIVO: 'prod.stock' (el total) es SIEMPRE la fuente de
-      //      verdad para saber si hay suficiente inventario. El desglose
-      //      Jero/Ángel es solo informativo para elegir de dónde descontar,
-      //      pero nunca debe poder BLOQUEAR una venta si el total alcanza —
-      //      antes, si stockJero/stockAngel estaban desincronizados con
-      //      stock (ej: el producto se editó sin tocar el campo Stock y
-      //      nunca se le asignó reparto), la venta se bloqueaba aunque
-      //      hubiera unidades reales disponibles.
-      const stockTotalProd = Number(prod.stock||0);
-      if(stockTotalProd < l.cant) { alert('Stock insuficiente para ' + prod.nombre + '. Disponible: ' + stockTotalProd); return; }
-
-      // 538. Determinamos la ubicación SOLO para saber de dónde descontar
-      //      al guardar — nunca para bloquear. Si el desglose no alcanza
-      //      en la ubicación "ideal", igual se permite (se ajusta al guardar).
-      const tieneUbicacionAsignada = prod.stockJero != null || prod.stockAngel != null;
-      const ubicacionLinea = l.ubicacion || ubicacionConStock(prod, l.cant);   // 808
+      if(!DATA.inventario.some(p => p.id === l.prodId)) {
+        alert('Producto no encontrado: ' + l.nombre);
+        return;
+      }
     }
 
     // 288. Si es una sola línea, registramos como venta simple (compatible con historial)
@@ -5208,7 +5183,9 @@ window.guardarVenta = async () => {
       const prod = DATA.inventario.find(p => p.id === l.prodId);
       // 453. Descontamos del stock de la ubicación elegida (Jero/Ángel) si el
       //      producto tiene reparto; si no, simplemente descuenta del total.
-      const tieneUbic1 = prod.stockJero != null || prod.stockAngel != null;
+      // 823. `tieneUbic1` se borró: se calculaba y nadie lo leía. Quien decide
+      //      de dónde descontar es `construirUpdateStockUbicacion`, que ya
+      //      mira por su cuenta si el producto tiene reparto.
       const ubicacionFinal1 = l.ubicacion || ubicacionConStock(prod, l.cant);   // 808
       const updateStock1 = construirUpdateStockUbicacion(prod, l.cant, ubicacionFinal1);
 
@@ -5247,7 +5224,6 @@ window.guardarVenta = async () => {
           continue;
         }
         const prod = DATA.inventario.find(p => p.id === l.prodId);
-        const tieneUbic2 = prod.stockJero != null || prod.stockAngel != null;
         const ubicacionFinal2 = l.ubicacion || ubicacionConStock(prod, l.cant);   // 808
         const updateStock2 = construirUpdateStockUbicacion(prod, l.cant, ubicacionFinal2);
 
@@ -5637,11 +5613,10 @@ window.editarVentaMultiple = (id) => {
     document.getElementById('v-edit-id').value = id;
     document.getElementById('modal-venta-title').textContent = 'Editar venta';
     document.getElementById('btn-guardar-venta').textContent = 'Guardar cambios';
-    // 629. Forzamos modo inventario y ocultamos el toggle — cambiar de modo
-    // mientras editas perdería las líneas ya cargadas.
-    document.getElementById('v-modo-toggle').style.display = 'none';
-    setTipoProducto('inventario');
-    renderLineasVenta();
+    // 629/821. Ya no hay toggle que ocultar: el riesgo que describía el 629
+    //          —cambiar de modo a mitad de una edición y perder las líneas
+    //          cargadas— desapareció con el modo manual de arriba.
+    prepararLineasVenta();
 
     document.getElementById('v-fecha').value = venta.fecha || today();
     document.getElementById('v-canal').value = venta.canal || 'directo';
@@ -5815,12 +5790,13 @@ window.guardarEditarVenta = async () => {
     const prodOriginalData = DATA.inventario.find(p => p.id === prodOriginal);
     if(prodOriginalData)
       await updateDoc(doc(db,'inventario',prodOriginal), { stock: prodOriginalData.stock + cantOriginal });
-    if(prodNuevoData.stock < cantNueva) { alert('Stock insuficiente. Disponible: ' + prodNuevoData.stock); return; }
+    // 813. Sin bloqueo por stock (ver guardarVenta).
     await updateDoc(doc(db,'inventario',prodNuevo), { stock: prodNuevoData.stock - cantNueva });
   } else if(cantNueva !== cantOriginal) {
     const diff = cantOriginal - cantNueva;
     const nuevoStock = prodNuevoData.stock + diff;
-    if(nuevoStock < 0) { alert('Stock insuficiente. Solo hay ' + prodNuevoData.stock + ' unidades'); return; }
+    // 813. Se permite que el stock quede negativo: es la verdad —se vendió algo
+    //      que la app no sabía que había— y truncarlo en cero sería inventar.
     await updateDoc(doc(db,'inventario',prodNuevo), { stock: nuevoStock });
   }
 
@@ -6045,214 +6021,22 @@ window.exportarReportePDF = () => {
 // Lista de productos con stock, precios y ajuste rápido
 // ============================================================
 function renderInventario() {
-  const low = DATA.inventario.filter(p => p.stock <= (p.stockMinimo||5));
-  // 265. Alertas de stock bajo en tarjetas individuales
-  function tarjetaStock(p) {
-    const esAgotado = p.stock === 0;
-    const bg = esAgotado ? 'var(--red-bg)' : 'var(--amber-bg)';
-    const border = esAgotado ? 'var(--red-bd)' : 'var(--amber-bd)';
-    const color = esAgotado ? 'var(--red)' : 'var(--amber)';
-    const ico = esAgotado ? '🚫' : '⚠️';
-    const label = esAgotado ? 'AGOTADO' : p.stock + ' uds.';
-    const nombreSeg = p.nombre.replace(/'/g, "\'");
-    return '<div style="background:' + bg + ';border:1px solid ' + border + ';border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:4px">'
-      + '<div style="font-size:10px;font-weight:700;color:' + color + ';text-transform:uppercase;letter-spacing:.05em">' + ico + ' ' + label + '</div>'
-      + '<div style="font-size:12px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + p.nombre + '</div>'
-      + '<div style="font-size:10px;color:var(--ink-3)">' + (p.marca||'') + '</div>'
-      + '<button onclick="abrirAjuste(\'' + p.id + '\',\'' + nombreSeg + '\',' + p.stock + ')" style="margin-top:4px;padding:4px 8px;border-radius:6px;border:1px solid ' + border + ';background:transparent;color:' + color + ';font-size:10px;font-weight:600;cursor:pointer">+ Ajustar stock</button>'
-      + '</div>';
-  }
-  const alertHtml = low.length
-    ? '<div style="margin-bottom:16px">'
-      + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">'
-        + '<span>⚠️</span>'
-        + '<span style="font-size:11px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:.07em">'
-          + low.length + ' producto' + (low.length>1?'s':'') + ' con stock bajo'
-        + '</span>'
-      + '</div>'
-      + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px">'
-        + low.map(tarjetaStock).join('')
-      + '</div>'
-    + '</div>'
-    : '';
-
-
-  // 160. Calculamos el resumen de capital invertido en inventario
-  //      capitalCosto = suma de (costo × stock) de todos los productos
-  //      capitalPventa = valor del inventario a precio de venta público
-  //      gananciaEsperada = lo que ganaríamos si vendemos todo al precio público
-  const capitalCosto = DATA.inventario.reduce((s,p) =>
-    s + (Number(p.costo||0) * Number(p.stock||0)), 0);
-  const capitalPventa = DATA.inventario.reduce((s,p) =>
-    s + (Number(p.pventa||0) * Number(p.stock||0)), 0);
-  const gananciaEsperada = capitalPventa - capitalCosto;
-  const totalUnidades = DATA.inventario.reduce((s,p) => s + Number(p.stock||0), 0);
-  const totalProductos = DATA.inventario.length;
-
-  // 161. Resumen visual de capital en tarjetas métricas
-  const capitalHtml = `
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px">
-      <div class="metric-card">
-        <div class="metric-label">Capital invertido</div>
-        <div class="metric-value" style="font-size:18px;color:var(--blue)">${fmt(capitalCosto)}</div>
-        <div class="metric-sub">A precio de costo</div>
-      </div>
-      <div class="metric-card">
-        <div class="metric-label">Valor del inventario</div>
-        <div class="metric-value" style="font-size:18px;color:var(--lime)">${fmt(capitalPventa)}</div>
-        <div class="metric-sub">A precio público</div>
-      </div>
-      <div class="metric-card">
-        <div class="metric-label">Ganancia esperada</div>
-        <div class="metric-value" style="font-size:18px;color:${gananciaEsperada>=0?'var(--green)':'var(--red)'}">${fmt(gananciaEsperada)}</div>
-        <div class="metric-sub">Si se vende todo</div>
-      </div>
-      <div class="metric-card">
-        <div class="metric-label">Total en stock</div>
-        <div class="metric-value" style="font-size:18px">${totalUnidades}</div>
-        <div class="metric-sub">${totalProductos} productos</div>
-      </div>
-    </div>`;
-
-  // 396. ROTACIÓN DE INVENTARIO / CAPITAL MUERTO
-  //      Para cada producto buscamos la fecha de su última venta (considerando
-  //      ventas normales, múltiples y combos) y calculamos cuánto capital
-  //      (a costo) está "congelado" en productos sin movimiento reciente.
-  const HOY_ROT = new Date();
-  const UMBRAL_DIAS_MUERTO = 45; // más de 45 días sin venta = capital muerto
-
-  // 420. FIX RENDIMIENTO: precalculamos la última venta de TODOS los productos
-  //      en un solo recorrido de DATA.ventas, en vez de recorrer todas las ventas
-  //      una vez POR CADA producto (era O(productos × ventas), ahora es O(ventas))
-  const ultimaVentaPorProducto = {};
-  DATA.ventas.forEach(v => {
-    const registrar = (prodId, fecha) => {
-      if(!prodId || !fecha) return;
-      if(!ultimaVentaPorProducto[prodId] || fecha > ultimaVentaPorProducto[prodId]) ultimaVentaPorProducto[prodId] = fecha;
-    };
-    if(v.prodId) registrar(v.prodId, v.fecha);
-    if(v.esMultiple && v.productosVenta) v.productosVenta.forEach(p => registrar(p.prodId, v.fecha));
-    if(v.esCombo && v.productosCombo) v.productosCombo.forEach(p => registrar(p.prodId, v.fecha));
-  });
-  function ultimaVentaDeProducto(prodId) { return ultimaVentaPorProducto[prodId] || null; }
-
-  const productosRotacion = DATA.inventario
-    .filter(p => Number(p.stock||0) > 0) // solo productos con stock — sin stock no hay capital congelado
-    .map(p => {
-      const ultimaFecha = ultimaVentaDeProducto(p.id);
-      const diasSinVenta = ultimaFecha ? Math.floor((HOY_ROT - new Date(ultimaFecha)) / 86400000) : null;
-      const capitalCongelado = Number(p.costo||0) * Number(p.stock||0);
-      return { ...p, ultimaFecha, diasSinVenta, capitalCongelado };
-    })
-    .filter(p => p.diasSinVenta === null || p.diasSinVenta > UMBRAL_DIAS_MUERTO)
-    .sort((a,b) => b.capitalCongelado - a.capitalCongelado);
-
-  const capitalMuertoTotal = productosRotacion.reduce((s,p) => s + p.capitalCongelado, 0);
-
-  // 397. Sección colapsable — no la mostramos siempre abierta para no saturar la página
-  const rotacionAbierta = window.inventarioRotacionAbierta || false;
-  let filasRotacion = '';
-  productosRotacion.forEach(p => {
-    const sinVentaNunca = p.diasSinVenta === null;
-    filasRotacion += '<tr>'
-      + '<td style="font-weight:500">' + p.nombre + '</td>'
-      + '<td style="color:var(--ink-3)">' + (p.marca||'') + '</td>'
-      + '<td style="text-align:center">' + p.stock + '</td>'
-      + '<td style="color:' + (sinVentaNunca?'var(--red)':'var(--amber)') + '">' + (sinVentaNunca ? 'Nunca vendido' : 'hace ' + p.diasSinVenta + ' días') + '</td>'
-      + '<td style="font-weight:600;color:var(--blue)">' + fmt(p.capitalCongelado) + '</td>'
-    + '</tr>';
-  });
-
-  // 425. FIX RENDIMIENTO: la tabla siempre se construye pero queda oculta con
-  //      display:none — el toggle solo cambia visibilidad vía JS puro, sin
-  //      llamar a renderInventario() y reconstruir toda la página de nuevo.
-  const rotacionHtml = productosRotacion.length === 0 ? '' : `
-    <div class="card" style="margin-bottom:16px;border-left:3px solid var(--amber)">
-      <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="toggleSeccionInventario('inv-rotacion-body','inv-rotacion-flecha')">
-        <div>
-          <div class="card-title" style="margin:0">🧊 Capital muerto — ${productosRotacion.length} producto(s) sin movimiento</div>
-          <div style="font-size:11px;color:var(--ink-3);margin-top:4px">Más de ${UMBRAL_DIAS_MUERTO} días sin venderse · ${fmt(capitalMuertoTotal)} congelados a precio de costo</div>
-        </div>
-        <span id="inv-rotacion-flecha" style="font-size:13px;color:var(--ink-3)">▼</span>
-      </div>
-      <div id="inv-rotacion-body" style="display:none">
-        <div class="table-wrap" style="margin-top:14px">
-          <table class="tbl">
-            <thead><tr><th>Producto</th><th>Marca</th><th>Stock</th><th>Última venta</th><th>Capital congelado</th></tr></thead>
-            <tbody>${filasRotacion}</tbody>
-          </table>
-        </div>
-      </div>
-    </div>`;
-
-  // 398. PROYECCIÓN DE REPOSICIÓN
-  //      Ritmo de venta = unidades vendidas en los últimos N días / N días
-  //      Días para agotarse = stock actual / ritmo diario
-  //      Solo tiene sentido para productos que SÍ se están vendiendo (ritmo > 0)
-  const VENTANA_DIAS_RITMO = 30; // analizamos las ventas del último mes para el ritmo
-  const fechaCorteRitmo = fechaLocal(new Date(HOY_ROT.getTime() - VENTANA_DIAS_RITMO*86400000));
-
-  // 421. FIX RENDIMIENTO: igual que arriba, un solo recorrido de ventas precalcula
-  //      las unidades vendidas por producto en la ventana, en vez de recorrer
-  //      todas las ventas una vez por cada producto del inventario
-  const vendidasPorProductoEnVentana = {};
-  DATA.ventas.forEach(v => {
-    if(!v.fecha || v.fecha < fechaCorteRitmo) return;
-    const acumular = (prodId, cant) => {
-      if(!prodId) return;
-      vendidasPorProductoEnVentana[prodId] = (vendidasPorProductoEnVentana[prodId]||0) + Number(cant||0);
-    };
-    if(v.prodId) acumular(v.prodId, v.cant);
-    if(v.esMultiple && v.productosVenta) v.productosVenta.forEach(p => acumular(p.prodId, p.cant));
-    if(v.esCombo && v.productosCombo) v.productosCombo.forEach(p => acumular(p.prodId, p.cant));
-  });
-  function unidadesVendidasDesde(prodId) { return vendidasPorProductoEnVentana[prodId] || 0; }
-
-  const proyeccionReposicion = DATA.inventario
-    .map(p => {
-      const vendidasUltimoMes = unidadesVendidasDesde(p.id);
-      const ritmoDiario = vendidasUltimoMes / VENTANA_DIAS_RITMO;
-      const diasParaAgotarse = ritmoDiario > 0 ? Math.floor(Number(p.stock||0) / ritmoDiario) : null;
-      return { ...p, vendidasUltimoMes, ritmoDiario, diasParaAgotarse };
-    })
-    // 399. Solo mostramos productos que se venden Y que se agotan en menos de 21 días
-    //      (umbral de alerta — tiempo razonable para gestionar un pedido nuevo)
-    .filter(p => p.diasParaAgotarse !== null && p.diasParaAgotarse <= 21)
-    .sort((a,b) => a.diasParaAgotarse - b.diasParaAgotarse);
-
-  const reposicionAbierta = window.inventarioReposicionAbierta || false;
-  let filasReposicion = '';
-  proyeccionReposicion.forEach(p => {
-    const critico = p.diasParaAgotarse <= 7;
-    filasReposicion += '<tr>'
-      + '<td style="font-weight:500">' + p.nombre + '</td>'
-      + '<td style="color:var(--ink-3)">' + (p.marca||'') + '</td>'
-      + '<td style="text-align:center">' + p.stock + '</td>'
-      + '<td style="text-align:center">' + p.vendidasUltimoMes + '</td>'
-      + '<td style="color:' + (critico?'var(--red)':'var(--amber)') + ';font-weight:600">' + (critico?'🔴 ':'🟡 ') + p.diasParaAgotarse + ' día' + (p.diasParaAgotarse!==1?'s':'') + '</td>'
-    + '</tr>';
-  });
-
-  const reposicionHtml = proyeccionReposicion.length === 0 ? '' : `
-    <div class="card" style="margin-bottom:16px;border-left:3px solid var(--red)">
-      <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="toggleSeccionInventario('inv-reposicion-body','inv-reposicion-flecha')">
-        <div>
-          <div class="card-title" style="margin:0">📉 Próximos a agotarse — ${proyeccionReposicion.length} producto(s)</div>
-          <div style="font-size:11px;color:var(--ink-3);margin-top:4px">Según ritmo de venta de los últimos ${VENTANA_DIAS_RITMO} días · se agotan en 21 días o menos</div>
-        </div>
-        <span id="inv-reposicion-flecha" style="font-size:13px;color:var(--ink-3)">▼</span>
-      </div>
-      <div id="inv-reposicion-body" style="display:none">
-        <div class="table-wrap" style="margin-top:14px">
-          <table class="tbl">
-            <thead><tr><th>Producto</th><th>Marca</th><th>Stock actual</th><th>Vendidas (30d)</th><th>Se agota en</th></tr></thead>
-            <tbody>${filasReposicion}</tbody>
-          </table>
-        </div>
-      </div>
-    </div>`;
-
-  // 244. Filtramos inventario según búsqueda activa
+  // 823. Aquí había 210 líneas que no se pintaban en ninguna parte: el aviso
+  //      de stock bajo con su tarjeta por producto, las cuatro métricas de
+  //      capital (invertido / valor del inventario / ganancia esperada / total
+  //      en stock), la tabla de "capital muerto" y la de "próximos a
+  //      agotarse". El 814 les quitó la interpolación en la plantilla pero
+  //      dejó el cálculo, así que se recorría DATA.inventario y DATA.ventas
+  //      cinco veces en cada render para producir HTML que nadie veía.
+  //
+  //      Las cinco se apoyaban en `p.stock`, que es el dato que Ángel dijo
+  //      que no existe: "lo que tenemos en inventario no lo sabemos". Un
+  //      número inventado con dos decimales de precisión es peor que no tener
+  //      número, porque parece un dato.
+  //
+  //      Con ellas se fueron `tarjetaStock`, `toggleSeccionInventario`,
+  //      UMBRAL_DIAS_MUERTO y VENTANA_DIAS_RITMO, que ya no abrían nada.
+  //      Esta pantalla es la lista de nombres y precios, y nada más.
   // 350. Ordenamos por marca luego por nombre alfabéticamente
   const inventarioOrdenado = [...DATA.inventario].sort((a,b) => {
     const marcaA = (a.marca||'').toLowerCase();
@@ -6270,14 +6054,12 @@ function renderInventario() {
 
   const rows = inventarioFiltrado.map((p, idx) => {
     const margen = p.costo > 0 ? Math.round(((p.pventa-p.costo)/p.costo)*100) : null;
-    const sc = p.stock===0 ? 'badge b-danger' : p.stock<=(p.stockMinimo||5) ? 'badge b-warning' : 'badge b-success';
-    const sl = p.stock===0 ? 'Agotado' : p.stock<=(p.stockMinimo||5) ? `Bajo (${p.stock})` : `OK (${p.stock})`;
     // 434. Encabezado de marca — se inserta cada vez que la marca cambia respecto
     //      a la fila anterior. No afecta el filtro porque solo agrega un <tr> extra.
     const marcaActual = p.marca || 'Sin marca';
     const marcaAnterior = idx > 0 ? (inventarioFiltrado[idx-1].marca || 'Sin marca') : null;
     const encabezadoMarca = marcaActual !== marcaAnterior
-      ? `<tr style="background:var(--surface-2)"><td colspan="7" style="padding:6px 12px;font-size:10px;font-weight:700;color:var(--ink-3);text-transform:uppercase;letter-spacing:.05em">${marcaActual}</td></tr>`
+      ? `<tr style="background:var(--surface-2)"><td colspan="5" style="padding:6px 12px;font-size:10px;font-weight:700;color:var(--ink-3);text-transform:uppercase;letter-spacing:.05em">${marcaActual}</td></tr>`
       : '';
     // 80. Mostramos los 3 precios en columnas separadas con punto de color identificador
     //     Si un precio no está configurado mostramos "—"
@@ -6285,11 +6067,8 @@ function renderInventario() {
     return `${encabezadoMarca}<tr data-nombre="${(p.nombre||'').toLowerCase()}" data-marca="${(p.marca||'').toLowerCase()}">
       <td style="font-weight:500">${p.nombre}</td>
       <td style="color:var(--ink-3)">${p.marca||''}</td>
-      <td>
-        <span class="${sc}">${sl}</span>
-        <!-- 449. Desglose por ubicación — solo si hay reparto entre Jero y Ángel -->
-        ${(p.stockJero != null && p.stockAngel != null) ? `<div style="font-size:10px;color:var(--ink-3);margin-top:3px">J: ${p.stockJero} · Á: ${p.stockAngel}</div>` : ''}
-      </td>
+      ${/* 814. Aquí iba la columna de Stock, con su semáforo y el reparto
+            Jero/Ángel. Fuera: esa cantidad nunca se contó. */''}
       <td>
         <div style="display:flex;flex-direction:column;gap:3px;font-size:12px">
           <span><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--blue);margin-right:4px"></span>${p.pventa>0?fmt(p.pventa):'—'}</span>
@@ -6297,19 +6076,23 @@ function renderInventario() {
           <span><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-right:4px"></span>${p.pesp>0?fmt(p.pesp):'—'}</span>
         </div>
       </td>
-      <!-- 355. Valor total en stock — a costo y a precio público -->
-      <td>
-        <div style="display:flex;flex-direction:column;gap:2px">
-          <span style="font-size:12px;font-weight:600;color:var(--ink)">${fmt((p.stock||0)*(p.pventa||0))}</span>
-          <span style="font-size:10px;color:var(--ink-3)">costo: ${fmt((p.stock||0)*(p.costo||0))}</span>
-        </div>
-      </td>
+      ${/* 823. Aquí seguía viva la celda "Valor total en stock" (355), aunque el
+            814 dio por quitada esa columna: borró el <th> del encabezado pero
+            no el <td> de la fila. En producción la tabla iba con CINCO
+            encabezados y SEIS celdas, así que el valor en stock se pintaba
+            debajo de "Margen", el margen debajo del encabezado vacío y los
+            botones se salían de la tabla. Y el número que mostraba era
+            stock × precio: justo lo que el 814 venía a quitar.
+            Misma lección del 812: borrar la mitad de una cosa es peor que no
+            borrarla. */''}
       <td style="color:${margen>=30?'var(--green)':margen>=15?'var(--amber)':'var(--red)'}">${margen!==null?margen+'%':'—'}</td>
       <td>
         <div style="display:flex;gap:5px;flex-wrap:wrap">
           <!-- 83. Botón editar: carga los datos del producto en el formulario para modificarlos -->
           <button class="btn btn-xs" onclick="editarProducto('${p.id}')">✏️ Editar</button>
-          <button class="btn btn-xs" onclick="abrirAjuste('${p.id}','${p.nombre.replace(/'/g,"\\'")}',${p.stock})">± Stock</button>
+          ${/* 814. Fuera el botón "± Stock": ajustar una cantidad que no se
+                conoce no lleva a ninguna parte. La función sigue existiendo
+                por si algún día hacen el conteo. */''}
           <!-- 469. Botones del sistema de lotes FIFO -->
           <button class="btn btn-xs" style="color:var(--blue);border-color:var(--blue-bd)" onclick="abrirModalLote('${p.id}')">+ Lote</button>
           ${(p.lotes && p.lotes.length > 0) ? '<button class="btn btn-xs" style="color:var(--lime);border-color:var(--lime-accent)" onclick="verLotesProducto(\'' + p.id + '\')">📦 ' + p.lotes.length + '</button>' : ''}
@@ -6321,7 +6104,7 @@ function renderInventario() {
 
   document.getElementById('page-inventario').innerHTML = `
     <div class="page-header">
-      <div><div class="page-title">Inventario</div><div class="page-sub">${DATA.inventario.length} productos · ${totalUnidades} unidades</div></div>
+      <div><div class="page-title">Inventario</div><div class="page-sub">${DATA.inventario.length} productos · nombres y precios</div></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <!-- 162. Botón temporal para corregir precios que están sin los ceros
                   Detecta precios menores a 1000 y los multiplica por 1000
@@ -6333,10 +6116,16 @@ function renderInventario() {
         <button class="btn btn-lime btn-sm" onclick="abrirNuevoProducto()">+ Agregar producto</button>
       </div>
     </div>
-    ${alertHtml}
-    ${capitalHtml}
-    ${rotacionHtml}
-    ${reposicionHtml}
+    ${/* 814. Fuera el aviso de stock bajo, las tarjetas de capital
+          (Capital invertido / Valor del inventario / Ganancia esperada /
+          Total en stock), la rotación y la reposición.
+          Ángel: "lo que tenemos en inventario no lo sabemos... no coloques la
+          cantidad, es irrelevante, necesito el nombre".
+          Los cuatro bloques se calculaban multiplicando un stock que nunca se
+          contó. Un número inventado con dos decimales de precisión es peor que
+          no tener número: parece un dato.
+          Lo que queda: el nombre, la marca y los precios, que sí son reales y
+          son de donde sale el margen. */''}
     <!-- 245. Barra de búsqueda de inventario -->
     <div style="position:relative;margin-bottom:14px">
       <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--ink-3);font-size:14px">🔍</span>
@@ -6351,75 +6140,16 @@ function renderInventario() {
     <div class="card">
       ${inventarioFiltrado.length ?
         `<div class="table-wrap"><table class="tbl">
-          <thead><tr><th>Producto</th><th>Marca</th><th>Stock</th><th>Precios 🔵Púb 🟠Dist 🟢Esp</th><th>Valor total</th><th>Margen</th><th></th></tr></thead>
+          <thead><tr><th>Producto</th><th>Marca</th><th>Precios 🔵Púb 🟠Dist 🟢Esp</th><th>Margen</th><th></th></tr></thead>
           <tbody id="inv-tabla-body">${rows}</tbody>
         </table></div>`
         : `<div class="empty-state"><div class="empty-state-icon">📦</div><div class="empty-state-text">${busquedaInventario ? 'Sin resultados para "'+busquedaInventario+'"' : 'Sin productos en inventario'}</div></div>`}
     </div>`;
 }
 
-// 345. Actualiza solo la tabla de inventario sin reconstruir toda la página
-//      Esto preserva el foco del buscador mientras el usuario escribe
-// 426. Toggle de secciones de inventario (capital muerto / reposición)
-//      Pura manipulación de DOM — NO llama a renderInventario(), así que
-//      es instantáneo sin importar cuántos productos o ventas haya.
-window.toggleSeccionInventario = (idBody, idFlecha) => {
-  const body = document.getElementById(idBody);
-  const flecha = document.getElementById(idFlecha);
-  if(!body) return;
-  const abierto = body.style.display !== 'none';
-  body.style.display = abierto ? 'none' : 'block';
-  if(flecha) flecha.textContent = abierto ? '▼' : '▲';
-};
-
-window.actualizarTablaInventario = () => {
-  const filtrado = busquedaInventario
-    ? DATA.inventario.filter(p =>
-        (p.nombre||'').toLowerCase().includes(busquedaInventario) ||
-        (p.marca||'').toLowerCase().includes(busquedaInventario)
-      )
-    : DATA.inventario;
-
-  // Actualizamos el contador de resultados
-  const infoEl = document.getElementById('inv-search-info');
-  if(infoEl) {
-    infoEl.textContent = busquedaInventario
-      ? filtrado.length + ' resultado(s) para "' + busquedaInventario + '"'
-      : '';
-  }
-
-  // Actualizamos solo el cuerpo de la tabla
-  const tbody = document.getElementById('inv-tabla-body');
-  if(!tbody) { renderInventario(); return; }
-
-  if(filtrado.length === 0) {
-    tbody.closest('.card').innerHTML = '<div class="empty-state"><div class="empty-state-icon">📦</div>'
-      + '<div class="empty-state-text">' + (busquedaInventario ? 'Sin resultados para "' + busquedaInventario + '"' : 'Sin productos') + '</div></div>';
-    return;
-  }
-
-  tbody.innerHTML = filtrado.map(p => {
-    const margen = p.costo > 0 ? Math.round(((p.pventa-p.costo)/p.costo)*100) : null;
-    const stockColor = p.stock <= 0 ? 'var(--red)' : p.stock <= (p.stockMinimo||5) ? 'var(--amber)' : 'var(--green)';
-    const stockLabel = p.stock <= 0 ? 'Agotado (0)' : p.stock <= (p.stockMinimo||5) ? 'Bajo (' + p.stock + ')' : 'OK (' + p.stock + ')';
-    return '<tr data-id="' + p.id + '">'
-      + '<td style="font-weight:500">' + p.nombre + '</td>'
-      + '<td style="color:var(--ink-3)">' + (p.marca||'') + '</td>'
-      + '<td style="font-weight:600;color:' + stockColor + '">' + stockLabel + '</td>'
-      + '<td><div style="display:flex;flex-direction:column;gap:2px">'
-        + '<span style="font-size:12px"><span style="color:var(--blue)">●</span> ' + fmt(p.pventa||0) + '</span>'
-        + '<span style="font-size:12px"><span style="color:var(--amber)">●</span> ' + fmt(p.pdist||0) + '</span>'
-        + '<span style="font-size:12px"><span style="color:var(--green)">●</span> ' + (p.pesp ? fmt(p.pesp) : '—') + '</span>'
-      + '</div></td>'
-      + '<td style="color:' + (margen!==null?margen>=30?'var(--green)':margen>=15?'var(--amber)':'var(--red)':'var(--ink-3)') + '">' + (margen!==null?margen+'%':'—') + '</td>'
-      + '<td><div style="display:flex;gap:5px">'
-        + '<button class="btn btn-xs" onclick="editarProducto(\'' + p.id + '\')">✏️ Editar</button>'
-        + '<button class="btn btn-xs" onclick="abrirAjuste(\'' + p.id + '\',\'' + p.nombre.replace(/'/g,"\\'") + '\',' + p.stock + ')">± Stock</button>'
-        + '<button class="btn btn-xs btn-danger" onclick="eliminarDoc(\'inventario\',\'' + p.id + '\')">✕</button>'
-      + '</div></td>'
-    + '</tr>';
-  }).join('');
-};
+// 817. `actualizarTablaInventario` se borró: nadie la llamaba.
+// 823. `toggleSeccionInventario` se borró: abría y cerraba las dos secciones
+//      de rotación y reposición, que ya no existen.
 
 
 // 352. Filtra filas del inventario en el DOM sin re-renderizar
@@ -7139,10 +6869,10 @@ function renderGastos() {
       <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2);margin-bottom:8px">
         🧾 La cuenta del ciclo
       </div>
-      ${renglonG('Gastos fijos', fijos, 'se pagan igual vendas o no', 'var(--blue)')}
+      ${renglonG(palabraConcepto('gastos','Gastos fijos'), fijos, 'se pagan igual vendas o no', 'var(--blue)')}
       ${renglonG('Gastos variables', variables, 'suben con el movimiento', 'var(--amber)')}
       ${renglonG('Total de gastos', fijos + variables, '', 'var(--red)', true)}
-      ${renglonG('Compra de mercancía', compras, 'no es gasto: es plata que se vuelve inventario y vuelve al vender', 'var(--ink-2)')}
+      ${renglonG(palabraConcepto('mercancia','Compra de mercancía'), compras, 'no es gasto: es plata que se vuelve inventario y vuelve al vender', 'var(--ink-2)')}
       ${renglonG('En total salió del banco', total, '', 'var(--ink)', true)}
     </div>`;
 
@@ -8475,8 +8205,10 @@ function renderInicio() {
   const cicloAnt = getCicloActual(inicioCicloOffset + 1);
   const esCicloActual = inicioCicloOffset === 0;
 
-  const ventasCiclo = DATA.ventas.filter(v => v.fecha >= ciclo.inicio && v.fecha <= ciclo.fin);
-  const gastosCiclo = DATA.gastos.filter(g => g.fecha >= ciclo.inicio && g.fecha <= ciclo.fin);
+  // 823. `ventasCiclo` y `gastosCiclo` se borraron: quedaron de antes del 780,
+  //      cuando esta pantalla hacía sus propias cuentas. Ahora todo sale de
+  //      `estadoFinanciero` y estos dos filtros solo recorrían las dos
+  //      colecciones completas para nada.
   // 731. Cobros de cuentas viejas del ciclo (ver 727) — entran a caja, nunca a vendido.
   const cobrosCiclo = DATA.cobros.filter(c => c.fecha >= ciclo.inicio && c.fecha <= ciclo.fin);
   const cobrado     = cobrosCiclo.reduce((s,c) => s + ingresoVenta(c), 0);
@@ -8508,7 +8240,9 @@ function renderInicio() {
   const F = estadoFinanciero(ciclo.inicio, ciclo.fin, { carteraViva: esCicloActual });
   const vendido      = F.vendido;
   const vendidoAnt   = ventasAnt.reduce((s,v) => s + ingresoVenta(v), 0);
-  const gastado      = F.gastado;
+  // 823. `gastado` (todo lo que salió del banco, mercancía incluida) se dejó
+  //      de mostrar en el 815: Inicio habla de gastos de operación, y la
+  //      mercancía aparece en su propio renglón del flujo de caja.
   const fijos        = calcularGastosFijosRango(ciclo.inicio, ciclo.fin);
   // 694. En el ciclo en curso interesa TODA la cartera viva (incluida la de
   //      meses viejos, que es la que hay que salir a cobrar). En un ciclo ya
@@ -8625,11 +8359,11 @@ function renderInicio() {
   //      ahora dentro de estadoFinanciero (ver 780).
   const cobradoDeVentas = F.caja.contado;
   const abonosEnCiclo   = F.caja.abonos;
-  const entroAlBanco    = F.caja.entradas;
+  // 823. `entroAlBanco` no se usa: el flujo de caja de Inicio desglosa las
+  //      entradas renglón por renglón en vez de mostrar el total junto.
   const quedoFiado      = F.caja.fiado;
   const caja            = F.caja.neto;
 
-  const inventarioValorizado = F.valorInventario;
   const colorUtil = utilidadReal >= 0 ? 'var(--green)' : 'var(--red)';
   const colorCaja = caja >= 0 ? 'var(--ink)' : 'var(--red)';
 
@@ -8650,11 +8384,13 @@ function renderInicio() {
       <div style="font-size:11.5px;color:var(--ink-3);margin-bottom:8px;line-height:1.4">
         La mercancía no entra aquí: su costo ya está descontado dentro del margen.
       </div>
-      ${renglon('Vendido', vendido, '')}
+      ${renglon(palabraConcepto('vendido','Vendido'), vendido, '')}
       ${renglon('Costo de lo que vendiste', costoVendido, '−')}
-      ${renglon('Margen bruto (' + margenPctCiclo + '%)', margenCiclo, '', true)}
-      ${renglon('Gastos de operación', operativos, '−')}
-      ${renglon('Utilidad real', utilidadReal, utilidadReal >= 0 ? '' : '−', true, colorUtil)}
+      ${renglon(palabraConcepto('margenBruto','Margen bruto') + ' (' + margenPctCiclo + '%)', margenCiclo, '', true)}
+      ${renglon(palabraConcepto('gastos','Gastos de operación'), operativos, '−')}
+      ${/* 818. Se llamaba "Utilidad real" aquí y "Utilidad neta" en Informes:
+            mismo número, dos nombres. Se queda el de contabilidad. */''}
+      ${renglon(palabraConcepto('utilidadNeta','Utilidad neta'), utilidadReal, utilidadReal >= 0 ? '' : '−', true, colorUtil)}
     </div>
 
     <div class="card" style="padding:16px">
@@ -8666,22 +8402,20 @@ function renderInicio() {
       </div>
       ${renglon('Te pagaron de contado', cobradoDeVentas, '')}
       ${abonosEnCiclo > 0 ? renglon('Abonos que entraron', abonosEnCiclo, '') : ''}
-      ${cobrado > 0 ? renglon('Cobros de cuentas viejas', cobrado, '') : ''}
-      ${compras > 0 ? renglon('Compra de mercancía', compras, '−') : ''}
+      ${cobrado > 0 ? renglon(palabraConcepto('cobrosViejos','Cobros de cuentas viejas'), cobrado, '') : ''}
+      ${compras > 0 ? renglon(palabraConcepto('mercancia','Compra de mercancía'), compras, '−') : ''}
       ${renglon('Gastos de operación', operativos, '−')}
-      ${renglon('Movimiento del banco', caja, caja >= 0 ? '' : '−', true, colorCaja)}
+      ${renglon(palabraConcepto('flujoCaja','Movimiento del banco'), caja, caja >= 0 ? '' : '−', true, colorCaja)}
       ${quedoFiado > 0 ? `
         <div style="font-size:12px;color:var(--ink-3);line-height:1.45;padding-top:9px;border-top:1px solid var(--border);margin-top:8px">
           Aparte quedaron <strong style="color:var(--ink-2)">${fmt(quedoFiado)}</strong> fiados de este ciclo. Esa plata todavía no ha llegado al banco.
         </div>` : ''}
+      ${/* 815. Aquí decía "hoy tienes $X en inventario a precio de costo".
+            Ese número era stock × costo, y el stock nunca se contó. Fuera. */''}
       ${(caja < 0 && compras > 0 && utilidadReal >= 0) ? `
         <div style="font-size:12.5px;color:var(--ink-2);line-height:1.45;padding-top:10px">
           El banco quedó en rojo <strong>porque compraste ${fmt(compras)} de mercancía</strong>. Esa plata no se perdió: está en el estante.
-          ${inventarioValorizado > 0 ? `Hoy tienes <strong>${fmt(inventarioValorizado)}</strong> en inventario a precio de costo.` : ''}
-        </div>` : (inventarioValorizado > 0 ? `
-        <div style="font-size:12px;color:var(--ink-3);line-height:1.45;padding-top:9px">
-          Hoy tienes <strong style="color:var(--ink-2)">${fmt(inventarioValorizado)}</strong> en inventario a precio de costo.
-        </div>` : '')}
+        </div>` : ''}
     </div>`;
 
   // ---- 695. Selector de ciclos ----
@@ -8938,11 +8672,10 @@ window.abrirDetalleInicio = (tipo) => {
       .filter(c => c.fecha >= ciclo.inicio && c.fecha <= ciclo.fin)
       .sort((a,b) => b.fecha > a.fecha ? 1 : -1);
     const total = cobros.reduce((s,c) => s + ingresoVenta(c), 0);
-    html += '<div style="background:var(--blue-bg);border:1px solid var(--blue-bd);border-radius:var(--radius);'
-      + 'padding:11px 13px;margin-bottom:4px;font-size:12.5px;color:var(--blue-ink);line-height:1.45">'
-      + 'Plata que entró al banco pagando cuentas de meses anteriores. <strong>No suma en "Vendido"</strong>: '
-      + 'esa venta ya se contó el día que salió la mercancía. Sumarla otra vez sería contar el mismo peso dos veces.'
-      + '</div>';
+    // 820. El aviso azul que estaba aquí decía lo mismo que GLOSARIO.cobrosViejos.
+    //      Se quitó: ahora la explicación la pone `bloqueConcepto` al final de
+    //      esta función, igual que en las otras cuatro pantallas. Un solo texto
+    //      que mantener, no dos que se van separando con los meses.
     html += bloqueGrupo('Total cobrado', fmt(total), cobros.length + ' movimiento' + (cobros.length>1?'s':''));
     html += tablaDetalle(
       [{txt:'Fecha'},{txt:'De quién'},{txt:'Concepto'},{txt:'Tipo'},{txt:'Valor',der:true}],
@@ -8958,7 +8691,10 @@ window.abrirDetalleInicio = (tipo) => {
 
   document.getElementById('det-title').textContent = titulo;
   document.getElementById('det-sub').textContent = 'Ciclo ' + fCorta(ciclo.inicio) + ' – ' + fCorta(ciclo.fin);
-  document.getElementById('det-contenido').innerHTML = html;
+  // 820. La definición va ARRIBA del listado, no debajo: primero qué es este
+  //      número, después de dónde sale. Si falta el concepto en el mapa el
+  //      bloque sale vacío y la pantalla queda como antes (no se rompe nada).
+  document.getElementById('det-contenido').innerHTML = bloqueConcepto(MAPA_TIPO_CONCEPTO[tipo]) + html;
   openModal('modal-detalle');
 };
 
@@ -9200,7 +8936,8 @@ window.abrirCierreMes = () => {
     + '<div>Utilidad neta: <strong>' + fmt(ingresos-gastosTotal) + '</strong></div>'
     + '<div>Margen real: <strong>' + fmt(margenTotal) + '</strong></div>'
     + '<div>Ventas: <strong>' + ventasMes.length + '</strong></div>'
-    + '<div>Inventario valorizado: <strong>' + fmt(inventarioValorizado) + '</strong></div>'
+    // 815. Fuera también del preview de cierre de mes (mismo motivo).
+    + ''
     + '</div>';
 
   // Guardamos los valores calculados para usarlos al confirmar, sin recalcular dos veces
@@ -9633,14 +9370,7 @@ window.guardarVentaCombo = async () => {
     if(!productosCombo.length) { alert('Agrega al menos un producto al combo'); return; }
   }
 
-  // 193. Verificamos stock de todos los productos antes de descontar
-  for(const item of productosCombo) {
-    const prod = DATA.inventario.find(p => p.id === item.prodId);
-    if(!prod) continue;
-    if(prod.stock < item.cant) {
-      alert(`Stock insuficiente para ${prod.nombre}. Disponible: ${prod.stock} uds.`); return;
-    }
-  }
+  // 813. Aquí se verificaba el stock antes de descontar. Ya no se verifica.
 
   // 194. Descontamos el stock de cada producto del combo
   //      368. Guardamos también el costo histórico de cada producto del combo
@@ -10014,35 +9744,8 @@ function renderActividad() {
         : papelera);
 }
 
-function renderPapelera() {
-  const items = [...DATA.papelera].sort((a,b) => (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0));
-  const rows = items.map(item => {
-    const creadoMs = (item.createdAt?.seconds||0) * 1000;
-    const diasTranscurridos = creadoMs ? Math.floor((Date.now() - creadoMs) / 86400000) : 0;
-    const diasRestantes = Math.max(0, PAPELERA_DIAS_RETENCION - diasTranscurridos);
-    return `<div class="list-card">
-      <div class="list-card-header">
-        <div>
-          <div class="list-card-title">${PAPELERA_LABELS[item.coleccion]||item.coleccion}</div>
-          <div class="list-card-sub">${describirRegistroPapelera(item.coleccion, item.datos)}</div>
-          <div style="font-size:10px;color:var(--ink-3);margin-top:3px">Se borra definitivo en ${diasRestantes} día${diasRestantes!==1?'s':''}</div>
-        </div>
-      </div>
-      <div class="list-card-actions">
-        <button class="btn btn-sm btn-lime" onclick="restaurarDePapelera('${item.id}')">↩️ Restaurar</button>
-        <button class="btn btn-sm btn-danger" onclick="purgarDePapelera('${item.id}')">Eliminar definitivo</button>
-      </div>
-    </div>`;
-  }).join('');
-
-  document.getElementById('page-papelera').innerHTML = `
-    <div class="page-header">
-      <div><div class="page-title">Papelera</div><div class="page-sub">${items.length} registro(s) — se guardan ${PAPELERA_DIAS_RETENCION} días</div></div>
-    </div>
-    ${items.length ?
-      `<div class="list-cards">${rows}</div>`
-      : `<div class="card"><div class="empty-state"><div class="empty-state-icon">🗑️</div><div class="empty-state-text">La papelera está vacía</div></div></div>`}`;
-}
+// 817. `renderPapelera` se borró: era copia literal de la pestaña Papelera
+//      de Actividad (786) y ninguna ruta llegaba a ella.
 
 window.restaurarDePapelera = async (papeleraId) => {
   if(!exigirAdmin('restaurar registros')) return;   // 803
@@ -10265,7 +9968,7 @@ window.guardarConsumo = async () => {
 
   const prod = DATA.inventario.find(p => p.id === prodId);
   if(!prod) { alert('Producto no encontrado'); return; }
-  if(prod.stock < cant) { alert('Stock insuficiente. Disponible: ' + prod.stock + ' uds.'); return; }
+  // 813. Sin bloqueo por stock.
 
   const total = cant * costo;
 
@@ -11103,7 +10806,7 @@ window.guardarDejarConsignacion = async () => {
     const prod = DATA.inventario.find(p => p.id === l.prodId);
     if(!prod) { alert('Producto no encontrado'); return; }
     if(!l.cant || l.cant <= 0) { alert('Revisa la cantidad de ' + prod.nombre); return; }
-    if(Number(prod.stock||0) < l.cant) { alert('Stock insuficiente para ' + prod.nombre + '. Disponible: ' + prod.stock); return; }
+    // 813. Sin bloqueo por stock.
     if(!l.precioVenta || l.precioVenta <= 0) { alert('Ingresa el precio de venta para ' + prod.nombre); return; }
   }
 
@@ -11113,8 +10816,8 @@ window.guardarDejarConsignacion = async () => {
   for(const l of lineasValidas) {
     const prod = DATA.inventario.find(p => p.id === l.prodId);
     const fifo = consumirLotesFIFO(prod, l.cant);
-    // 536. Mismo fix de ubicación aplicado en Ventas
-    const tieneUbicConsig = prod.stockJero != null || prod.stockAngel != null;
+    // 536. Mismo fix de ubicación aplicado en Ventas (823: la variable
+    //      `tieneUbicConsig` que estaba aquí no la leía nadie).
     const ubicacionConsig = ubicacionConStock(prod, l.cant);   // 808
     const updateInv = construirUpdateStockUbicacion(prod, l.cant, ubicacionConsig);
     let costoUnit;
@@ -11631,7 +11334,6 @@ window.generarCuentaDeCobro = (distribuidorId) => {
 // 390. Confirmar datos y disparar la generación real del PDF con jsPDF
 window.confirmarGenerarCuentaCobro = () => {
   const distribuidorId = document.getElementById('cdc-dist-id').value;
-  const d = DATA.distribuidores.find(x => x.id === distribuidorId);
   const nombreNegocio = document.getElementById('cdc-nombre-negocio').value.trim();
   const responsable = document.getElementById('cdc-responsable').value.trim();
   const nit = document.getElementById('cdc-nit').value.trim();
@@ -13313,6 +13015,11 @@ function fichaCompradorHtml(ventas) {
     + dato('Total comprado', fmt(total), 'ticket promedio ' + fmt(ticket), 'var(--lime)')
     + dato('Margen que deja', margenConocido ? fmt(margen) : 'N/D', margenConocido && total > 0 ? Math.round((margen/total)*100) + '% de lo que compra' : 'sin costo registrado', margenConocido ? (margen >= 0 ? 'var(--green)' : 'var(--red)') : 'var(--ink-3)')
     + dato('Última compra', fCorta(ultima), diasSinComprar === 0 ? 'hoy' : 'hace ' + diasSinComprar + ' día' + (diasSinComprar !== 1 ? 's' : ''), diasSinComprar > 45 ? 'var(--amber)' : 'var(--ink)')
+    // 823. `primera` ya se calculaba y no se mostraba en ninguna parte. En vez
+    //      de borrarla se pinta: saber desde cuándo compra un cliente es justo
+    //      el dato que le da sentido a "veces que compró" (6 compras en dos
+    //      años no es lo mismo que 6 en dos meses).
+    + dato('Cliente desde', fCorta(primera), ventas.length > 1 ? 'su primera compra' : 'única compra hasta hoy', 'var(--ink-2)')
     + (debe > 0 ? dato('Debe', fmt(debe), 'pendiente de pago', 'var(--red)') : '')
   + '</div>';
 
@@ -14036,13 +13743,39 @@ function resumenDelMes(offset) {
   const productos = Object.values(mapa).map(p => ({ ...p, dinero: Math.round(p.dinero) }))
     .sort((a,b) => b.unidades - a.unidades || b.dinero - a.dinero);
 
+  // 822. Cuánto registró cada uno. Ángel: "la venta que se registre, que le
+  //      cuente a cada uno... quiero que aparezca cuánto he vendido yo y
+  //      cuánto ha vendido él", y después: "que sea sin protagonismo".
+  //
+  //      Lo que se cuenta es QUIÉN REGISTRÓ la venta (el sello del 801-808),
+  //      no quién la cerró con el cliente. No es lo mismo y la pantalla lo
+  //      dice con esas palabras: si Jero vende y Ángel la mete en la app, la
+  //      venta queda a nombre de Ángel. Prometer "quién vendió" cuando el
+  //      dato es "quién tecleó" es exactamente la clase de número que después
+  //      nadie se cree.
+  //
+  //      Las ventas de antes del sello no tienen autor y no se les inventa
+  //      ninguno: caen en "Sin asignar", que es la verdad (ver 801).
+  const porRegistro = {};
+  ventas.forEach(v => {
+    const nombre = String(v.creadoPor || '').trim() || 'Sin asignar';
+    porRegistro[nombre] = porRegistro[nombre]
+      || { nombre, ventas:0, dinero:0, sinAsignar: nombre === 'Sin asignar' };
+    porRegistro[nombre].ventas += 1;
+    porRegistro[nombre].dinero += ingresoVenta(v);
+  });
+  // "Sin asignar" siempre de último: es un residuo, no un competidor.
+  const registradores = Object.values(porRegistro)
+    .map(r => ({ ...r, dinero: Math.round(r.dinero) }))
+    .sort((a,b) => (a.sinAsignar?1:0) - (b.sinAsignar?1:0) || b.dinero - a.dinero);
+
   return {
     ciclo: c, offset,
     etiqueta: c.label.charAt(0).toUpperCase() + c.label.slice(1).replace(' de ', ' '),
     unidades: productos.reduce((s,p) => s + p.unidades, 0),
     dinero: ventas.reduce((s,v) => s + ingresoVenta(v), 0),
     nVentas: ventas.length,
-    productos, dormidos, dormidosViejos, mesesReciente: RECIENTE
+    productos, dormidos, dormidosViejos, mesesReciente: RECIENTE, registradores
   };
 }
 
@@ -14155,6 +13888,46 @@ function renderResumenMes() {
       + '</tbody></table></div>'
   + '</div>';
 
+  // ---- 822. Quién registró ----
+  //      "Sin protagonismo": sin medallas, sin podio, sin pintar de verde al
+  //      que va arriba y de rojo al que va abajo. Es un reparto, no una
+  //      competencia. Va al pie del resumen y no en el Dashboard justo por
+  //      eso: quien quiera verlo lo busca, pero no se lo encuentra de frente
+  //      cada vez que abre la app.
+  const conAutor = R.registradores.filter(r => !r.sinAsignar);
+  const quien = conAutor.length
+    ? '<div class="card" style="padding:16px;margin-top:16px">'
+      + '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2)">👥 Quién registró</div>'
+      + '<div style="font-size:11.5px;color:var(--ink-3);margin:3px 0 11px;line-height:1.45">'
+        + 'Quién metió cada venta en la app este mes. No es necesariamente quién la vendió: '
+        + 'si uno vende y el otro la registra, queda a nombre de quien la registró.</div>'
+      + R.registradores.map((r, i) =>
+          '<div style="display:flex;align-items:center;gap:10px;padding:8px 0'
+            + (i ? ';border-top:1px solid var(--border)' : '') + '">'
+          + '<span style="flex:1;min-width:0;font-size:13px;font-weight:' + (r.sinAsignar?'400':'600') + ';'
+            + 'color:var(--' + (r.sinAsignar?'ink-3':'ink') + ');overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
+            + escTxt(r.nombre) + '</span>'
+          + '<span style="font-size:11.5px;color:var(--ink-3);white-space:nowrap">'
+            + r.ventas + ' venta' + (r.ventas !== 1 ? 's' : '') + '</span>'
+          + '<span style="font-size:13px;font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums;'
+            + 'min-width:92px;text-align:right;color:var(--' + (r.sinAsignar?'ink-3':'ink') + ')">'
+            + fmt(r.dinero) + '</span>'
+          + '<span style="font-size:11.5px;color:var(--ink-3);white-space:nowrap;min-width:38px;text-align:right;'
+            + 'font-variant-numeric:tabular-nums">'
+            + (R.dinero ? Math.round((r.dinero / R.dinero) * 100) : 0) + '%</span>'
+        + '</div>').join('')
+      + (R.registradores.some(r => r.sinAsignar)
+          ? '<div style="font-size:11.5px;color:var(--ink-3);margin-top:11px;padding-top:10px;'
+            + 'border-top:1px solid var(--border);line-height:1.45">'
+            + '"Sin asignar" son las ventas que se registraron antes de que la app empezara a '
+            + 'guardar quién las metía. No se le adjudican a nadie.</div>'
+          : '')
+    + '</div>'
+    // 822. Si NINGUNA venta del mes tiene autor (los meses anteriores al sello),
+    //      la tarjeta entera no aparece: una tabla de una sola fila que dice
+    //      "Sin asignar: todo" no informa nada y ocupa pantalla.
+    : '';
+
   // ---- Los que se durmieron ----
   // 810. Los que se cayeron (se vendían hace poco) van en tabla; los que
   //      llevan mucho quietos, en una sola línea al pie.
@@ -14207,7 +13980,182 @@ function renderResumenMes() {
       + '<div class="page-sub">' + R.etiqueta + ' · del ' + fCorta(R.ciclo.inicio) + ' al ' + fCorta(R.ciclo.fin) + '</div>'
     + '</div></div>'
     + '<div style="display:flex;gap:7px;overflow-x:auto;padding-bottom:4px;margin-bottom:16px">' + chips + '</div>'
-    + totales + podio + grafica + tabla + dormidos;
+    + totales + podio + grafica + tabla + quien + dormidos;
+}
+
+// ============================================================
+// 819. GLOSARIO — un solo sitio donde cada concepto significa una cosa
+//
+// Ángel: "que yo le pueda dar a la utilidad neta y que me explique qué es.
+// Y con todos los conceptos. Y que donde aparece la palabra 'vendido' no se
+// quede ahí, sino que nos lleve a la info".
+//
+// Por qué las definiciones viven AQUÍ y no sueltas en cada pantalla: porque
+// sueltas es exactamente como nació el problema del 818 —"utilidad neta"
+// significando tres cosas según dónde la leyeras—. Si la definición se
+// escribe en seis sitios, en tres meses hay seis definiciones.
+//
+// Cada concepto trae tres cosas, y las tres importan:
+//   · que es     → en una frase, sin jerga
+//   · formula    → cómo sale el número, para poder rehacerlo a mano
+//   · ojo        → la trampa que tiene (opcional, pero es lo más útil)
+// ============================================================
+const GLOSARIO = {
+  vendido: {
+    titulo: 'Vendido',
+    que: 'Todo lo que facturaste en el periodo, hayan pagado o no.',
+    formula: 'Suma del total de cada venta del periodo.',
+    ojo: 'Una venta fiada cuenta aquí completa desde el día que se hizo. Que esté vendido no quiere decir que la plata ya haya entrado — eso lo dice el flujo de caja.',
+    detalle: 'vendido'
+  },
+  margenBruto: {
+    titulo: 'Margen bruto',
+    que: 'Lo que dejó lo que vendiste, antes de pagar un solo gasto.',
+    formula: 'Vendido − el costo de lo que SÍ se vendió.',
+    ojo: 'Solo entra el costo de lo vendido, no el de lo que compraste y sigue en el estante. Si una venta no tiene costo registrado, entra completa como margen y lo infla.',
+    detalle: 'margen'
+  },
+  gastos: {
+    titulo: 'Gastos',
+    que: 'Lo que cuesta tener el negocio abierto: marketing, intereses, lo operativo.',
+    formula: 'Suma de los gastos del periodo, SIN la compra de mercancía.',
+    ojo: 'Comprar mercancía no es gasto, es inventario: esa plata no se fue, se cambió de forma. Su costo aparece como gasto solo cuando el producto se vende.',
+    detalle: 'gastos'
+  },
+  utilidadNeta: {
+    titulo: 'Utilidad neta',
+    que: 'Lo que de verdad quedó del negocio en el periodo.',
+    formula: 'Margen bruto − gastos de operación − gastos financieros.',
+    ojo: 'No es lo mismo que la plata que tienes en el banco. Puedes tener utilidad y estar sin efectivo si compraste mercancía o si te deben mucho.'
+  },
+  porCobrar: {
+    titulo: 'Por cobrar',
+    que: 'Plata que ya es tuya pero todavía no te la han dado.',
+    formula: 'Suma de los saldos pendientes de las ventas.',
+    ojo: 'Ya está contada en "Vendido". No se suma otra vez cuando te paguen: ese día solo cambia de sitio, de "por cobrar" a "entró al banco".',
+    detalle: 'cobrar'
+  },
+  mercancia: {
+    titulo: 'Compra de mercancía',
+    que: 'Lo que pagaste por producto para revender.',
+    formula: 'Suma de los gastos marcados como compra de mercancía.',
+    ojo: 'Sale del banco pero NO es un gasto del mes: es inventario. Por eso un mes puede quedar con el banco en rojo y aun así haber ganado plata.'
+  },
+  flujoCaja: {
+    titulo: 'Flujo de caja',
+    que: 'La plata que de verdad entró y salió del banco en el periodo.',
+    formula: '(Lo que te pagaron + abonos + cobros viejos) − (mercancía + gastos).',
+    ojo: 'Es otra pregunta distinta de la utilidad. Ganar y cobrar no son lo mismo: un negocio puede tener un año excelente y quedarse sin efectivo el mismo mes.'
+  },
+  puntoEquilibrio: {
+    titulo: 'Punto de equilibrio',
+    que: 'Cuánto tienes que vender para cubrir los gastos fijos del mes.',
+    formula: 'Gastos fijos ÷ margen promedio.',
+    ojo: 'De ahí en adelante, el margen de cada venta es ganancia.'
+  },
+  ticket: {
+    titulo: 'Ticket promedio',
+    que: 'Cuánto deja en promedio cada venta.',
+    formula: 'Vendido ÷ número de ventas.',
+    ojo: 'Sube si vendes paquetes más grandes, no necesariamente si vendes más veces.'
+  },
+  cobrosViejos: {
+    titulo: 'Cobros de cuentas viejas',
+    que: 'Plata que entró este mes por ventas de meses anteriores.',
+    formula: 'Suma de los movimientos de cobro del periodo.',
+    ojo: 'Entra al banco pero NO es venta nueva: esa venta ya se contó el mes en que se hizo. Contarla otra vez sería inflar el mes dos veces.',
+    detalle: 'cobros'
+  }
+};
+
+// 820. El puente al revés: entrar por el número y recibir también la definición.
+//
+//      `explicarConcepto` resuelve "toco la palabra → me explica". Falta el
+//      otro sentido: Ángel toca la tarjeta de Inicio y llega directo al
+//      listado de registros. Ahí el número está, pero nadie le dice qué es.
+//
+//      Antes de esto la salida era un "?" al lado de cada cifra: dos gestos,
+//      dos destinos, y una pantalla más sucia. Esto es un solo gesto: arriba
+//      la definición en dos renglones, debajo los registros. Nunca hay que
+//      elegir entre entender el número y verlo desglosado.
+//
+//      Versión COMPACTA a propósito: si el bloque ocupa media pantalla, el
+//      listado —que es lo que Ángel viene a ver— queda debajo del doblez.
+const MAPA_TIPO_CONCEPTO = {
+  vendido: 'vendido',
+  margen:  'margenBruto',
+  gastos:  'gastos',
+  cobrar:  'porCobrar',
+  cobros:  'cobrosViejos'
+};
+
+function bloqueConcepto(clave) {
+  const g = GLOSARIO[clave];
+  if(!g) return '';
+  return '<div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);'
+      + 'padding:11px 13px;margin-bottom:12px">'
+    + '<div style="font-size:13px;color:var(--ink);line-height:1.45">' + escTxt(g.que) + '</div>'
+    + '<div style="font-size:11.5px;color:var(--ink-3);line-height:1.4;margin-top:5px">'
+      + '<strong style="color:var(--ink-2)">Se calcula así:</strong> ' + escTxt(g.formula) + '</div>'
+    + (g.ojo
+        ? '<div style="font-size:11.5px;color:var(--amber-ink);line-height:1.4;margin-top:7px;'
+          + 'padding-top:7px;border-top:1px solid var(--border)">'
+          + '<strong>Ojo:</strong> ' + escTxt(g.ojo) + '</div>'
+        : '')
+  + '</div>';
+}
+
+// 819. El panel: primero QUÉ ES, después DE DÓNDE SALE. Un solo toque.
+//      Separar "explicar" de "navegar" en dos gestos distintos obligaría a
+//      poner un signo de interrogación al lado de cada número, y eso ensucia
+//      justo las pantallas que estamos limpiando.
+window.explicarConcepto = (clave) => {
+  const g = GLOSARIO[clave];
+  if(!g) return;
+  document.getElementById('det-title').textContent = g.titulo;
+  document.getElementById('det-sub').textContent = 'Qué es y de dónde sale';
+  document.getElementById('det-contenido').innerHTML =
+    '<div style="font-size:14.5px;color:var(--ink);line-height:1.5;margin-bottom:14px">' + escTxt(g.que) + '</div>'
+    + '<div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:' + (g.ojo?'12px':'0') + '">'
+      + '<div style="font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);margin-bottom:4px">Cómo se calcula</div>'
+      + '<div style="font-size:13px;color:var(--ink-2);line-height:1.45">' + escTxt(g.formula) + '</div>'
+    + '</div>'
+    + (g.ojo
+        ? '<div style="background:var(--amber-bg);border:1px solid var(--amber-bd);border-radius:var(--radius);padding:12px 14px">'
+          + '<div style="font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--amber-ink);margin-bottom:4px">Ojo con esto</div>'
+          + '<div style="font-size:13px;color:var(--amber-ink);line-height:1.45">' + escTxt(g.ojo) + '</div>'
+        + '</div>'
+        : '')
+    + (g.detalle
+        ? '<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">'
+          + '<button class="btn btn-lime" style="width:100%" onclick="closeModal(\'modal-detalle\');abrirDetalleInicio(\'' + escAttr(g.detalle) + '\')">'
+            + '📋 Ver de dónde sale, uno por uno</button>'
+        + '</div>'
+        : '');
+  openModal('modal-detalle');
+};
+
+// 819. Tarjeta de métrica que se puede tocar. Sustituye a las `.metric-card`
+//      sueltas: misma pinta, pero el concepto deja de ser una palabra muerta.
+function tarjetaConcepto(clave, valor, sub, color) {
+  const g = GLOSARIO[clave] || { titulo: clave };
+  return '<div class="metric-card" role="button" tabindex="0" onclick="explicarConcepto(\'' + escAttr(clave) + '\')"'
+    + ' onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();explicarConcepto(\'' + escAttr(clave) + '\')}"'
+    + ' style="cursor:pointer;position:relative" title="Toca para ver qué es ' + escAttr(g.titulo) + '">'
+    + '<div class="metric-label">' + escTxt(g.titulo) + '</div>'
+    + '<div class="metric-value" style="font-size:19px;color:' + (color||'var(--ink)') + '">' + valor + '</div>'
+    + '<div class="metric-sub">' + (sub || '') + '</div>'
+    + '<span style="position:absolute;top:10px;right:12px;color:var(--ink-3);font-size:11px;opacity:.5">?</span>'
+  + '</div>';
+}
+
+// 819. Y para los textos: una palabra que explica el concepto al tocarla.
+function palabraConcepto(clave, texto) {
+  const g = GLOSARIO[clave];
+  if(!g) return escTxt(texto || clave);
+  return '<span class="concepto" role="button" tabindex="0" onclick="event.stopPropagation();explicarConcepto(\'' + escAttr(clave) + '\')"'
+    + ' onkeydown="if(event.key===\'Enter\'){event.preventDefault();explicarConcepto(\'' + escAttr(clave) + '\')}"'
+    + ' title="¿Qué es ' + escAttr(g.titulo) + '?">' + escTxt(texto || g.titulo) + '</span>';
 }
 
 function renderInformes() {
@@ -14260,16 +14208,16 @@ function renderInformes() {
   const resultados = '<div class="card" style="padding:18px">'
     + '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2)">📐 Estado de resultados</div>'
     + '<div style="font-size:11.5px;color:var(--ink-3);margin:3px 0 12px">' + r.etiqueta + ' · ' + fCorta(r.inicio) + ' al ' + fCorta(r.fin) + '</div>'
-    + renglonInforme('Ventas del periodo', F.vendido, '', 'normal', F.nVentas + ' venta' + (F.nVentas!==1?'s':'') + ' · ticket promedio ' + fmt(F.ticket))
+    + renglonInforme(palabraConcepto('vendido','Ventas del periodo'), F.vendido, '', 'normal', F.nVentas + ' venta' + (F.nVentas!==1?'s':'') + ' · ticket promedio ' + fmt(F.ticket))
     + renglonInforme('Costo de la mercancía vendida', F.costoVendido, '−', 'normal', 'solo el costo de lo que SÍ se vendió')
-    + renglonInforme('Utilidad bruta', F.utilidadBruta, '', 'total', F.margenPct + '% sobre ventas')
+    + renglonInforme(palabraConcepto('margenBruto','Utilidad bruta'), F.utilidadBruta, '', 'total', F.margenPct + '% sobre ventas')
     + '<div style="margin:10px 0 2px;font-size:11px;font-weight:700;color:var(--ink-2);text-transform:uppercase;letter-spacing:.04em">Gastos de operación</div>'
     + categorias
-    + renglonInforme('Total gastos de operación', F.gastosOperacion, '−', 'normal')
+    + renglonInforme(palabraConcepto('gastos','Total gastos de operación'), F.gastosOperacion, '−', 'normal')
     + renglonInforme('Utilidad operacional', F.utilidadOperacional, F.utilidadOperacional < 0 ? '−' : '', 'total',
         'lo que deja el negocio antes de los intereses', F.utilidadOperacional >= 0 ? 'var(--ink)' : 'var(--red)')
     + renglonInforme('Gastos financieros', F.gastosFinancieros, '−', 'normal', 'intereses, comisiones bancarias, 4×1000')
-    + renglonInforme('Utilidad neta', F.utilidadNeta, F.utilidadNeta < 0 ? '−' : '', 'final',
+    + renglonInforme(palabraConcepto('utilidadNeta','Utilidad neta'), F.utilidadNeta, F.utilidadNeta < 0 ? '−' : '', 'final',
         F.margenNetoPct + '% sobre ventas', colorNeta)
     + '<div style="font-size:11px;color:var(--ink-3);margin-top:12px;line-height:1.45;padding-top:10px;border-top:1px solid var(--border)">'
       + 'La compra de mercancía (' + fmt(F.compras) + ' en este periodo) no es un gasto: es inventario. '
@@ -14283,13 +14231,13 @@ function renderInformes() {
     + '<div style="font-size:11.5px;color:var(--ink-3);margin:3px 0 12px">Plata que de verdad entró y salió en el periodo</div>'
     + renglonInforme('Te pagaron de contado', C.contado, '', 'normal', 'el pago del día de cada venta')
     + renglonInforme('Abonos que entraron', C.abonos, '', 'normal', 'fechados en este periodo, sea de cuando sea la venta')
-    + renglonInforme('Cobros de cuentas viejas', C.cobrosViejos, '', 'normal', F.nCobros + ' movimiento' + (F.nCobros!==1?'s':'') + ' · no son venta nueva')
+    + renglonInforme(palabraConcepto('cobrosViejos','Cobros de cuentas viejas'), C.cobrosViejos, '', 'normal', F.nCobros + ' movimiento' + (F.nCobros!==1?'s':'') + ' · no son venta nueva')
     + renglonInforme('Total que entró', C.entradas, '', 'total', null, 'var(--green)')
-    + renglonInforme('Compra de mercancía', C.compras, '−', 'normal', 'no es gasto, pero del banco salió')
+    + renglonInforme(palabraConcepto('mercancia','Compra de mercancía'), C.compras, '−', 'normal', 'no es gasto, pero del banco salió')
     + renglonInforme('Gastos de operación', C.gastosOperacion, '−', 'normal')
     + renglonInforme('Gastos financieros', C.gastosFinancieros, '−', 'normal')
     + renglonInforme('Total que salió', C.salidas, '−', 'total', null, 'var(--red)')
-    + renglonInforme('Movimiento del banco', C.neto, C.neto < 0 ? '−' : '', 'final', null, C.neto >= 0 ? 'var(--ink)' : 'var(--red)')
+    + renglonInforme(palabraConcepto('flujoCaja','Movimiento del banco'), C.neto, C.neto < 0 ? '−' : '', 'final', null, C.neto >= 0 ? 'var(--ink)' : 'var(--red)')
     + (C.fiado > 0
         ? '<div style="font-size:11.5px;color:var(--ink-3);margin-top:12px;line-height:1.45;padding-top:10px;border-top:1px solid var(--border)">'
           + 'De las ventas de este periodo quedaron <strong style="color:var(--ink-2)">' + fmt(C.fiado) + '</strong> sin cobrar. '
@@ -14303,8 +14251,10 @@ function renderInformes() {
     + '<div class="metric-value" style="font-size:19px;color:' + (color||'var(--ink)') + '">' + valor + '</div>'
     + '<div class="metric-sub">' + sub + '</div></div>';
   const posicion = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-top:16px">'
-    + dato('Cartera por cobrar', fmt(F.cartera), r.actual ? 'toda la que está viva hoy' : 'lo que dejó debiendo este periodo', F.cartera > 0 ? 'var(--amber)' : 'var(--green)')
-    + dato('Inventario a costo', fmt(F.valorInventario), 'plata parada en el estante', 'var(--blue)')
+    + dato(palabraConcepto('porCobrar','Cartera por cobrar'), fmt(F.cartera), r.actual ? 'toda la que está viva hoy' : 'lo que dejó debiendo este periodo', F.cartera > 0 ? 'var(--amber)' : 'var(--green)')
+    // 815. Fuera "Inventario a costo": salía de un stock que no existe, y en
+    //      un informe que se le pasa a un contador eso es peor que un hueco.
+    + ''
     + dato('Margen bruto', F.margenPct + '%', 'sobre las ventas del periodo')
     + dato('Margen neto', F.margenNetoPct + '%', 'después de todos los gastos', F.utilidadNeta >= 0 ? 'var(--green)' : 'var(--red)')
   + '</div>';
