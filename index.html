@@ -14011,14 +14011,27 @@ function resumenDelMes(offset) {
   //      quiere ver.
   const historico = {};
   DATA.ventas.filter(v => v.fecha < c.inicio).forEach(v => acumular(historico, v));
-  const dormidos = Object.values(historico)
+  // 810. Dos grupos, no uno. En producción salieron 86 "dormidos" de golpe
+  //      y una tabla de 86 filas no es información, es ruido: ahí dentro
+  //      estaba todo el catálogo histórico, incluido lo que no se vende
+  //      desde mayo. Lo que de verdad hay que mirar es lo que se vendía
+  //      HACE POCO y este mes no — eso es una caída. Lo demás lleva tiempo
+  //      quieto y no es noticia de este mes; se cuenta en una línea.
+  const RECIENTE = 3;   // ciclos hacia atrás que cuentan como "hace poco"
+  const inicioReciente = getCicloActual(offset + RECIENTE).inicio;
+
+  const todosDormidos = Object.values(historico)
     .filter(h => !mapa[h.nombre])
     .map(h => {
-      const ultimas = DATA.ventas.filter(v => v.fecha < c.inicio && lineasDeVenta(v).some(l => String(l.nombre||'').trim() === h.nombre));
-      const ultima = ultimas.reduce((f,v) => v.fecha > f ? v.fecha : f, '');
+      const suyas = DATA.ventas.filter(v => v.fecha < c.inicio
+        && lineasDeVenta(v).some(l => String(l.nombre||'').trim() === h.nombre));
+      const ultima = suyas.reduce((f,v) => v.fecha > f ? v.fecha : f, '');
       return { nombre:h.nombre, unidades:0, dinero:0, ventas:0, ultima, unidadesAntes:h.unidades };
     })
-    .sort((a,b) => b.unidadesAntes - a.unidadesAntes);
+    .sort((a,b) => (b.ultima > a.ultima ? 1 : b.ultima < a.ultima ? -1 : 0) || b.unidadesAntes - a.unidadesAntes);
+
+  const dormidos    = todosDormidos.filter(d => d.ultima >= inicioReciente);
+  const dormidosViejos = todosDormidos.filter(d => d.ultima < inicioReciente);
 
   const productos = Object.values(mapa).map(p => ({ ...p, dinero: Math.round(p.dinero) }))
     .sort((a,b) => b.unidades - a.unidades || b.dinero - a.dinero);
@@ -14029,7 +14042,7 @@ function resumenDelMes(offset) {
     unidades: productos.reduce((s,p) => s + p.unidades, 0),
     dinero: ventas.reduce((s,v) => s + ingresoVenta(v), 0),
     nVentas: ventas.length,
-    productos, dormidos
+    productos, dormidos, dormidosViejos, mesesReciente: RECIENTE
   };
 }
 
@@ -14143,21 +14156,38 @@ function renderResumenMes() {
   + '</div>';
 
   // ---- Los que se durmieron ----
-  const dormidos = R.dormidos.length
+  // 810. Los que se cayeron (se vendían hace poco) van en tabla; los que
+  //      llevan mucho quietos, en una sola línea al pie.
+  const colaViejos = R.dormidosViejos.length
+    ? '<div style="font-size:11.5px;color:var(--ink-3);margin-top:12px;padding-top:11px;border-top:1px solid var(--border);line-height:1.45">'
+      + 'Hay otros <strong style="color:var(--ink-2)">' + R.dormidosViejos.length + '</strong> productos sin ventas desde hace más de '
+      + R.mesesReciente + ' meses. No se listan aquí porque no es una novedad de este mes: '
+      + 'llevan tiempo quietos.</div>'
+    : '';
+
+  const dormidos = (R.dormidos.length || R.dormidosViejos.length)
     ? '<div class="card" style="padding:16px;margin-top:16px;border-left:3px solid var(--amber)">'
-      + '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2)">😴 Se vendían antes, este mes no</div>'
+      + '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2)">😴 Se vendían y este mes no</div>'
       + '<div style="font-size:11.5px;color:var(--ink-3);margin:3px 0 11px;line-height:1.45">'
-        + R.dormidos.length + ' producto' + (R.dormidos.length!==1?'s':'') + ' con ventas en meses anteriores y <strong>cero</strong> en este. '
-        + 'No aparecen en la tabla de arriba porque no tienen ninguna venta que contar.</div>'
-      + '<div class="table-wrap"><table class="tbl">'
-        + '<thead><tr><th>Producto</th><th style="text-align:right">Este mes</th>'
-          + '<th style="text-align:right">Vendidas antes</th><th>Última venta</th></tr></thead>'
-        + '<tbody>' + R.dormidos.map(d =>
-            '<tr><td style="font-weight:500">' + escTxt(d.nombre) + '</td>'
-            + '<td style="text-align:right;font-weight:700;color:var(--amber)">0</td>'
-            + '<td style="text-align:right;color:var(--ink-3);font-variant-numeric:tabular-nums">' + d.unidadesAntes + '</td>'
-            + '<td style="color:var(--ink-3);white-space:nowrap">' + (d.ultima ? fCorta(d.ultima) : '—') + '</td></tr>').join('')
-        + '</tbody></table></div>'
+        + (R.dormidos.length
+            ? '<strong>' + R.dormidos.length + ' producto' + (R.dormidos.length!==1?'s':'') + '</strong> que se vendía'
+              + (R.dormidos.length!==1?'n':'') + ' en los últimos ' + R.mesesReciente + ' meses y este mes quedó'
+              + (R.dormidos.length!==1?'aron':'') + ' en <strong>cero</strong>. '
+              + 'No aparecen arriba porque no tienen ninguna venta que contar.'
+            : 'Ninguno de los que se vendían en los últimos ' + R.mesesReciente + ' meses se quedó en cero. Bien.')
+      + '</div>'
+      + (R.dormidos.length
+          ? '<div class="table-wrap"><table class="tbl">'
+            + '<thead><tr><th>Producto</th><th style="text-align:right">Este mes</th>'
+              + '<th style="text-align:right">Vendidas antes</th><th>Última venta</th></tr></thead>'
+            + '<tbody>' + R.dormidos.map(d =>
+                '<tr><td style="font-weight:500">' + escTxt(d.nombre) + '</td>'
+                + '<td style="text-align:right;font-weight:700;color:var(--amber)">0</td>'
+                + '<td style="text-align:right;color:var(--ink-3);font-variant-numeric:tabular-nums">' + d.unidadesAntes + '</td>'
+                + '<td style="color:var(--ink-3);white-space:nowrap">' + (d.ultima ? fCorta(d.ultima) : '—') + '</td></tr>').join('')
+            + '</tbody></table></div>'
+          : '')
+      + colaViejos
     + '</div>'
     : '';
 

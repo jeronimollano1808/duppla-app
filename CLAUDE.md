@@ -1043,6 +1043,10 @@ La gráfica son **barras horizontales**: con quince nombres de producto, las ver
 
 **809. Las reglas.** `firestore.rules` + `COMO-ACTIVAR-LOS-PERMISOS.md` en el repo, con el orden exacto (crear la cuenta del visitante → que entren los dos admins → que entre el visitante → publicar las reglas) y la prueba que importa: entrar como visitante, abrir la consola y llamar a `guardarGasto()` a mano. Si no guarda, quedó bien.
 
+**810. Un arreglo que solo se vio con los datos reales.** La primera versión mostraba **86 "dormidos"** de golpe para septiembre: ahí dentro estaba todo el catálogo histórico, incluido lo que no se vende desde mayo. Una tabla de 86 filas no es información, es ruido.
+
+Ahora son dos grupos: **los que se cayeron** —vendían en los últimos 3 ciclos y este mes quedaron en cero, que es lo accionable— van en la tabla, ordenados por el que se cayó más recientemente. Los que llevan más tiempo quietos se cuentan **en una línea** al pie: no se pierden, pero no es una novedad de este mes.
+
 **Regla que sale de aquí:** *un permiso que solo existe en la interfaz no es un permiso, es una sugerencia.* Y cuando el despliegue de la parte que sí protege queda fuera del alcance de uno, lo honesto es decirlo en grande y dejar los pasos escritos — no entregarlo como si estuviera hecho.
 
 
