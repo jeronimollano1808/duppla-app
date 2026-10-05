@@ -1011,5 +1011,40 @@ Ahora todo lo que no tiene color propio se apila en **una sola banda "Otros"**, 
 **Regla que sale de aquí:** *un tema oscuro no se agrega al final, se habilita.* El trabajo de verdad fue el 792 —sacar los colores del código— y eso no se ve en pantalla. Cuando alguien pida "modo oscuro" en una app con colores a mano, el 80% del tiempo se va en esa limpieza, y conviene decirlo antes de empezar.
 
 
+### 14.29 Tres sesiones y resumen del mes (comentarios 801–809)
+
+**801. Roles.** `admin` (Jero y Ángel) y `visitante` (solo lectura). El rol vive en la colección `usuarios`, **un documento por persona con su UID como id** — no se deduce del correo en caliente, se lee de la base, para que la misma fuente que usa la app la puedan usar las reglas de Firestore.
+
+El rol se resuelve **antes** de pintar nada. Si se pintara primero y se ocultara después, el visitante vería los botones un instante.
+
+**802. LO MÁS IMPORTANTE: esconder botones no protege nada.** Cualquiera con la consola del navegador abierta llama a la función que hay detrás. El candado real son las reglas de Firestore (`firestore.rules`), y **desde la app no se pueden desplegar: hay que pegarlas en la consola de Firebase.** Todo lo del lado del cliente sirve para que el visitante no vea cosas que no puede hacer y para que nadie se lleve un error feo del servidor. Nada más.
+
+Corolario que se aplicó: si el servidor **rechaza** crear la ficha de usuario —que es justo lo que hacen las reglas con un rol no autorizado— la app **no** puede devolver 'admin' igual. Entra como visitante, que es la verdad de lo que esa persona puede hacer. Una interfaz que dice que mandas mientras el servidor te bloquea cada guardado es peor que una que te lo dice de frente.
+
+**Alta automática, con el default que menos daño hace.** La primera vez que alguien entra se le crea su ficha. Si `usuarios` está vacía, ese primero es admin (única forma de arrancar sin tocar la consola); de ahí en adelante **todos entran como visitante** y un admin los asciende. Entre equivocarse dando permisos de más y de menos, se escoge de menos.
+
+**803. Candado en las 44 funciones que escriben.** Puesto por script sobre la lista completa de `window.guardar*`, `eliminar*`, etc., no a ojo: a mano se olvida una, y la que se olvida es la que alguien encuentra.
+
+**804. Modo solo lectura por lo que HACE cada botón.** La app escribe los manejadores en `onclick`, así que se esconde con selectores de atributo (`[onclick*="guardar"]`, `[onclick*="eliminar"]`…) en vez de marcar uno por uno los cientos que existen. Cualquier botón nuevo que siga la convención queda cubierto solo. Y una cinta pegada arriba dice siempre quién está conectado y con qué permiso: *si uno no sabe con qué cuenta está, acaba registrando algo donde no es.*
+
+**806. Pantalla de Usuarios (solo admins).** Con dos candados que no son paranoia: un admin **no puede quitarse el permiso a sí mismo**, y **no se puede dejar la casa sin admins**. En los dos casos el desenlace es el mismo: nadie puede volver a dar permisos y hay que ir a arreglarlo a la consola.
+
+**807–808. La firma y la ubicación.** Todo registro nuevo lleva quién lo hizo y cuándo. No es lo mismo que la bitácora (785): la bitácora cuenta la *historia* de los cambios; esto pega el autor al registro, para poder preguntarle a una venta de hace tres meses quién la metió. Los registros viejos **no llevan dato inventado**: se muestran como "Sin asignar", que es la verdad.
+
+El stock sale por defecto de la ubicación de quien registra. Antes siempre arrancaba en Jero, así que cada venta de Ángel había que corregirla a mano o salía descontada del lado equivocado. Es un **punto de partida, no una obligación**: si no hay suficiente en su lado, se cae al otro igual que antes — no se rompe nada de lo que ya funcionaba.
+
+**805. Resumen del mes.** Va por **ciclo de Duppla** (día 4 al 3), no por mes de calendario, porque es la ventana con la que cuadra todo lo demás; medirlo distinto haría que dos pantallas dieran dos números para la misma pregunta.
+
+Las unidades salen de las **líneas**, no de las ventas: "3 creatinas + 1 whey" son 4 unidades, no 1. Y el dinero de una venta de varias líneas se reparte entre ellas, de modo que **la suma por producto da exactamente el total del mes** (probado como invariante).
+
+La parte que no es obvia es la de los productos que se vendían antes y este mes no: **no están en las ventas del mes** —por definición no hay fila que contarles— así que hay que traerlos del histórico completo y ponerles cero. Es la información más útil de la pantalla y la única que no aparece sola. Se mira todo el histórico anterior, no solo el mes pasado: un producto que se vendía en mayo y lleva cuatro meses quieto es justo el que uno quiere ver.
+
+La gráfica son **barras horizontales**: con quince nombres de producto, las verticales obligan a girar las etiquetas y no se leen.
+
+**809. Las reglas.** `firestore.rules` + `COMO-ACTIVAR-LOS-PERMISOS.md` en el repo, con el orden exacto (crear la cuenta del visitante → que entren los dos admins → que entre el visitante → publicar las reglas) y la prueba que importa: entrar como visitante, abrir la consola y llamar a `guardarGasto()` a mano. Si no guarda, quedó bien.
+
+**Regla que sale de aquí:** *un permiso que solo existe en la interfaz no es un permiso, es una sugerencia.* Y cuando el despliegue de la parte que sí protege queda fuera del alcance de uno, lo honesto es decirlo en grande y dejar los pasos escritos — no entregarlo como si estuviera hecho.
+
+
 ---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*

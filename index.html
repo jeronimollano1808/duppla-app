@@ -548,6 +548,62 @@ body{
 .bus-fila:active{background:var(--surface-3)}
 
 /* ============================================================
+   804. MODO SOLO LECTURA
+   La app escribe los manejadores en el atributo onclick, así que se
+   puede esconder por lo que HACE cada botón y no hay que marcar uno
+   por uno los cientos que existen. Es un selector largo pero es la
+   lista completa de verbos que escriben, y cualquiera nuevo que siga
+   la convención (guardar…, abrirNuevo…, editar…, eliminar…) queda
+   cubierto solo.
+   Repito lo del 802: esto es cosmética. El candado real son las
+   reglas de Firestore.
+   ============================================================ */
+body.solo-lectura [onclick*="abrirModal"],
+body.solo-lectura [onclick*="abrirNuevo"],
+body.solo-lectura [onclick*="abrirAbono"],
+body.solo-lectura [onclick*="abrirImportar"],
+body.solo-lectura [onclick*="abrirCierre"],
+body.solo-lectura [onclick*="abrirAjuste"],
+body.solo-lectura [onclick*="abrirLote"],
+body.solo-lectura [onclick*="abrirUnificar"],
+body.solo-lectura [onclick*="abrirLimpiar"],
+body.solo-lectura [onclick*="abrirDejar"],
+body.solo-lectura [onclick*="abrirReporte"],
+body.solo-lectura [onclick*="abrirConsumo"],
+body.solo-lectura [onclick*="abrirVentasSinCosto"],
+body.solo-lectura [onclick*="abrirRecordatorio"],
+body.solo-lectura [onclick*="guardar"],
+body.solo-lectura [onclick*="editar"],
+body.solo-lectura [onclick*="eliminar"],
+body.solo-lectura [onclick*="registrar"],
+body.solo-lectura [onclick*="restaurar"],
+body.solo-lectura [onclick*="purgar"],
+body.solo-lectura [onclick*="cerrarMes"],
+body.solo-lectura [onclick*="reabrirMes"],
+body.solo-lectura [onclick*="corregir"],
+body.solo-lectura [onclick*="desvincular"],
+body.solo-lectura [onclick*="convertir"],
+body.solo-lectura [onclick*="unificar"],
+body.solo-lectura [onclick*="aplicar"],
+body.solo-lectura [onclick*="toggleActivo"],
+body.solo-lectura [onclick*="cambiarEstadoPedido"],
+body.solo-lectura [onclick*="cambiarRol"],
+body.solo-lectura [onclick="openModal('modal-meta')"],
+body.solo-lectura .modal-footer .btn-lime,
+body.solo-lectura .modal-footer .btn-primary{ display:none !important; }
+
+/* La cinta de arriba, para que nunca haya duda de en qué modo se está. */
+.barra-sesion{
+  display:flex;align-items:center;gap:9px;
+  padding:7px 16px;background:var(--surface);
+  border-bottom:1px solid var(--border);
+  font-size:12.5px;color:var(--ink-2);
+  position:sticky;top:0;z-index:60;
+}
+#chip-usuario{display:flex;align-items:center;gap:7px;min-width:0;flex:1;font-weight:600;color:var(--ink)}
+body.solo-lectura .barra-sesion{background:var(--blue-bg);border-bottom-color:var(--blue-bd)}
+
+/* ============================================================
    797. ESQUELETOS DE CARGA
    Mientras Firebase responde, las pantallas salían en blanco y la app
    parecía rota o vacía —sobre todo con datos móviles flojos—. Un bloque
@@ -1049,6 +1105,13 @@ body{
        Cada página tiene su propio div, solo uno visible a la vez
        ============================================================ -->
   <div class="main">
+    <!-- 804. Cinta de sesión: quién está conectado, con qué permiso, y el
+         botón de salir. Se queda pegada arriba al hacer scroll — si uno no
+         sabe con qué cuenta está, acaba registrando algo donde no es. -->
+    <div class="barra-sesion">
+      <div id="chip-usuario"></div>
+      <button class="btn btn-sm" onclick="doLogout()" title="Cerrar sesión">Salir</button>
+    </div>
     <!-- 661. Inicio — pantalla de arranque: lo urgente, los accesos rápidos y
          cómo va el ciclo. El Dashboard sigue existiendo tal cual para el
          detalle; Inicio es el resumen accionable de todos los días. -->
@@ -1063,6 +1126,9 @@ body{
     <div class="page" id="page-metas"></div>
     <!-- 782. Informes: estado de resultados y flujo de caja, exportables. -->
     <div class="page" id="page-informes"></div>
+    <!-- 805. Resumen del mes y 806. Usuarios -->
+    <div class="page" id="page-resumen"></div>
+    <div class="page" id="page-usuarios"></div>
     <!-- 178. Página de combos -->
     <div class="page" id="page-combos"></div>
     <!-- 306. Página de deudores -->
@@ -2556,7 +2622,7 @@ body{
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getFirestore, collection, addDoc, deleteDoc,
-  doc, updateDoc, setDoc, onSnapshot, query, orderBy,
+  doc, getDoc, getDocs, updateDoc, setDoc, onSnapshot, query, orderBy,
   serverTimestamp, limit
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
@@ -2602,7 +2668,8 @@ let DATA = {
   tiendasConsignacion:[], consignaciones:[],  // 488. consignación física en tiendas
   gastosRecurrentes:[],  // 597. plantillas de gastos fijos mensuales (arriendo, nómina, etc.)
   papelera:[],  // 619. registros eliminados, recuperables por 7 días
-  bitacora:[]   // 785. quién tocó qué y cuándo
+  bitacora:[],  // 785. quién tocó qué y cuándo
+  usuarios:[]   // 801. quién entra y con qué permiso
 };
 let currentPage = 'inicio';  // 663. Página activa — arrancamos en Inicio
 // 797. Hasta que lleguen las tres colecciones de las que cuelga casi todo,
@@ -3142,6 +3209,8 @@ const MENU = [
   // 782. Informes — lo que se le pasa a un contador, a un banco o a un socio.
   { id:'informes', label:'Informes', ico:'📄', group:'Cómo vamos' },
   { id:'metas', label:'Metas', ico:'🎯', group:'Cómo vamos' },
+  // 805. Resumen del mes — qué se vendió, cuánto y de qué. Lo ven los tres.
+  { id:'resumen', label:'Resumen del mes', ico:'📅', group:'Cómo vamos' },
 
   // --- Operación: de vez en cuando ---
   { id:'pedidos', label:'Pedidos', ico:'📦', group:'Operación' },
@@ -3151,6 +3220,8 @@ const MENU = [
   // 786. Actividad se comió a Papelera (ver 786). La página vieja sigue
   //      existiendo y showPage('papelera') sigue sirviendo.
   { id:'actividad', label:'Actividad', ico:'📋', group:'Operación' },
+  // 806. Usuarios — solo para admins (buildNav lo filtra).
+  { id:'usuarios', label:'Usuarios', ico:'🔑', group:'Operación', soloAdmin:true },
   // 774. Inventario no está en el menú a propósito: se entra por el botón
   //      discreto del pie, que es donde se arregla un costo o se crea un
   //      producto cuando de verdad hace falta.
@@ -3161,15 +3232,161 @@ const MENU = [
 // onAuthStateChanged escucha cambios de sesión automáticamente
 // Se ejecuta al abrir la app y cuando el usuario hace login/logout
 // ============================================================
-onAuthStateChanged(auth, user => {
+// ============================================================
+// 801. SESIONES Y ROLES
+//
+// Hasta ahora todo el que entraba podía tocar todo. Ahora hay dos roles:
+//
+//   · admin      → Jero y Ángel. Todo como hasta hoy.
+//   · visitante  → solo lectura. No crea, no edita, no borra.
+//
+// El rol vive en la colección `usuarios`, un documento por persona con su
+// propio UID como id. No se deduce del correo en caliente: se lee de la
+// base, para que la MISMA fuente que usa la app la puedan usar las reglas
+// de Firestore (ver firestore.rules).
+//
+// 802. ESTO SOLO ES LA MITAD. Esconder botones no protege nada: cualquiera
+//      con la consola del navegador abierta puede llamar a la función que
+//      hay detrás. El bloqueo de verdad son las reglas de Firestore, que
+//      están en firestore.rules y HAY QUE PEGARLAS EN LA CONSOLA DE
+//      FIREBASE — desde aquí no se pueden desplegar. Lo de abajo sirve
+//      para que el visitante no vea cosas que no puede hacer, y para que
+//      un admin no se lleve un error feo del servidor. Nada más.
+//
+// Alta automática: la primera vez que alguien entra se le crea su
+// documento. Si la colección `usuarios` todavía está vacía, ese primero es
+// admin (es la única forma de arrancar sin tocar la consola); de ahí en
+// adelante, todo el que llegue entra como VISITANTE y un admin lo asciende
+// desde la pantalla de Usuarios. El valor por defecto es el que menos
+// daño hace si alguien se equivoca.
+// ============================================================
+const ADMINS_SEMILLA = ['angelcertuchegaray123@gmail.com'];
+
+let usuarioActual = null;          // { uid, email, nombre, rol }
+const esAdmin   = () => usuarioActual?.rol === 'admin';
+const soloLee   = () => !esAdmin();
+
+const nombreDeCorreo = (correo) => {
+  const base = String(correo || '').split('@')[0].replace(/[._-]+/g, ' ').trim();
+  return base ? base.replace(/\b\w/g, c => c.toUpperCase()) : 'Sin nombre';
+};
+
+async function cargarPerfil(user) {
+  const ref = doc(db, 'usuarios', user.uid);
+  try {
+    const snap = await getDoc(ref);
+    if(snap.exists()) {
+      const d = snap.data();
+      return { uid:user.uid, email:user.email, nombre: d.nombre || nombreDeCorreo(user.email), rol: d.rol === 'admin' ? 'admin' : 'visitante' };
+    }
+    // Primera vez de esta persona. ¿Hay alguien ya registrado?
+    let hayAlguien = true;
+    try { hayAlguien = (await getDocs(collection(db,'usuarios'))).size > 0; }
+    catch(e) { hayAlguien = true; }   // si no se puede leer, lo prudente es "ya hay"
+
+    const rol = (!hayAlguien || ADMINS_SEMILLA.includes(String(user.email||'').toLowerCase()))
+      ? 'admin' : 'visitante';
+    const perfil = { email:user.email, nombre: nombreDeCorreo(user.email), rol, creadoEn: today() };
+    try {
+      await setDoc(ref, perfil);
+      return { uid:user.uid, ...perfil };
+    } catch(e) {
+      // 802. Si el servidor RECHAZA crear la ficha —que es justo lo que
+      //      hacen las reglas con un rol 'admin' no autorizado— no se puede
+      //      devolver 'admin' igual: la app diría que manda y el servidor
+      //      bloquearía cada guardado. Se entra como visitante, que es la
+      //      verdad de lo que ese usuario puede hacer.
+      console.warn('No se pudo crear el perfil, se entra como visitante:', e);
+      return { uid:user.uid, email:user.email, nombre: nombreDeCorreo(user.email), rol:'visitante' };
+    }
+  } catch(e) {
+    // Si la lectura falla (reglas, red), se entra como visitante: nunca se
+    // abre la puerta por culpa de un error.
+    console.warn('No se pudo leer el perfil, se entra como visitante:', e);
+    return { uid:user.uid, email:user.email, nombre: nombreDeCorreo(user.email), rol:'visitante' };
+  }
+}
+
+// ============================================================
+// 807. LA FIRMA DE QUIEN REGISTRA
+//
+// Todo registro nuevo lleva quién lo hizo y cuándo. No es lo mismo que la
+// bitácora (785): la bitácora cuenta la HISTORIA de los cambios, esto
+// pega el autor al registro mismo, para poder preguntarle a una venta de
+// hace tres meses quién la metió sin ir a buscar su rastro.
+//
+// Los registros viejos no tienen este campo y no se les inventa nada: se
+// muestran como "Sin asignar", que es la verdad.
+// ============================================================
+function firmaRegistro() {
+  return {
+    creadoPorUid: usuarioActual?.uid || null,
+    creadoPor: usuarioActual?.nombre || null,
+    creadoEnFecha: today(),
+    creadoEnHora: new Date().toTimeString().slice(0,5)
+  };
+}
+const autorDe = (r) => r?.creadoPor || 'Sin asignar';
+
+// 808. De qué ubicación sale el stock por defecto. Si quien registra es
+//      Ángel, de lo de Ángel; si es Jero, de lo de Jero. Antes siempre
+//      arrancaba en 'jero', así que cada venta de Ángel había que
+//      corregirla a mano o salía descontada del lado equivocado.
+//      Se usa como PUNTO DE PARTIDA, nunca como obligación: si no hay
+//      suficiente en su lado, se cae al otro, igual que antes.
+function ubicacionPorDefecto() {
+  const n = String(usuarioActual?.nombre || usuarioActual?.email || '').toLowerCase();
+  if(/[áa]ngel/.test(n)) return 'angel';
+  if(/jer[óo]nimo|jero/.test(n)) return 'jero';
+  return 'jero';
+}
+function ubicacionConStock(prod, cant) {
+  const mia = ubicacionPorDefecto();
+  const otra = mia === 'jero' ? 'angel' : 'jero';
+  const hay = (u) => Number(u === 'jero' ? (prod?.stockJero||0) : (prod?.stockAngel||0));
+  const tieneReparto = prod?.stockJero != null || prod?.stockAngel != null;
+  if(!tieneReparto) return mia;
+  if(hay(mia) >= Number(cant||0)) return mia;
+  if(hay(otra) >= Number(cant||0)) return otra;
+  return hay(mia) >= hay(otra) ? mia : otra;
+}
+
+// 803. Candado para TODA función que escriba. Devuelve false y avisa.
+function exigirAdmin(queIbaAHacer) {
+  if(esAdmin()) return true;
+  alert('👁️ Estás entrando como visitante.\n\nPuedes ver todo, pero no ' + (queIbaAHacer || 'hacer cambios') + '.\n\n'
+    + 'Si necesitas registrar algo, pídele a Jero o a Ángel que te den permiso de administrador.');
+  return false;
+}
+
+// Pinta u oculta todo lo que sirva para escribir, según el rol.
+function aplicarPermisos() {
+  document.body.classList.toggle('solo-lectura', soloLee());
+  const chip = document.getElementById('chip-usuario');
+  if(chip) {
+    chip.innerHTML = '<span class="avatar" style="width:26px;height:26px;font-size:10px">'
+      + escTxt((usuarioActual?.nombre || '?').slice(0,2).toUpperCase()) + '</span>'
+      + '<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
+        + escTxt(usuarioActual?.nombre || '') + '</span>'
+      + '<span class="badge" style="background:' + (esAdmin() ? 'var(--lime-bg)' : 'var(--blue-bg)')
+        + ';color:' + (esAdmin() ? 'var(--lime)' : 'var(--blue)') + '">'
+        + (esAdmin() ? 'Admin' : '👁️ Solo lectura') + '</span>';
+  }
+  const em = document.getElementById('user-email-display');
+  if(em) em.textContent = usuarioActual?.email || '';
+  const av = document.getElementById('user-avatar');
+  if(av) av.textContent = (usuarioActual?.nombre || '?').charAt(0).toUpperCase();
+}
+
+onAuthStateChanged(auth, async user => {
   document.getElementById('loading').style.display = 'none';
   if (user) {
     // 44. Usuario logueado: mostramos la app y configuramos UI
     document.getElementById('app').style.display = 'block';
-    document.getElementById('user-email-display').textContent = user.email;
-    // Mostramos inicial del email en el avatar
-    const initial = user.email.charAt(0).toUpperCase();
-    document.getElementById('user-avatar').textContent = initial;
+    // 801. El rol se resuelve ANTES de pintar nada: si se pintara primero y
+    //      se ocultara después, el visitante vería los botones un instante.
+    usuarioActual = await cargarPerfil(user);
+    aplicarPermisos();
     startListeners();   // Iniciamos conexión con Firebase
     buildNav();         // Construimos el menú lateral
     aplicarTema(temaGuardado());  // 793. Deja el botón con la etiqueta correcta
@@ -3177,6 +3394,8 @@ onAuthStateChanged(auth, user => {
     requestNotifPermission(); // Pedimos permiso de notificaciones
   } else {
     // 45. Sin usuario: mostramos pantalla de login
+    usuarioActual = null;
+    document.body.classList.remove('solo-lectura');
     document.getElementById('login-screen').style.display = 'flex';
     document.getElementById('app').style.display = 'none';
   }
@@ -3218,6 +3437,12 @@ document.getElementById('li-pass')?.addEventListener('keydown', e => {
 // ============================================================
 function startListeners() {
   const cols = ['ventas','inventario','gastos','proveedores','pedidos','metas','combos','consumos','distribuidores','cierres','tiendasConsignacion','consignaciones','gastosRecurrentes','papelera'];
+  // 806. `usuarios` va con su propio oyente: no tiene createdAt y el bucle
+  //      de arriba ordena por ese campo, así que ahí no entra.
+  onSnapshot(collection(db,'usuarios'), snap => {
+    DATA.usuarios = snap.docs.map(d => ({ uid:d.id, ...d.data() }));
+    if(currentPage === 'usuarios') renderUsuarios();
+  }, e => console.warn('No se pudo leer usuarios:', e));
   cols.forEach(col => {
     const q = query(collection(db, col), orderBy('createdAt','desc'));
     onSnapshot(q, snap => {
@@ -3316,7 +3541,8 @@ function buildNav() {
   //      viejo —recorrer ítems y sacar título cuando cambiaba el grupo— un
   //      array desordenado repetía los títulos, que es lo que pasaba.
   GRUPOS_MENU.forEach(grupo => {
-    const items = MENU.filter(m => m.group === grupo);
+    // 806. Las entradas marcadas soloAdmin no existen para un visitante.
+    const items = MENU.filter(m => m.group === grupo && (!m.soloAdmin || esAdmin()));
     if(!items.length) return;
     html += `<div class="nav-section-title">${grupo}</div>`;
     items.forEach(m => {
@@ -3377,6 +3603,7 @@ function renderPage(id) {
     gastos:renderGastos, proveedores:renderProveedores,
     pedidos:renderPedidos, metas:renderMetas, combos:renderCombos,
     informes:renderInformes,
+    resumen:renderResumenMes, usuarios:renderUsuarios,
     deudores:renderDeudores,
     distribuidores:renderDistribuidores,
     consignacion:renderConsignacion,
@@ -4630,7 +4857,8 @@ function contenidoLineaVenta(i) {
       const tieneReparto = (prod.stockJero != null && prod.stockAngel != null) && (sj > 0 || sa > 0);
       let ubicacionHtml = '';
       if(tieneReparto) {
-        if(!l.ubicacion) l.ubicacion = sj > 0 ? 'jero' : 'angel';
+        // 808. Arranca en la ubicación de quien registra, no siempre en Jero.
+        if(!l.ubicacion) l.ubicacion = ubicacionConStock({stockJero:sj, stockAngel:sa}, l.cant);
         ubicacionHtml = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">'
           + '<button type="button" onclick="seleccionarUbicacionLinea(' + i + ',\'jero\')" '
             + 'style="padding:6px 4px;border-radius:6px;border:2px solid ' + (l.ubicacion==='jero'?'var(--ink)':'var(--border)') + ';'
@@ -4849,13 +5077,14 @@ async function escribirVenta(editId, datosVenta, ventaOriginal) {
         titulo: tituloRegistro('ventas', { ...ventaOriginal, ...datosVenta }), cambios });
     }
   } else {
-    const ref = await addDoc(collection(db,'ventas'), { ...datosVenta, abonos:[], createdAt:serverTimestamp() });
+    const ref = await addDoc(collection(db,'ventas'), { ...firmaRegistro(), ...datosVenta, abonos:[], createdAt:serverTimestamp() });
     await registrarEnBitacora({ accion:'creó', coleccion:'ventas', docId: ref.id,
       titulo: tituloRegistro('ventas', datosVenta), cambios: [] });
   }
 }
 
 window.guardarVenta = async () => {
+  if(!exigirAdmin('registrar ni editar ventas')) return;   // 803
   // 634. Modo edición (ver editarVentaMultiple) — mismo modal de "Nueva
   // venta", pero actualiza la venta existente en vez de crear una nueva.
   const editId = document.getElementById('v-edit-id')?.value || '';
@@ -4908,7 +5137,7 @@ window.guardarVenta = async () => {
     const cant = Number(document.getElementById('v-cant')?.value)||1;
     const precio = Number(document.getElementById('v-precio')?.value)||0;
     if(!fecha||!nombreManual||!cant||!precio) { alert('Completa fecha, nombre del producto, cantidad y precio'); return; }
-    await addDoc(collection(db,'ventas'), {
+    await addDoc(collection(db,'ventas'), { ...firmaRegistro(),
       fecha, canal, producto:nombreManual, prodId:null, esManual:true,
       cant, precio, total, cliente, nota, tipoPrecio:'publico',
       metodoPago, pagado, saldo, estadoPago, abonos:[],
@@ -4956,7 +5185,7 @@ window.guardarVenta = async () => {
       //      al guardar — nunca para bloquear. Si el desglose no alcanza
       //      en la ubicación "ideal", igual se permite (se ajusta al guardar).
       const tieneUbicacionAsignada = prod.stockJero != null || prod.stockAngel != null;
-      const ubicacionLinea = l.ubicacion || (!tieneUbicacionAsignada ? 'jero' : ((prod.stockJero||0) >= l.cant ? 'jero' : ((prod.stockAngel||0) >= l.cant ? 'angel' : 'jero')));
+      const ubicacionLinea = l.ubicacion || ubicacionConStock(prod, l.cant);   // 808
     }
 
     // 288. Si es una sola línea, registramos como venta simple (compatible con historial)
@@ -4980,7 +5209,7 @@ window.guardarVenta = async () => {
       // 453. Descontamos del stock de la ubicación elegida (Jero/Ángel) si el
       //      producto tiene reparto; si no, simplemente descuenta del total.
       const tieneUbic1 = prod.stockJero != null || prod.stockAngel != null;
-      const ubicacionFinal1 = l.ubicacion || (!tieneUbic1 ? 'jero' : ((prod.stockJero||0) > 0 ? 'jero' : 'angel'));
+      const ubicacionFinal1 = l.ubicacion || ubicacionConStock(prod, l.cant);   // 808
       const updateStock1 = construirUpdateStockUbicacion(prod, l.cant, ubicacionFinal1);
 
       // 470. FIFO: si el producto tiene lotes, consumimos del más antiguo primero
@@ -5019,7 +5248,7 @@ window.guardarVenta = async () => {
         }
         const prod = DATA.inventario.find(p => p.id === l.prodId);
         const tieneUbic2 = prod.stockJero != null || prod.stockAngel != null;
-        const ubicacionFinal2 = l.ubicacion || (!tieneUbic2 ? 'jero' : ((prod.stockJero||0) > 0 ? 'jero' : 'angel'));
+        const ubicacionFinal2 = l.ubicacion || ubicacionConStock(prod, l.cant);   // 808
         const updateStock2 = construirUpdateStockUbicacion(prod, l.cant, ubicacionFinal2);
 
         // 470. Mismo tratamiento FIFO para cada línea de una venta múltiple
@@ -5175,6 +5404,7 @@ window.calcNuevoSaldo = () => {
 };
 
 window.guardarAbono = async () => {
+  if(!exigirAdmin('registrar abonos')) return;   // 803
   const venta = DATA.ventas.find(v => v.id === abonoVentaId);
   if(!venta) return;
   const valor = Number(document.getElementById('ab-valor').value);
@@ -5277,6 +5507,7 @@ window.abrirModalCobro = () => {
 };
 
 window.guardarCobro = async () => {
+  if(!exigirAdmin()) return;   // 803
   const fecha   = document.getElementById('cb-fecha').value;
   const cliente = document.getElementById('cb-cliente').value.trim();
   const valor   = Number(document.getElementById('cb-valor').value) || 0;
@@ -5298,7 +5529,7 @@ window.guardarCobro = async () => {
       + 'así también le baja la deuda.\n\n¿Aun así lo guardo como cobro de cuenta vieja?')) return;
   }
 
-  await addDoc(collection(db,'ventas'), {
+  await addDoc(collection(db,'ventas'), { ...firmaRegistro(),
     tipoMov,                       // 727. lo saca de DATA.ventas y lo manda a DATA.cobros
     fecha, cliente,
     producto: nota || (tipoMov === 'reembolso' ? 'Reembolso de socio' : 'Abono a cuenta'),
@@ -5501,6 +5732,7 @@ window.calcEditTotal = () => {
 };
 
 window.guardarEditarVenta = async () => {
+  if(!exigirAdmin()) return;   // 803
   const id = document.getElementById('ev-id').value;
   if(!id) return;
 
@@ -6255,6 +6487,7 @@ window.filtrarFilasInventario = (busq) => {
 };
 
 window.corregirPrecios = async () => {
+  if(!exigirAdmin()) return;   // 803
   //      Criterio: precio público mayor a 0 pero menor a 1000
   //      (ningún suplemento debería costar menos de $1.000 COP)
   const aCorregir = DATA.inventario.filter(p => p.pventa > 0 && p.pventa < 1000);
@@ -6349,6 +6582,7 @@ function toast(msg, tipo='success') {
 }
 
 window.guardarProducto = async () => {
+  if(!exigirAdmin('tocar el inventario')) return;   // 803
   // 84. Validamos campos obligatorios
   const nombre = document.getElementById('p-nombre').value.trim();
   const pventa = Number(document.getElementById('p-pventa').value);
@@ -6498,6 +6732,7 @@ window.abrirAjuste = (id, nombre, stock) => {
 };
 
 window.aplicarAjuste = async () => {
+  if(!exigirAdmin()) return;   // 803
   const delta = Number(document.getElementById('aj-delta').value);
   if(!delta) { alert('Ingresa un número distinto de 0'); return; }
   const prod = DATA.inventario.find(p=>p.id===ajusteProductoId);
@@ -6536,6 +6771,7 @@ window.abrirModalLote = (prodId) => {
 };
 
 window.guardarLote = async () => {
+  if(!exigirAdmin()) return;   // 803
   const prodId = document.getElementById('lote-prod-id').value;
   const prod = DATA.inventario.find(p => p.id === prodId);
   if(!prod) { alert('Producto no encontrado'); return; }
@@ -6780,6 +7016,7 @@ window.abrirUnificarNombres = () => {
 };
 
 window.unificarNombresClientes = async () => {
+  if(!exigirAdmin()) return;   // 803
   const grupos = gruposNombresRepetidos();
   if(!grupos.length) return;
   const aCambiar = [];
@@ -7033,6 +7270,7 @@ window.abrirModalGasto = () => {
 };
 
 window.guardarGasto = async () => {
+  if(!exigirAdmin('registrar ni editar gastos')) return;   // 803
   const fecha = document.getElementById('g-fecha').value;
   const desc = document.getElementById('g-desc').value.trim();
   const valor = Number(document.getElementById('g-valor').value);
@@ -7113,6 +7351,7 @@ window.editarGastoRecurrente = (id) => {
 };
 
 window.guardarGastoRecurrente = async () => {
+  if(!exigirAdmin()) return;   // 803
   const desc = document.getElementById('gr-desc').value.trim();
   const valor = Number(document.getElementById('gr-valor').value);
   const cat = document.getElementById('gr-cat').value;
@@ -7126,7 +7365,7 @@ window.guardarGastoRecurrente = async () => {
     // 603. Al crear una plantilla nueva, generamos de una vez el gasto de
     // este ciclo — si no, tendría que esperar hasta el próximo mes para
     // ver su primer gasto, cuando lo lógico es que aplique desde ya.
-    await addDoc(collection(db,'gastosRecurrentes'), {
+    await addDoc(collection(db,'gastosRecurrentes'), { ...firmaRegistro(),
       desc, valor, cat, esFijo, activo:true, ultimoMesGenerado:null, createdAt:serverTimestamp()
     });
   }
@@ -7134,6 +7373,7 @@ window.guardarGastoRecurrente = async () => {
 };
 
 window.toggleActivoGastoRecurrente = async (id) => {
+  if(!exigirAdmin()) return;   // 803
   const r = DATA.gastosRecurrentes.find(x => x.id === id);
   if(!r) return;
   await updateDoc(doc(db,'gastosRecurrentes',id), { activo: r.activo === false ? true : false });
@@ -7165,7 +7405,7 @@ async function generarGastosRecurrentesDelCiclo() {
     for(const r of DATA.gastosRecurrentes) {
       if(r.activo === false) continue;
       if(r.ultimoMesGenerado === mesActual) continue;
-      await addDoc(collection(db,'gastos'), {
+      await addDoc(collection(db,'gastos'), { ...firmaRegistro(),
         // 755. Antes usaba today(), o sea el día en que alguien abrió la app.
         //      Ángel los paga el día 4 —"Los dos el día 4"— y ese es el primer
         //      día del ciclo. Con today() un gasto del ciclo aparecía fechado
@@ -7304,9 +7544,10 @@ window.abrirRecordatorioPagoProveedor = (proveedorId) => {
 };
 
 window.guardarProveedor = async () => {
+  if(!exigirAdmin()) return;   // 803
   const nombre = document.getElementById('pr-nombre').value.trim();
   if(!nombre) { alert('El nombre es requerido'); return; }
-  await addDoc(collection(db,'proveedores'), {
+  await addDoc(collection(db,'proveedores'), { ...firmaRegistro(),
     nombre, pais:document.getElementById('pr-pais').value,
     contacto:document.getElementById('pr-contacto').value,
     email:document.getElementById('pr-email').value,
@@ -7629,6 +7870,7 @@ window.abrirNuevoProductoDesdePedido = () => {
 };
 
 window.guardarProductoRapido = async () => {
+  if(!exigirAdmin()) return;   // 803
   const nombre = document.getElementById('pr-nombre').value.trim();
   const pventa = Number(document.getElementById('pr-pventa').value);
   if(!nombre || !pventa) { alert('Nombre y precio público son requeridos'); return; }
@@ -7659,6 +7901,7 @@ window.guardarProductoRapido = async () => {
 };
 
 window.guardarPedido = async () => {
+  if(!exigirAdmin()) return;   // 803
   // 270. Obtenemos el nombre del proveedor según el modo activo
   let proveedorId = null, proveedorNombre = '';
 
@@ -7732,14 +7975,14 @@ window.guardarPedido = async () => {
         fecha, desc:'Pedido a ' + proveedorNombre, valor: pagado
       });
     } else if(pagado > 0) {
-      await addDoc(collection(db,'gastos'), {
+      await addDoc(collection(db,'gastos'), { ...firmaRegistro(),
         fecha, cat:'importacion', desc:'Pedido a ' + proveedorNombre,
         valor: pagado, pedidoId, createdAt: serverTimestamp()
       });
     }
     await pushNotif('📋 Pedido editado', `${proveedorNombre} · ${fmt(total)}`, 'pedido', {seccion:'pedidos'});
   } else {
-    const pedidoRef = await addDoc(collection(db,'pedidos'), { ...datosPedido, estado:'pendiente', createdAt: serverTimestamp() });
+    const pedidoRef = await addDoc(collection(db,'pedidos'), { ...firmaRegistro(), ...datosPedido, estado:'pendiente', createdAt: serverTimestamp() });
 
     // 590. Los pedidos a proveedor se pagan por anticipado — se registran
     // como gasto (categoría Importación) al crear el pedido, no al recibirlo.
@@ -7747,7 +7990,7 @@ window.guardarPedido = async () => {
     // crédito (pagado=0) no creamos un gasto de $0; el gasto real nace
     // cuando se registre el primer abono (guardarAbonoPedido).
     if(pagado > 0) {
-      await addDoc(collection(db,'gastos'), {
+      await addDoc(collection(db,'gastos'), { ...firmaRegistro(),
         fecha, cat:'importacion', desc:'Pedido a ' + proveedorNombre,
         valor: pagado, pedidoId: pedidoRef.id, createdAt: serverTimestamp()
       });
@@ -7805,6 +8048,7 @@ async function procesarRecepcionPedido(pedido) {
 }
 
 window.cambiarEstadoPedido = async (id, estado) => {
+  if(!exigirAdmin()) return;   // 803
   const p = DATA.pedidos.find(x=>x.id===id);
   // 486. Guard de idempotencia: si ya estaba "recibido" y se vuelve a marcar
   //      "recibido", NO reprocesamos — evita duplicar stock/lotes por error.
@@ -7834,6 +8078,7 @@ window.abrirAbonoPedido = (id) => {
 };
 
 window.guardarAbonoPedido = async () => {
+  if(!exigirAdmin()) return;   // 803
   const id = document.getElementById('ap-pedido-id').value;
   const p = DATA.pedidos.find(x => x.id === id);
   if(!p) return;
@@ -7850,7 +8095,7 @@ window.guardarAbonoPedido = async () => {
 
   // 612. Marcado con esAbonoPedido para no confundirlo con el gasto
   // "original" del pedido cuando este se edita (ver guardarPedido).
-  await addDoc(collection(db,'gastos'), {
+  await addDoc(collection(db,'gastos'), { ...firmaRegistro(),
     fecha, cat:'importacion', desc:'Abono pedido a ' + p.proveedorNombre,
     valor, pedidoId:id, esAbonoPedido:true, createdAt: serverTimestamp()
   });
@@ -8908,10 +9153,11 @@ function renderMetas() {
 }
 
 window.guardarMeta = async () => {
+  if(!exigirAdmin()) return;   // 803
   const mes = document.getElementById('me-mes').value;
   const ventasMeta = Number(document.getElementById('me-ventas').value);
   if(!mes||!ventasMeta) { alert('Mes y meta de ventas son requeridos'); return; }
-  await addDoc(collection(db,'metas'), {
+  await addDoc(collection(db,'metas'), { ...firmaRegistro(),
     mes, ventasMeta,
     diaInicio: Number(document.getElementById('me-dia-inicio').value)||1, // 527. Día de inicio del ciclo
     gastoMax:Number(document.getElementById('me-gastos').value)||0,
@@ -8963,6 +9209,7 @@ window.abrirCierreMes = () => {
 };
 
 window.confirmarCierreMes = async () => {
+  if(!exigirAdmin()) return;   // 803
   // 788. Este botón (el de Metas) ya no escribe por su cuenta: usa el mismo
   //      camino que el de Informes, para que los dos congelen los costos.
   const c = window._cierrePendiente;
@@ -9199,6 +9446,7 @@ window.calcDescuentoCombo = () => {
 };
 
 window.guardarCombo = async () => {
+  if(!exigirAdmin()) return;   // 803
   const nombre = document.getElementById('combo-nombre').value.trim();
   const precio = Number(document.getElementById('combo-precio').value);
   const productos = comboLineas.filter(l => l.prodId);
@@ -9354,6 +9602,7 @@ window.calcSaldoCombo = () => {
 };
 
 window.guardarVentaCombo = async () => {
+  if(!exigirAdmin()) return;   // 803
   const fecha = document.getElementById('vc-fecha').value;
   const canal = document.getElementById('vc-canal').value;
   const precio = Number(document.getElementById('vc-precio').value);
@@ -9405,7 +9654,7 @@ window.guardarVentaCombo = async () => {
 
   // 195. Registramos la venta del combo como una sola entrada
   // 441. Incluimos método de pago y desglose mixto, igual que las ventas normales
-  await addDoc(collection(db,'ventas'), {
+  await addDoc(collection(db,'ventas'), { ...firmaRegistro(),
     fecha, canal,
     producto: nombreCombo,
     esCombo: true,
@@ -9494,6 +9743,7 @@ async function restaurarStockConsignacion(item) {
 let pendienteEliminar = null; // { col, id, snapshot, timeoutId }
 
 window.eliminarDoc = async (col, id) => {
+  if(!exigirAdmin('borrar registros')) return;   // 803
   if(!confirm('¿Eliminar este registro? Tendrás unos segundos para deshacerlo.')) return;
   if(pendienteEliminar) await confirmarEliminacionPendiente();
 
@@ -9795,6 +10045,7 @@ function renderPapelera() {
 }
 
 window.restaurarDePapelera = async (papeleraId) => {
+  if(!exigirAdmin('restaurar registros')) return;   // 803
   const item = DATA.papelera.find(x => x.id === papeleraId);
   if(!item) return;
   // 625. Restauramos con el MISMO id original (setDoc, no addDoc) para que
@@ -9810,6 +10061,7 @@ window.restaurarDePapelera = async (papeleraId) => {
 };
 
 window.purgarDePapelera = async (papeleraId) => {
+  if(!exigirAdmin('borrar definitivamente')) return;   // 803
   if(!confirm('¿Eliminar definitivamente? Ya no se podrá recuperar.')) return;
   const item = DATA.papelera.find(x => x.id === papeleraId);
   await deleteDoc(doc(db,'papelera',papeleraId));
@@ -10004,6 +10256,7 @@ window.abrirModalConsumo = () => {
 };
 
 window.guardarConsumo = async () => {
+  if(!exigirAdmin()) return;   // 803
   const prodId = document.getElementById('cons-prod-id').value;
   const cant = Number(document.getElementById('cons-cant').value)||0;
   const costo = Number(document.getElementById('cons-costo').value)||0;
@@ -10021,7 +10274,7 @@ window.guardarConsumo = async () => {
 
   // 317. Guardamos en colección 'consumos' — NO en ventas
   //      Así el dashboard no lo cuenta como ingreso ni utilidad
-  await addDoc(collection(db,'consumos'), {
+  await addDoc(collection(db,'consumos'), { ...firmaRegistro(),
     quien: consumidorActual,      // 'jero' o 'angel'
     prodId, nombre: prod.nombre, marca: prod.marca||'',
     cant, costoPorUnidad: costo,
@@ -10159,6 +10412,7 @@ function renderDeudores() {
 
 // 323. Eliminar consumo — devuelve el stock al inventario
 window.eliminarConsumo = async (id, prodId, cant) => {
+  if(!exigirAdmin()) return;   // 803
   if(!confirm('¿Eliminar este consumo? El stock se devolverá al inventario.')) return;
   const prod = DATA.inventario.find(p => p.id === prodId);
   if(prod) {
@@ -10219,6 +10473,7 @@ window.abrirRevisarPrecios = () => {
 };
 
 window.corregirPrecioVenta = async (ventaId, precioCorrecto) => {
+  if(!exigirAdmin()) return;   // 803
   const v = DATA.ventas.find(x => x.id === ventaId);
   if(!v) return;
   const nuevoTotal = precioCorrecto * Number(v.cant||1);
@@ -10419,6 +10674,7 @@ window.editarDistribuidor = (id) => {
 };
 
 window.guardarDistribuidor = async () => {
+  if(!exigirAdmin()) return;   // 803
   const nombre = document.getElementById('dist-nombre').value.trim();
   if(!nombre) { alert('El nombre es obligatorio'); return; }
   const id = document.getElementById('dist-id').value;
@@ -10433,7 +10689,7 @@ window.guardarDistribuidor = async () => {
     await updateDoc(doc(db,'distribuidores',id), data);
     toast('✅ Distribuidor actualizado');
   } else {
-    const ref = await addDoc(collection(db,'distribuidores'), { ...data, createdAt: serverTimestamp() });
+    const ref = await addDoc(collection(db,'distribuidores'), { ...firmaRegistro(), ...data, createdAt: serverTimestamp() });
     toast('✅ Distribuidor agregado');
     // 762. Si venía de "Créalo aquí" dentro de una venta, se vuelve a la venta
     //      con el distribuidor nuevo ya escogido — sin perder lo que llevaba.
@@ -10460,9 +10716,10 @@ window.guardarDistribuidor = async () => {
 // que ya estaba registrado.
 // ============================================================
 window.registrarDistribuidorDesdeVentas = async (nombre) => {
+  if(!exigirAdmin()) return;   // 803
   if(!confirm('¿Registrar "' + nombre + '" como distribuidor? Se vincularán automáticamente todas sus ventas existentes.')) return;
 
-  const ref = await addDoc(collection(db,'distribuidores'), {
+  const ref = await addDoc(collection(db,'distribuidores'), { ...firmaRegistro(),
     nombre,
     tipo: 'persona', // 517. Tipo por defecto — el usuario puede editarlo después si es gimnasio/tienda
     telefono: '', ciudad: '', notas: 'Registrado automáticamente desde historial de ventas',
@@ -10488,6 +10745,7 @@ window.registrarDistribuidorDesdeVentas = async (nombre) => {
 // La venta sigue existiendo normal, solo deja de contar para este distribuidor.
 // ============================================================
 window.desvincularVentaDistribuidor = async (ventaId) => {
+  if(!exigirAdmin()) return;   // 803
   const v = DATA.ventas.find(x => x.id === ventaId);
   if(!v) return;
   if(!confirm('¿Desvincular esta venta (' + (v.producto||'') + ' — ' + fmt(v.total) + ') de este distribuidor? La venta no se borra, solo deja de contar aquí.')) return;
@@ -10597,6 +10855,7 @@ window.abrirLimpiarVinculos = () => {
 };
 
 window.desvincularTodasMalVinculadas = async () => {
+  if(!exigirAdmin()) return;   // 803
   const malas = ventasMalVinculadas();
   if(!malas.length) return;
   const total = malas.reduce((s,m) => s + ingresoVenta(m.venta), 0);
@@ -10620,6 +10879,7 @@ window.desvincularTodasMalVinculadas = async () => {
 };
 
 window.eliminarDistribuidor = async (id) => {
+  if(!exigirAdmin()) return;   // 803
   const d = DATA.distribuidores.find(x => x.id === id);
   if(!confirm('¿Eliminar ' + (d?.nombre||'este distribuidor') + '? Las ventas vinculadas no se borran.')) return;
   await deleteDoc(doc(db,'distribuidores',id));
@@ -10660,6 +10920,7 @@ window.editarTiendaConsig = (id) => {
 };
 
 window.guardarTiendaConsignacion = async () => {
+  if(!exigirAdmin()) return;   // 803
   const nombre = document.getElementById('tc-nombre').value.trim();
   if(!nombre) { alert('El nombre es obligatorio'); return; }
   const id = document.getElementById('tc-id').value;
@@ -10673,13 +10934,14 @@ window.guardarTiendaConsignacion = async () => {
     await updateDoc(doc(db,'tiendasConsignacion',id), data);
     toast('✅ Tienda actualizada');
   } else {
-    await addDoc(collection(db,'tiendasConsignacion'), { ...data, createdAt: serverTimestamp() });
+    await addDoc(collection(db,'tiendasConsignacion'), { ...firmaRegistro(), ...data, createdAt: serverTimestamp() });
     toast('✅ Tienda agregada');
   }
   closeModal('modal-tienda-consig');
 };
 
 window.eliminarTiendaConsig = async (id) => {
+  if(!exigirAdmin()) return;   // 803
   const t = DATA.tiendasConsignacion.find(x => x.id === id);
   const tieneActivos = DATA.consignaciones.some(c => c.tiendaId === id && Number(c.cantidadActual||0) > 0);
   if(tieneActivos) { alert('Esta tienda todavía tiene productos en consignación. Repórtalos como vendidos o devueltos antes de eliminarla.'); return; }
@@ -10829,6 +11091,7 @@ window.restaurarPrecioDistribuidor = (i) => {
 };
 
 window.guardarDejarConsignacion = async () => {
+  if(!exigirAdmin()) return;   // 803
   const tiendaId = document.getElementById('dc-tienda-id').value;
   const fecha = document.getElementById('dc-fecha').value;
   const t = DATA.tiendasConsignacion.find(x => x.id === tiendaId);
@@ -10852,7 +11115,7 @@ window.guardarDejarConsignacion = async () => {
     const fifo = consumirLotesFIFO(prod, l.cant);
     // 536. Mismo fix de ubicación aplicado en Ventas
     const tieneUbicConsig = prod.stockJero != null || prod.stockAngel != null;
-    const ubicacionConsig = !tieneUbicConsig ? 'jero' : ((prod.stockJero||0) > 0 ? 'jero' : 'angel');
+    const ubicacionConsig = ubicacionConStock(prod, l.cant);   // 808
     const updateInv = construirUpdateStockUbicacion(prod, l.cant, ubicacionConsig);
     let costoUnit;
     if(fifo) {
@@ -10895,7 +11158,7 @@ window.guardarDejarConsignacion = async () => {
       entregaExistente.costoUnit = costoPromedio;
       entregaExistente.fecha = fecha;
     } else {
-      await addDoc(collection(db,'consignaciones'), {
+      await addDoc(collection(db,'consignaciones'), { ...firmaRegistro(),
         tiendaId, tiendaNombre: t?.nombre || '',
         prodId: l.prodId, prodNombre: prod.nombre,
         cantidadInicial: l.cant,
@@ -10999,6 +11262,7 @@ window.abrirReportarConsignacion = (tiendaId, prodId) => {
 };
 
 window.guardarReporteConsignacion = async () => {
+  if(!exigirAdmin()) return;   // 803
   const tiendaId = document.getElementById('rc-tienda-id').value;
   const prodId = document.getElementById('rc-prod-id').value;
   const entregas = entregasActivasConsig(tiendaId, prodId);
@@ -11054,7 +11318,7 @@ window.guardarReporteConsignacion = async () => {
     const saldo = Math.max(0, total - pagado);
     const estadoPago = saldo === 0 ? 'pagado' : pagado > 0 ? 'parcial' : 'pendiente';
 
-    await addDoc(collection(db,'ventas'), {
+    await addDoc(collection(db,'ventas'), { ...firmaRegistro(),
       fecha: fechaVenta, canal: 'distribuidor',
       producto: primerProd, prodId, esManual:false,
       cant: cantidad, precio, total,
@@ -11172,6 +11436,7 @@ window.previewAjusteStockConsig = () => {
 };
 
 window.guardarEditarConsignacion = async () => {
+  if(!exigirAdmin()) return;   // 803
   const id = document.getElementById('ec-id').value;
   const item = DATA.consignaciones.find(c => c.id === id);
   if(!item) return;
@@ -11939,6 +12204,7 @@ window.previsualizarGastosImport = () => {
 };
 
 window.ejecutarImportarGastos = async () => {
+  if(!exigirAdmin()) return;   // 803
   const faltan = gastosImportGrupos.filter(g => g.estado === 'falta');
   if(!faltan.length) return;
   const total = faltan.reduce((s,g) => s + g.valor, 0);
@@ -11949,7 +12215,7 @@ window.ejecutarImportarGastos = async () => {
   let hechas = 0;
   for(const g of faltan) {
     try {
-      await addDoc(collection(db,'gastos'), {
+      await addDoc(collection(db,'gastos'), { ...firmaRegistro(),
         fecha: g.fecha, cat: g.cat, desc: g.desc, valor: g.valor,
         esFijo: g.esFijo,
         importadoDeHoja: true,   // trazabilidad, se puede revertir
@@ -12019,6 +12285,7 @@ function ventasQueSonCobros() {
 }
 
 window.convertirVentasEnCobros = async () => {
+  if(!exigirAdmin()) return;   // 803
   const malas = ventasQueSonCobros();
   if(!malas.length) return;
   const total = malas.reduce((s,v) => s + ingresoVenta(v), 0);
@@ -12105,6 +12372,7 @@ function lineaEditableSinCosto(p) {
 }
 
 window.guardarCostosManuales = async () => {
+  if(!exigirAdmin()) return;   // 803
   const cambios = [];
   sinCostoPropuestas.forEach((p, i) => {
     if(p.resuelta) return;
@@ -12245,6 +12513,7 @@ window.abrirVentasSinCosto = () => {
 };
 
 window.aplicarCostosSugeridos = async () => {
+  if(!exigirAdmin()) return;   // 803
   const resueltas = sinCostoPropuestas.filter(p => p.resuelta);
   if(!resueltas.length) return;
   const costoRec = resueltas.reduce((s,p) => s + p.costoTotal, 0);
@@ -12422,6 +12691,7 @@ window.previsualizarImportacion = () => {
 };
 
 window.ejecutarImportacion = async () => {
+  if(!exigirAdmin()) return;   // 803
   const faltan = importGrupos.filter(g => g.estado === 'falta');
   const cobrosFaltan = cobrosImport.filter(c => c.estado === 'falta');
   if(!faltan.length && !cobrosFaltan.length) return;
@@ -12498,7 +12768,7 @@ window.ejecutarImportacion = async () => {
   let cobrosHechos = 0;
   for(const c of cobrosFaltan) {
     try {
-      await addDoc(collection(db,'ventas'), {
+      await addDoc(collection(db,'ventas'), { ...firmaRegistro(),
         tipoMov: c.tipoMov,
         fecha: c.fecha, cliente: c.cliente,
         producto: c.concepto, nota: 'Importado de la hoja de Google',
@@ -13323,7 +13593,7 @@ async function ejecutarCierreDeMes(mesStr, inicio, fin) {
     reabierto: false
   };
   if(previo) await updateDoc(doc(db,'cierres',previo.id), datos);
-  else await addDoc(collection(db,'cierres'), { ...datos, createdAt: serverTimestamp() });
+  else await addDoc(collection(db,'cierres'), { ...firmaRegistro(), ...datos, createdAt: serverTimestamp() });
 
   await registrarEnBitacora({
     accion:'cerró', coleccion:'cierres', docId: mesStr, titulo: 'Mes ' + mesStr,
@@ -13386,6 +13656,7 @@ function exigirMesAbierto(fecha, queSeIbaAHacer) {
 }
 
 window.reabrirMes = async (mesStr) => {
+  if(!exigirAdmin('reabrir meses')) return;   // 803
   const c = cierreVigente(mesStr);
   if(!c) return;
   const [a, m] = String(mesStr).split('-');
@@ -13404,6 +13675,7 @@ window.reabrirMes = async (mesStr) => {
 };
 
 window.cerrarMesDesdeInformes = async (mesStr) => {
+  if(!exigirAdmin('cerrar meses')) return;   // 803
   const r = rangoInformes();
   const F = estadoFinanciero(r.inicio, r.fin, {});
   const [a, m] = String(mesStr).split('-');
@@ -13604,6 +13876,299 @@ const CAMPOS_AUDITADOS = {
   inventario: ['nombre','alias','marca','costo','pventa','pdist','pesp','stock','stockMinimo','duracionDias'],
   distribuidores: ['nombre','tipo','ciudad','telefono']
 };
+
+// ============================================================
+// 806. PANTALLA DE USUARIOS — solo para admins
+//
+// Aquí un admin asciende o degrada a quien sea. Es la única forma de
+// cambiar un rol desde la app; el campo `rol` de la colección `usuarios`
+// no se toca desde ningún otro lado.
+//
+// Dos candados que no son paranoia:
+//   · Un admin no puede quitarse el permiso a sí mismo. Si el único admin
+//     se degrada por error, nadie puede volver a ascender a nadie y hay
+//     que entrar a la consola de Firebase a arreglarlo.
+//   · No se puede dejar la casa sin admins. Mismo motivo.
+// ============================================================
+window.cambiarRol = async (uid, rol) => {
+  if(!exigirAdmin('cambiar permisos')) return;
+  if(uid === usuarioActual?.uid) {
+    alert('No puedes cambiarte el permiso a ti mismo.\n\nPídele a el otro administrador que lo haga, '
+      + 'para que nunca quedemos sin nadie que pueda administrar.');
+    return;
+  }
+  const admins = DATA.usuarios.filter(u => u.rol === 'admin');
+  if(rol !== 'admin' && admins.length <= 1 && admins[0]?.uid === uid) {
+    alert('Es el único administrador que queda. Si lo quitas, nadie podrá volver a dar permisos '
+      + 'y habría que arreglarlo desde la consola de Firebase.');
+    return;
+  }
+  const u = DATA.usuarios.find(x => x.uid === uid);
+  const quien = u?.nombre || u?.email || uid;
+  if(!confirm(rol === 'admin'
+      ? '¿Darle permiso de ADMINISTRADOR a ' + quien + '?\n\nVa a poder registrar, editar y borrar todo.'
+      : '¿Dejar a ' + quien + ' en SOLO LECTURA?\n\nVa a poder ver todo, pero no cambiar nada.')) return;
+
+  await updateDoc(doc(db,'usuarios',uid), { rol });
+  await registrarEnBitacora({
+    accion:'editó', coleccion:'usuarios', docId:uid, titulo: quien,
+    cambios: [{ campo:'rol', etiqueta:'Permiso', antes: u?.rol === 'admin' ? 'Administrador' : 'Solo lectura',
+                despues: rol === 'admin' ? 'Administrador' : 'Solo lectura' }]
+  });
+  toast('✅ Permiso actualizado');
+};
+
+function renderUsuarios() {
+  if(!esAdmin()) {
+    document.getElementById('page-usuarios').innerHTML =
+      '<div class="card"><div class="empty-state" style="padding:34px"><div class="empty-state-icon">🔒</div>'
+      + '<div class="empty-state-text">Esta pantalla es solo para administradores</div></div></div>';
+    return;
+  }
+  const lista = [...DATA.usuarios].sort((a,b) =>
+    (b.rol === 'admin') - (a.rol === 'admin') || String(a.nombre||'').localeCompare(String(b.nombre||'')));
+
+  const filas = lista.map(u => {
+    const admin = u.rol === 'admin';
+    const yo = u.uid === usuarioActual?.uid;
+    return '<div class="list-card"><div class="list-card-header">'
+      + '<div style="display:flex;align-items:center;gap:11px;min-width:0">'
+        + '<div class="avatar">' + escTxt(String(u.nombre||'?').slice(0,2).toUpperCase()) + '</div>'
+        + '<div style="min-width:0">'
+          + '<div class="list-card-title">' + escTxt(u.nombre || '(sin nombre)') + (yo ? ' <span style="font-size:11px;color:var(--ink-3);font-weight:400">— tú</span>' : '') + '</div>'
+          + '<div class="list-card-sub">' + escTxt(u.email || '') + '</div>'
+        + '</div>'
+      + '</div>'
+      + '<span class="badge" style="background:' + (admin?'var(--lime-bg)':'var(--blue-bg)') + ';color:' + (admin?'var(--lime)':'var(--blue)') + '">'
+        + (admin ? '🔑 Administrador' : '👁️ Solo lectura') + '</span>'
+    + '</div>'
+    + (yo ? '' : '<div class="list-card-actions">'
+        + '<button class="btn btn-sm' + (admin ? '' : ' btn-lime') + '" onclick="cambiarRol(\'' + escAttr(u.uid) + '\',\'' + (admin ? 'visitante' : 'admin') + '\')">'
+          + (admin ? '👁️ Dejar en solo lectura' : '🔑 Hacer administrador') + '</button>'
+      + '</div>')
+  + '</div>';
+  }).join('');
+
+  document.getElementById('page-usuarios').innerHTML =
+    '<div class="page-header"><div>'
+      + '<div class="page-title">Usuarios</div>'
+      + '<div class="page-sub">Quién entra a Duppla y qué puede hacer</div>'
+    + '</div></div>'
+    + '<div style="display:flex;gap:10px;align-items:flex-start;background:var(--blue-bg);border:1px solid var(--blue-bd);'
+      + 'border-radius:var(--radius);padding:12px 14px;margin-bottom:16px">'
+      + '<span style="font-size:15px">ℹ️</span>'
+      + '<span style="font-size:12.5px;color:var(--blue-ink);line-height:1.45">'
+        + 'La lista se llena sola: cada persona aparece aquí la primera vez que entra con su correo. '
+        + 'Las cuentas se crean en la consola de Firebase; aquí solo se reparten los permisos.</span>'
+    + '</div>'
+    + (lista.length ? '<div class="list-cards">' + filas + '</div>'
+        : '<div class="card"><div class="empty-state" style="padding:30px"><div class="empty-state-icon">👤</div>'
+          + '<div class="empty-state-text">Todavía nadie ha entrado</div></div></div>');
+}
+
+// ============================================================
+// 805. RESUMEN DEL MES — qué se vendió, cuánto y de qué
+//
+// Va por CICLO de Duppla (del día 4 al 3 del mes siguiente), no por mes
+// de calendario, porque es la ventana con la que cuadra todo lo demás de
+// la app. Si aquí se midiera de otra forma, dos pantallas darían dos
+// números para la misma pregunta.
+//
+// La parte que no es obvia es el punto 4 del pedido: los productos que se
+// vendían antes y este mes NO. Esos **no están** en las ventas del mes —
+// por definición no hay fila que contarles— así que hay que traerlos del
+// histórico y ponerles cero. Es la información más útil de la pantalla y
+// la única que no aparece sola.
+// ============================================================
+let resumenOffset = 0;
+window.verMesResumen = (o) => { resumenOffset = Number(o); renderResumenMes(); };
+
+function resumenDelMes(offset) {
+  const c = getCicloActual(offset);
+  const ventas = DATA.ventas.filter(v => v.fecha >= c.inicio && v.fecha <= c.fin);
+
+  // Las unidades salen de las LÍNEAS, no de las ventas: una venta de
+  // "3 creatinas + 1 whey" son 4 unidades, no 1.
+  const acumular = (mapa, v) => {
+    const lineas = lineasDeVenta(v);
+    const ing = ingresoVenta(v);
+    lineas.forEach(l => {
+      const k = String(l.nombre || '(sin nombre)').trim();
+      mapa[k] = mapa[k] || { nombre:k, unidades:0, dinero:0, ventas:0 };
+      mapa[k].unidades += Number(l.cant || 0);
+      // El dinero de una venta de varias líneas se reparte entre ellas.
+      mapa[k].dinero   += ing / lineas.length;
+      mapa[k].ventas   += 1;
+    });
+  };
+
+  const mapa = {};
+  ventas.forEach(v => acumular(mapa, v));
+
+  // 805. Lo que se vendía antes y este mes no. Se mira TODO el histórico
+  //      anterior a este ciclo, no solo el mes pasado: un producto que se
+  //      vendía en mayo y lleva cuatro meses quieto es justo el que uno
+  //      quiere ver.
+  const historico = {};
+  DATA.ventas.filter(v => v.fecha < c.inicio).forEach(v => acumular(historico, v));
+  const dormidos = Object.values(historico)
+    .filter(h => !mapa[h.nombre])
+    .map(h => {
+      const ultimas = DATA.ventas.filter(v => v.fecha < c.inicio && lineasDeVenta(v).some(l => String(l.nombre||'').trim() === h.nombre));
+      const ultima = ultimas.reduce((f,v) => v.fecha > f ? v.fecha : f, '');
+      return { nombre:h.nombre, unidades:0, dinero:0, ventas:0, ultima, unidadesAntes:h.unidades };
+    })
+    .sort((a,b) => b.unidadesAntes - a.unidadesAntes);
+
+  const productos = Object.values(mapa).map(p => ({ ...p, dinero: Math.round(p.dinero) }))
+    .sort((a,b) => b.unidades - a.unidades || b.dinero - a.dinero);
+
+  return {
+    ciclo: c, offset,
+    etiqueta: c.label.charAt(0).toUpperCase() + c.label.slice(1).replace(' de ', ' '),
+    unidades: productos.reduce((s,p) => s + p.unidades, 0),
+    dinero: ventas.reduce((s,v) => s + ingresoVenta(v), 0),
+    nVentas: ventas.length,
+    productos, dormidos
+  };
+}
+
+function renderResumenMes() {
+  const R = resumenDelMes(resumenOffset);
+  const n = ciclosDisponibles();
+
+  let chips = '';
+  for(let i = 0; i <= n; i++) {
+    const c = getCicloActual(i);
+    const act = resumenOffset === i;
+    const mes = c.label.charAt(0).toUpperCase() + c.label.slice(1).replace(' de ', ' ');
+    chips += '<button onclick="verMesResumen(' + i + ')" style="padding:6px 13px;border-radius:20px;white-space:nowrap;'
+      + 'cursor:pointer;font-size:12.5px;border:1.5px solid ' + (act?'var(--ink)':'var(--border)') + ';'
+      + 'background:' + (act?'var(--ink)':'var(--surface)') + ';color:' + (act?'var(--on-ink)':'var(--ink-2)') + ';'
+      + 'font-weight:' + (act?'600':'400') + '">' + (i===0?'Este mes':mes) + '</button>';
+  }
+
+  if(!R.productos.length) {
+    document.getElementById('page-resumen').innerHTML =
+      '<div class="page-header"><div><div class="page-title">Resumen del mes</div>'
+      + '<div class="page-sub">' + R.etiqueta + ' · ' + fCorta(R.ciclo.inicio) + ' al ' + fCorta(R.ciclo.fin) + '</div></div></div>'
+      + '<div style="display:flex;gap:7px;overflow-x:auto;padding-bottom:4px;margin-bottom:14px">' + chips + '</div>'
+      + '<div class="card"><div class="empty-state" style="padding:34px"><div class="empty-state-icon">📅</div>'
+      + '<div class="empty-state-text">Sin ventas en este mes</div></div></div>';
+    return;
+  }
+
+  // ---- Totales ----
+  const tot = (etiqueta, valor, sub, color) =>
+    '<div class="metric-card"><div class="metric-label">' + etiqueta + '</div>'
+    + '<div class="metric-value" style="color:' + (color||'var(--ink)') + '">' + valor + '</div>'
+    + '<div class="metric-sub">' + sub + '</div></div>';
+  const totales = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:18px">'
+    + tot('Unidades vendidas', R.unidades, R.productos.length + ' producto' + (R.productos.length!==1?'s':'') + ' distinto' + (R.productos.length!==1?'s':''), 'var(--lime)')
+    + tot('Dinero vendido', fmt(R.dinero), R.nVentas + ' venta' + (R.nVentas!==1?'s':''))
+    + tot('Promedio por unidad', fmt(R.unidades ? Math.round(R.dinero / R.unidades) : 0), 'lo que deja cada unidad vendida', 'var(--ink-2)')
+  + '</div>';
+
+  // ---- Podio: los más y los menos ----
+  const top = R.productos.slice(0, 3);
+  const flop = R.productos.length > 3 ? R.productos.slice(-3).reverse() : [];
+  const medalla = ['🥇','🥈','🥉'];
+  const fichaPodio = (p, i, arriba) =>
+    '<div style="display:flex;align-items:center;gap:10px;padding:9px 0' + (i ? ';border-top:1px solid var(--border)' : '') + '">'
+    + '<span style="font-size:15px;width:22px;text-align:center">' + (arriba ? medalla[i] : '·') + '</span>'
+    + '<span style="flex:1;min-width:0;font-size:13px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
+      + escTxt(p.nombre) + '</span>'
+    + '<span style="font-size:13px;font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums;color:'
+      + (arriba ? 'var(--lime)' : 'var(--ink-3)') + '">' + p.unidades + ' u</span>'
+    + '<span style="font-size:11.5px;color:var(--ink-3);white-space:nowrap;min-width:78px;text-align:right">' + fmt(p.dinero) + '</span>'
+  + '</div>';
+
+  const podio = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-bottom:18px">'
+    + '<div class="card" style="padding:15px;border-left:3px solid var(--lime)">'
+      + '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2);margin-bottom:4px">🔥 Lo que más salió</div>'
+      + top.map((p,i) => fichaPodio(p,i,true)).join('')
+    + '</div>'
+    + (flop.length
+        ? '<div class="card" style="padding:15px;border-left:3px solid var(--amber)">'
+          + '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2);margin-bottom:4px">🐢 Lo que menos salió</div>'
+          + flop.map((p,i) => fichaPodio(p,i,false)).join('')
+        + '</div>'
+        : '')
+  + '</div>';
+
+  // ---- Gráfica: barras horizontales, que es como se compara una lista
+  //      larga de nombres. Barras verticales con quince productos obligan
+  //      a girar las etiquetas y no se leen. ----
+  const maxU = Math.max(...R.productos.map(p => p.unidades), 1);
+  const barras = R.productos.slice(0, 12).map(p =>
+    '<div style="display:flex;align-items:center;gap:10px;padding:3px 0">'
+    + '<span style="width:38%;min-width:0;font-size:11.5px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
+      + escTxt(p.nombre) + '</span>'
+    + '<span style="flex:1;height:14px;background:var(--surface-3);border-radius:4px;overflow:hidden">'
+      + '<span style="display:block;height:100%;width:' + Math.max(2, Math.round((p.unidades/maxU)*100)) + '%;'
+        + 'background:linear-gradient(90deg,var(--lime-accent),#A8C63A);border-radius:4px"></span></span>'
+    + '<span style="width:46px;text-align:right;font-size:11.5px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums">'
+      + p.unidades + '</span>'
+  + '</div>').join('');
+
+  const grafica = '<div class="card" style="padding:16px;margin-bottom:16px">'
+    + '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2)">📊 Unidades por producto</div>'
+    + '<div style="font-size:11.5px;color:var(--ink-3);margin:3px 0 11px">'
+      + (R.productos.length > 12 ? 'Los 12 que más salieron. La tabla de abajo los trae todos.' : 'Todos los del mes, de más a menos.') + '</div>'
+    + barras
+  + '</div>';
+
+  // ---- Tabla completa ----
+  const filas = R.productos.map((p, i) =>
+    '<tr><td style="color:var(--ink-3);width:28px">' + (i+1) + '</td>'
+    + '<td style="font-weight:500">' + escTxt(p.nombre) + '</td>'
+    + '<td style="text-align:right;font-weight:700;font-variant-numeric:tabular-nums">' + p.unidades + '</td>'
+    + '<td style="text-align:right;font-variant-numeric:tabular-nums">' + fmt(p.dinero) + '</td>'
+    + '<td style="text-align:right;color:var(--ink-3);font-variant-numeric:tabular-nums">'
+      + (R.dinero ? Math.round((p.dinero / R.dinero) * 100) : 0) + '%</td></tr>').join('');
+
+  const tabla = '<div class="card" style="padding:16px">'
+    + '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2);margin-bottom:10px">'
+      + '📦 Todo lo vendido, producto por producto</div>'
+    + '<div class="table-wrap"><table class="tbl">'
+      + '<thead><tr><th>#</th><th>Producto</th><th style="text-align:right">Unidades</th>'
+        + '<th style="text-align:right">Dinero</th><th style="text-align:right">% del mes</th></tr></thead>'
+      + '<tbody>' + filas
+        + '<tr style="border-top:2px solid var(--border)"><td></td>'
+        + '<td style="font-weight:800">Total</td>'
+        + '<td style="text-align:right;font-weight:800;font-variant-numeric:tabular-nums">' + R.unidades + '</td>'
+        + '<td style="text-align:right;font-weight:800;font-variant-numeric:tabular-nums">' + fmt(R.dinero) + '</td>'
+        + '<td></td></tr>'
+      + '</tbody></table></div>'
+  + '</div>';
+
+  // ---- Los que se durmieron ----
+  const dormidos = R.dormidos.length
+    ? '<div class="card" style="padding:16px;margin-top:16px;border-left:3px solid var(--amber)">'
+      + '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2)">😴 Se vendían antes, este mes no</div>'
+      + '<div style="font-size:11.5px;color:var(--ink-3);margin:3px 0 11px;line-height:1.45">'
+        + R.dormidos.length + ' producto' + (R.dormidos.length!==1?'s':'') + ' con ventas en meses anteriores y <strong>cero</strong> en este. '
+        + 'No aparecen en la tabla de arriba porque no tienen ninguna venta que contar.</div>'
+      + '<div class="table-wrap"><table class="tbl">'
+        + '<thead><tr><th>Producto</th><th style="text-align:right">Este mes</th>'
+          + '<th style="text-align:right">Vendidas antes</th><th>Última venta</th></tr></thead>'
+        + '<tbody>' + R.dormidos.map(d =>
+            '<tr><td style="font-weight:500">' + escTxt(d.nombre) + '</td>'
+            + '<td style="text-align:right;font-weight:700;color:var(--amber)">0</td>'
+            + '<td style="text-align:right;color:var(--ink-3);font-variant-numeric:tabular-nums">' + d.unidadesAntes + '</td>'
+            + '<td style="color:var(--ink-3);white-space:nowrap">' + (d.ultima ? fCorta(d.ultima) : '—') + '</td></tr>').join('')
+        + '</tbody></table></div>'
+    + '</div>'
+    : '';
+
+  document.getElementById('page-resumen').innerHTML =
+    '<div class="page-header"><div>'
+      + '<div class="page-title">Resumen del mes</div>'
+      + '<div class="page-sub">' + R.etiqueta + ' · del ' + fCorta(R.ciclo.inicio) + ' al ' + fCorta(R.ciclo.fin) + '</div>'
+    + '</div></div>'
+    + '<div style="display:flex;gap:7px;overflow-x:auto;padding-bottom:4px;margin-bottom:16px">' + chips + '</div>'
+    + totales + podio + grafica + tabla + dormidos;
+}
 
 function renderInformes() {
   const r = rangoInformes();

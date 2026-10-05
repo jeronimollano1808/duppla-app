@@ -1,0 +1,65 @@
+rules_version = '2';
+
+// ============================================================
+// 809. REGLAS DE FIRESTORE — DUPPLA
+//
+// ESTE ES EL CANDADO DE VERDAD. Esconder botones en la app no protege
+// nada: cualquiera con la consola del navegador abierta puede llamar a la
+// función que hay detrás. Lo único que impide de verdad que el visitante
+// escriba es lo que está en este archivo.
+//
+// HAY QUE PEGARLO EN LA CONSOLA DE FIREBASE. Desde la app no se despliega.
+//   Firebase → proyecto dupplafitness → Firestore Database → pestaña
+//   "Reglas" → se reemplaza todo por esto → Publicar.
+//
+// ORDEN IMPORTANTE: antes de publicar estas reglas, Jero y Ángel tienen
+// que haber entrado a la app al menos una vez, para que exista su
+// documento en `usuarios` con rol 'admin'. Si se publican antes, la app
+// creará su documento con rol 'visitante' y quedarían sin permisos.
+// Si eso pasa: arreglar el campo `rol` a mano desde la consola.
+// ============================================================
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function haIniciadoSesion() {
+      return request.auth != null;
+    }
+
+    // El rol se lee de la MISMA colección que usa la app. Una sola fuente
+    // de verdad: si la app dice que alguien es visitante, el servidor
+    // dice lo mismo.
+    function rolDe(uid) {
+      return get(/databases/$(database)/documents/usuarios/$(uid)).data.rol;
+    }
+
+    function esAdmin() {
+      return haIniciadoSesion()
+        && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid))
+        && rolDe(request.auth.uid) == 'admin';
+    }
+
+    // ---- La colección de usuarios ----
+    match /usuarios/{uid} {
+      // Todo el que entró puede ver quién es quién.
+      allow read: if haIniciadoSesion();
+
+      // Cada quien puede crear SU PROPIO documento la primera vez que
+      // entra, y solo como visitante. Así nadie se asciende solo.
+      allow create: if haIniciadoSesion()
+                    && request.auth.uid == uid
+                    && request.resource.data.rol == 'visitante';
+
+      // Cambiar un rol o borrar a alguien: solo un admin.
+      allow update, delete: if esAdmin();
+    }
+
+    // ---- Todo lo demás ----
+    // Leer: cualquiera que haya iniciado sesión (el visitante ve todo).
+    // Escribir: solo admin. Esto cubre ventas, inventario, gastos,
+    // consignaciones, pedidos, lotes, cierres, bitácora y lo que venga.
+    match /{coleccion}/{documento} {
+      allow read: if haIniciadoSesion();
+      allow create, update, delete: if esAdmin();
+    }
+  }
+}
