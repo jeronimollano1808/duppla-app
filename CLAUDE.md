@@ -1052,5 +1052,48 @@ Ahora son dos grupos: **los que se cayeron** —vendían en los últimos 3 ciclo
 **Regla que sale de aquí:** *un permiso que solo existe en la interfaz no es un permiso, es una sugerencia.* Y cuando el despliegue de la parte que sí protege queda fuera del alcance de uno, lo honesto es decirlo en grande y dejar los pasos escritos — no entregarlo como si estuviera hecho.
 
 
+### 14.30 La limpieza grande: un solo significado por número (comentarios 812–822)
+
+Ángel dictó esta tanda durante varios días en modo "anota y no ejecutes todavía". Lo que pidió, en sus palabras: *"Necesito ese dashboard lo más limpio posible. Ese dashboard y toda la plataforma"*, *"no quiero relleno"*, *"lo que quede huérfano o que no abra nada, debes quitarlo"*, *"todas las palabras que pueden tener un acceso directo a información, que no se quede como ahí, sino que nos lleve a la info"*.
+
+**812. El Dashboard llevaba semanas en blanco y nadie lo sabía.** En el 774 se borró el cálculo de `low`/`alertHtml` (el banner de stock bajo) pero quedó un `${alertHtml}` suelto en la plantilla, en la línea 4260. Un template literal con una variable inexistente **no falla al cargar**: falla el día que alguien abre esa pantalla, lanza `ReferenceError` antes de asignar el `.innerHTML`, y la página queda vacía. De paso se llevó los botones de exportar CSV/PDF, que vivían en ese mismo encabezado.
+
+**Regla que sale de aquí, y es la más cara de esta sesión:** *al borrar una variable, buscar su nombre en TODO el archivo, no solo en el bloque que se está editando.* Un `node --check` pasa igual. Lo encontró una revisión que leyó la pantalla entera, no el diff.
+
+**813. Nada bloquea registrar una venta.** Se quitaron los seis guardas de "Stock insuficiente" (`guardarVenta`, `guardarEditarVenta`, el guarda de stock negativo, `guardarVentaCombo`, `guardarConsumo`, `guardarDejarConsignacion`) y el bucle de pre-chequeo de combos. Ángel: *"hoy fui a registrar una y no me dejó porque no había stock de un producto"*.
+
+El argumento es simple y vale para cualquier app de negocio: **nunca se hizo un conteo físico**, así que la cantidad que guarda la app es una suposición. Una suposición no puede impedir registrar una venta que de verdad ocurrió. El inventario pasa a ser **una base de datos de nombres y precios**, que es para lo que se usa.
+
+**814–815. El inventario deja de pretender saber cuánto hay.** Fuera la columna Stock, el semáforo, el reparto J/Á de la tabla, la columna "Valor total", el botón "± Stock", el banner de stock bajo, y las frases de "inventario a precio de costo" en Inicio, Informes y la previa del cierre. La pestaña ahora dice lo que es: *"N productos · nombres y precios"*.
+
+**816–817. Barrido de huérfanos.** Combos salió del menú (la página y los datos se conservan: las ventas viejas de combo se siguen viendo en Ventas). Y se borraron diez cosas que no abrían nada: `autorDe`, `toggleDetalleVenta` + `ventaDetalleId`, `fillVentaPrecio`, `seleccionarPrecio`, `actualizarTablaInventario`, `DUPPLA_MES_TRANSICION`, `renderPapelera` con su `<div id="page-papelera">` y su entrada en el router, y `rotacionAbierta`/`reposicionAbierta` fijados en `false`.
+
+**818. "Utilidad neta" significaba tres cosas distintas.** El Dashboard la calculaba por su cuenta, Inicio la llamaba "Utilidad real" y los Informes usaban `estadoFinanciero`. Tres sitios, tres números, y el usuario leyendo el que le tocara. Ahora **el Dashboard también pasa por `estadoFinanciero`** y en Inicio se llama igual que en todas partes. Un concepto, un nombre, un número.
+
+**819–820. Tocar una palabra y que explique.** `GLOSARIO` es el único sitio donde cada concepto está definido: diez entradas (vendido, margen bruto, gastos, utilidad neta, por cobrar, mercancía, flujo de caja, punto de equilibrio, ticket, cobros viejos), cada una con **qué es** (una frase, sin jerga), **cómo se calcula** (para poder rehacerlo a mano) y **ojo con esto** (la trampa que tiene, que suele ser lo más útil).
+
+Por qué las definiciones viven en un solo objeto y no sueltas en cada pantalla: porque sueltas es exactamente como nació el problema del 818. Si la definición se escribe en seis sitios, en tres meses hay seis definiciones.
+
+Se usa por tres vías: `tarjetaConcepto` (las métricas del Dashboard, tocables), `palabraConcepto` (once palabras en Inicio, Gastos e Informes, con subrayado punteado) y `bloqueConcepto` (**820**), que mete la definición **arriba del listado de registros** cuando se abre el detalle desde Inicio. Esa última es la que cierra el círculo: antes, tocar una cifra llevaba a sus registros sin decir qué era la cifra. La alternativa era un "?" al lado de cada número — dos gestos, dos destinos, y más suciedad justo en las pantallas que se estaban limpiando. Un solo toque da las dos cosas. El aviso azul que explicaba a mano los "cobros viejos" se borró: decía lo mismo que `GLOSARIO.cobrosViejos`.
+
+**821. Registrar una venta: un solo camino.** Ángel: *"hay demasiados botones, necesito que me dejes seleccionar el producto que se vendió, si son varios productos"*. Salieron los tres botones de modo (📦 Inventario / ✏️ Manual / 🎁 Combo) y el formulario manual completo que vivía escondido debajo:
+
+- **Combo** llevaba a una pantalla que ya no está en el menú (816).
+- **Manual** hacía lo mismo que la línea manual del 583, pero peor: un solo producto, sin poder mezclarlo con los de catálogo, y prohibido al editar. Guardaba **exactamente el mismo documento** que la línea manual (`esManual:true`, `prodId:null`, `costoUnit:null`), así que no se perdió ningún caso de uso: una línea manual única cae en `lineasValidas.length === 1 && esManual`.
+- **Inventario**, sin los otros dos, era un toggle de una sola opción: un botón que no hace nada.
+
+Con eso murió también el `if(esInv)` de `calcVentaTotal` —el único motivo por el que el toggle existía— y `setTipoProducto` entero.
+
+Lo demás de esta pantalla: `inputmode="numeric"` en cantidad, precio, pagado y el desglose mixto (*"cuando yo esté colocando el precio, despliégame el teclado que es solo números"* — `type="number"` no basta, en el móvil sigue saliendo la fila de símbolos); fuera el "Stock: N" del lado de cada producto en el buscador, por lo mismo del 813; y los botones de ubicación J/Á sin contadores y **sin el `disabled`** que traían cuando la ubicación marcaba cero. Ese `disabled` era un bloqueo escondido del tipo que el 813 quitó, y encima estaba roto: metía un **segundo atributo `style`** en el mismo botón, que el navegador ignora, así que el botón se veía normal y no respondía. La peor combinación posible.
+
+**822. Cuánto registró cada uno, sin protagonismo.** Ángel: *"la venta que se registre, que le cuente a cada uno... quiero que aparezca cuánto he vendido yo y cuánto ha vendido él"*, y después, preguntado por el tono: *"que sea sin protagonismo"*.
+
+Va **al pie del Resumen del mes**, no en el Dashboard: quien quiera verlo lo busca, pero no se lo encuentra de frente cada vez que abre la app. Sin medallas, sin podio, sin pintar de verde al que va arriba. Es un reparto, no una competencia.
+
+Y dice con esas palabras lo que de verdad mide: **quién metió la venta en la app**, no quién la cerró con el cliente. Si Jero vende y Ángel la registra, queda a nombre de Ángel. Prometer "quién vendió" cuando el dato es "quién tecleó" es justo la clase de número que después nadie se cree. Las ventas anteriores al sello (801–808) caen en **"Sin asignar"**, que es la verdad, y si **ningún** registro del mes tiene autor la tarjeta entera no aparece: una tabla de una fila que dice "Sin asignar: todo" no informa nada y ocupa pantalla.
+
+Probado con 13 casos (`registradores`): tres autores conviviendo con ventas sin sello, sello en blanco contado como sin asignar, el invariante de que **la suma por autor da el total del mes**, ventas fiadas contadas completas, `pagado` acumulado mayor que el total, meses sin ningún sello, ventas de otros ciclos excluidas, y una venta múltiple contando **una vez** para su autor aunque aporte tres unidades.
+
+
 ---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*
