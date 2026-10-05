@@ -554,6 +554,21 @@ body{
 .concepto:active{opacity:.6}
 .concepto:focus-visible{outline:2px solid var(--lime);outline-offset:2px;border-radius:3px}
 
+/* 824. LA DONA. En celular el anillo va arriba y la leyenda debajo; en pantalla
+   ancha, uno al lado del otro. El `flex-wrap` hace las dos cosas sin media
+   query: la leyenda pide 190px mínimos y salta de línea cuando no caben. */
+.dona-envoltura{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:18px}
+.dona-arco{transition:opacity .15s}
+@media (hover:hover){
+  .dona-envoltura:hover .dona-arco{opacity:.45}
+  .dona-envoltura .dona-arco:hover{opacity:1}
+}
+.dona-fila{display:flex;align-items:center;gap:9px;padding:6px 2px;border-radius:7px}
+.dona-fila + .dona-fila{border-top:1px solid var(--border)}
+@media (hover:hover){ .dona-fila[role="button"]:hover{background:var(--surface-2)} }
+.dona-fila[role="button"]:active{background:var(--surface-3)}
+.dona-fila:focus-visible{outline:2px solid var(--lime);outline-offset:1px}
+
 /* ============================================================
    804. MODO SOLO LECTURA
    La app escribe los manejadores en el atributo onclick, así que se
@@ -12717,7 +12732,56 @@ function comparativoDistHtml() {
     + '<td style="text-align:right;font-weight:800;font-variant-numeric:tabular-nums">' + fmt(total) + '</td>'
   + '</tr>';
 
-  return '<div class="card" style="margin-bottom:16px;padding:16px">'
+  // ---- 824. La dona: el reparto del canal en todo el periodo visible ----
+  //      La gráfica de columnas de arriba responde "cómo va mes a mes". Esta
+  //      responde la otra pregunta, la que se hace uno al entrar: "de todo lo
+  //      que compró el canal, ¿cuánto pesa cada quién".
+  //
+  //      Los colores NO se vuelven a repartir aquí: se toman los que ya trae
+  //      cada fila (`f.color`), los mismos de las columnas y de la tabla. Esa
+  //      es la regla: el color sigue al distribuidor, no a su puesto. Si en
+  //      las columnas GO UP es azul, en la dona es azul.
+  //
+  //      "Sin vincular" se queda como pedazo propio y en ámbar, como en la
+  //      tabla: no es un distribuidor más, es plata del canal que no le quedó
+  //      a nadie, y esconderla dentro de "Otros" sería taparla.
+  const pedazosDist = [];
+  conColor.forEach(f => pedazosDist.push({
+    id: f.id, nombre: f.nombre, valor: f.total, color: f.color,
+    sub: 'en ' + f.meses.filter(v => v > 0).length + ' de ' + ciclos.length + ' meses'
+  }));
+  const grisesSinSueltas = resto.filter(f => !f.suelta && f.total > 0);
+  if(grisesSinSueltas.length) pedazosDist.push({
+    nombre: 'Otros ' + grisesSinSueltas.length,
+    valor: grisesSinSueltas.reduce((s,f) => s + f.total, 0),
+    color: paletaDist.otros, sub: 'los demás, en la tabla', esOtros: true
+  });
+  // El pedazo de "Sin vincular" va en gris oscuro, NO en ámbar, aunque en la
+  // tabla sea ámbar. Razón: el ámbar ya es el color de la serie 4 (ahí está
+  // NAGATOMO en la gráfica de arriba), y dos ámbares en el mismo anillo se
+  // leen como el mismo distribuidor. Un color de aviso no puede ser también
+  // un color de serie. El ⚠️ del nombre hace el trabajo que hacía el color.
+  const sueltasFila = filas.find(f => f.suelta);
+  if(sueltasFila) pedazosDist.push({
+    nombre: '⚠️ Sin vincular', valor: sueltasFila.total,
+    color: 'var(--ink-3)', rayado: true,
+    sub: 'ventas del canal sin dueño', esOtros: true
+  });
+  const donaDist = donaHtml(pedazosDist, {
+    centro: fmtCorto(total),
+    centroSub: 'compró el canal',
+    fmtValor: v => fmt(v),
+    alClic: 'abrirFichaDistribuidor'
+  });
+  const cardDona = donaDist ? '<div class="card" style="margin-bottom:16px;padding:16px">'
+    + '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2)">'
+      + '🍩 Quién pesa en el canal</div>'
+    + '<div style="font-size:11.5px;color:var(--ink-3);margin:3px 0 13px;line-height:1.4">'
+      + 'Reparto de los ' + ciclos.length + ' meses de abajo. Toca un nombre para ver su historial.</div>'
+    + donaDist
+  + '</div>' : '';
+
+  return cardDona + '<div class="card" style="margin-bottom:16px;padding:16px">'
     + '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:3px">'
       + '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2)">'
         + '📊 Cuánto compró cada uno, mes a mes</div>'
@@ -13489,6 +13553,152 @@ function coloresDeSerie() {
 }
 
 // ============================================================
+// 824. LA DONA — una sola gráfica de reparto para toda la app
+//
+// Ángel mandó una infografía de anillos y pidió "este tipo de gráficas" en
+// productos vendidos y en distribuidores. Se construye UNA sola vez y la usan
+// las dos pantallas, para que un anillo signifique siempre lo mismo.
+//
+// Lo que una dona responde bien: "de todo lo del periodo, ¿cuánto se llevó
+// cada quién". Lo que NO responde: comparar dos cosas parecidas (dos pedazos
+// de 18% y 20% nadie los distingue a ojo) ni ver evolución mes a mes. Por eso
+// la tabla de abajo se queda en las dos pantallas: la dona es para el golpe de
+// vista, la tabla es para consultar.
+//
+// Tres decisiones que no son de gusto:
+//
+//  · TOPE DE 6 PEDAZOS + "Otros". Con catorce distribuidores o setenta
+//    productos, una dona de setenta tajadas es un disco de colores. Del 7º en
+//    adelante se doblan en una sola banda gris (misma regla del 800).
+//  · HUECO DE 2px ENTRE PEDAZOS, del color del fondo. Sin él, dos colores
+//    pegados se leen como uno solo.
+//  · EL NOMBRE NUNCA VA SOLO EN EL COLOR. Cada pedazo tiene su renglón en la
+//    leyenda con nombre, porcentaje y valor. Quien no distingue rojo de verde
+//    —y quien mira la pantalla al sol— sigue leyendo la gráfica entera.
+//
+// Los colores salen de `coloresDeSerie()`, que los lee del tema activo: la
+// dona se oscurece con la app sola. Son los mismos seis de las columnas de
+// distribuidores, validados para daltonismo (ΔE adyacente ≥ 9,1).
+// ============================================================
+const DONA_MAX_PEDAZOS = 6;
+
+// Agrupa una lista cualquiera en los N que más pesan + "Otros".
+// `items` = [{ nombre, valor, sub?, id? }] — se devuelve ya con color.
+function repartoParaDona(items, max) {
+  const tope = max || DONA_MAX_PEDAZOS;
+  const paleta = coloresDeSerie();
+  const ordenados = [...items].filter(i => Number(i.valor) > 0)
+    .sort((a,b) => b.valor - a.valor);
+  const cabeza = ordenados.slice(0, tope).map((i, k) => ({ ...i, color: paleta.series[k] }));
+  const cola = ordenados.slice(tope);
+  if(cola.length) {
+    cabeza.push({
+      nombre: 'Otros ' + cola.length,
+      valor: cola.reduce((s,i) => s + Number(i.valor||0), 0),
+      sub: 'los demás, sumados',
+      color: paleta.otros,
+      esOtros: true
+    });
+  }
+  return cabeza;
+}
+
+// El anillo. `opciones`: { centro, centroSub, fmtValor, alClic }
+//  · centro / centroSub → lo que va en el hueco del medio (el total).
+//  · fmtValor           → cómo se escribe cada valor (plata, unidades…).
+//  · alClic             → nombre de una función global que recibe el `id`
+//                         del pedazo; si viene, la leyenda se vuelve tocable.
+function donaHtml(pedazos, opciones) {
+  const o = opciones || {};
+  const fv = o.fmtValor || (v => String(v));
+  const total = pedazos.reduce((s,p) => s + Number(p.valor||0), 0);
+  if(!total) return '';
+
+  // Geometría: el anillo se dibuja con stroke-dasharray sobre un círculo.
+  // Es una sola etiqueta por pedazo y no hay que calcular arcos a mano.
+  const R = 70, GROSOR = 30, C = 2 * Math.PI * R;
+  const HUECO = 3;                       // separación entre pedazos, en px de trazo
+  // Id único por dona: si dos donas comparten id de patrón, la segunda pinta
+  // con el patrón de la primera.
+  donaHtml.n = (donaHtml.n || 0) + 1;
+  const idRayado = 'dona-rayado-' + donaHtml.n;
+
+  // Un pedazo "rayado" no es una serie más: es un cajón (lo que no se pudo
+  // atribuir). La raya lo dice sin gastar un color, que es lo que pide la
+  // regla: los colores son para entidades, no para avisos.
+  const defs = pedazos.some(p => p.rayado)
+    ? '<defs><pattern id="' + idRayado + '" width="7" height="7" patternUnits="userSpaceOnUse"'
+      + ' patternTransform="rotate(45)">'
+      + '<rect width="7" height="7" fill="var(--ink-3)"/>'
+      + '<line x1="0" y1="0" x2="0" y2="7" stroke="var(--surface)" stroke-width="3"/>'
+      + '</pattern></defs>'
+    : '';
+
+  let acumulado = 0;
+  const arcos = pedazos.map((p, i) => {
+    const frac = Number(p.valor||0) / total;
+    const largo = Math.max(2, frac * C - HUECO);   // un pedazo mínimo sigue viéndose
+    const pct = Math.round(frac * 100);
+    const arco = '<circle class="dona-arco" cx="100" cy="100" r="' + R + '" fill="none"'
+      + ' stroke="' + (p.rayado ? 'url(#' + idRayado + ')' : p.color) + '" stroke-width="' + GROSOR + '"'
+      + ' stroke-dasharray="' + largo.toFixed(2) + ' ' + (C - largo).toFixed(2) + '"'
+      + ' stroke-dashoffset="' + (-acumulado).toFixed(2) + '"'
+      + ' transform="rotate(-90 100 100)">'
+      + '<title>' + escTxt(p.nombre) + ' · ' + pct + '% · ' + fv(p.valor) + '</title>'
+      + '</circle>';
+    acumulado += frac * C;
+    return arco;
+  }).join('');
+
+  const svg = '<svg viewBox="0 0 200 200" width="190" height="190" role="img"'
+    + ' aria-label="Reparto: ' + escAttr(pedazos.map(p => p.nombre + ' ' + Math.round((p.valor/total)*100) + '%').join(', ')) + '"'
+    + ' style="flex:0 0 auto;max-width:100%">'
+    + defs
+    + arcos
+    + (o.centro
+        ? '<text x="100" y="97" text-anchor="middle" fill="var(--ink)" font-size="19" font-weight="800">'
+            + escTxt(o.centro) + '</text>'
+          + '<text x="100" y="114" text-anchor="middle" fill="var(--ink-3)" font-size="9.5">'
+            + escTxt(o.centroSub || '') + '</text>'
+        : '')
+  + '</svg>';
+
+  const leyenda = pedazos.map(p => {
+    const pct = Math.round((Number(p.valor||0) / total) * 100);
+    const tocable = o.alClic && p.id && !p.esOtros;
+    const apertura = tocable
+      ? '<div class="dona-fila" role="button" tabindex="0" style="cursor:pointer"'
+        + ' onclick="' + o.alClic + '(\'' + escAttr(p.id) + '\')"'
+        + ' onkeydown="if(event.key===\'Enter\'){event.preventDefault();' + o.alClic + '(\'' + escAttr(p.id) + '\')}">'
+      : '<div class="dona-fila">';
+    return apertura
+      + '<span style="width:10px;height:10px;border-radius:3px;flex:0 0 auto;background:'
+        + (p.rayado
+            ? 'repeating-linear-gradient(45deg,var(--ink-3) 0 2px,var(--surface) 2px 4px)'
+            : p.color) + '"></span>'
+      + '<span style="flex:1;min-width:0">'
+        + '<span style="display:block;font-size:12.5px;color:var(--ink);overflow:hidden;'
+          + 'text-overflow:ellipsis;white-space:nowrap">' + escTxt(p.nombre) + '</span>'
+        + (p.sub ? '<span style="display:block;font-size:10.5px;color:var(--ink-3);overflow:hidden;'
+            + 'text-overflow:ellipsis;white-space:nowrap">' + escTxt(p.sub) + '</span>' : '')
+      + '</span>'
+      + '<span style="font-size:12.5px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums;'
+        + 'min-width:34px;text-align:right">' + pct + '%</span>'
+      + '<span style="font-size:11.5px;color:var(--ink-3);font-variant-numeric:tabular-nums;'
+        + 'min-width:74px;text-align:right">' + fv(p.valor) + '</span>'
+    + '</div>';
+  }).join('');
+
+  // La leyenda no se estira hasta el borde en pantalla ancha: con 520px de
+  // tope, el porcentaje y el valor quedan cerca del nombre. Estirada, el ojo
+  // tiene que cruzar media pantalla vacía para unir un nombre con su cifra.
+  return '<div class="dona-envoltura">'
+    + svg
+    + '<div style="flex:1 1 230px;min-width:200px;max-width:520px">' + leyenda + '</div>'
+  + '</div>';
+}
+
+// ============================================================
 // 785. BITÁCORA — quién tocó qué y cuándo
 //
 // Duppla la manejan dos socios sobre la misma base. Hasta ahora, si un
@@ -13842,27 +14052,33 @@ function renderResumenMes() {
         : '')
   + '</div>';
 
-  // ---- Gráfica: barras horizontales, que es como se compara una lista
-  //      larga de nombres. Barras verticales con quince productos obligan
-  //      a girar las etiquetas y no se leen. ----
-  const maxU = Math.max(...R.productos.map(p => p.unidades), 1);
-  const barras = R.productos.slice(0, 12).map(p =>
-    '<div style="display:flex;align-items:center;gap:10px;padding:3px 0">'
-    + '<span style="width:38%;min-width:0;font-size:11.5px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
-      + escTxt(p.nombre) + '</span>'
-    + '<span style="flex:1;height:14px;background:var(--surface-3);border-radius:4px;overflow:hidden">'
-      + '<span style="display:block;height:100%;width:' + Math.max(2, Math.round((p.unidades/maxU)*100)) + '%;'
-        + 'background:linear-gradient(90deg,var(--lime-accent),#A8C63A);border-radius:4px"></span></span>'
-    + '<span style="width:46px;text-align:right;font-size:11.5px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums">'
-      + p.unidades + '</span>'
-  + '</div>').join('');
-
-  const grafica = '<div class="card" style="padding:16px;margin-bottom:16px">'
-    + '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2)">📊 Unidades por producto</div>'
-    + '<div style="font-size:11.5px;color:var(--ink-3);margin:3px 0 11px">'
-      + (R.productos.length > 12 ? 'Los 12 que más salieron. La tabla de abajo los trae todos.' : 'Todos los del mes, de más a menos.') + '</div>'
-    + barras
-  + '</div>';
+  // ---- Gráfica: la dona del reparto del mes ----
+  // 824. Antes aquí había barras horizontales de unidades. La dona responde
+  //      otra pregunta, que es la que se hace uno al abrir el mes: "de toda la
+  //      plata que entró, ¿cuánto se llevó cada producto". El tamaño del
+  //      pedazo es DINERO, no unidades, a propósito: un producto barato que
+  //      sale mucho llenaba la barra y no es el que sostiene el mes. Las
+  //      unidades siguen estando, en el renglón de cada uno de la leyenda.
+  const pedazosProd = repartoParaDona(
+    R.productos.map(p => ({
+      nombre: p.nombre,
+      valor: p.dinero,
+      sub: p.unidades + ' unidad' + (p.unidades !== 1 ? 'es' : '')
+    }))
+  );
+  const donaProd = donaHtml(pedazosProd, {
+    centro: fmtCorto(R.dinero),
+    centroSub: R.unidades + ' unidades',
+    fmtValor: v => fmt(v)
+  });
+  const grafica = donaProd ? '<div class="card" style="padding:16px;margin-bottom:16px">'
+    + '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2)">🍩 Quién sostuvo el mes</div>'
+    + '<div style="font-size:11.5px;color:var(--ink-3);margin:3px 0 13px">'
+      + (R.productos.length > DONA_MAX_PEDAZOS
+          ? 'Los ' + DONA_MAX_PEDAZOS + ' que más plata dejaron; el resto va junto en "Otros". La tabla de abajo los trae todos.'
+          : 'Reparto de la plata del mes, producto por producto.') + '</div>'
+    + donaProd
+  + '</div>' : '';
 
   // ---- Tabla completa ----
   const filas = R.productos.map((p, i) =>
