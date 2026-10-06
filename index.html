@@ -1160,6 +1160,8 @@ body.solo-lectura .barra-sesion{background:var(--blue-bg);border-bottom-color:va
     <div class="page" id="page-ventas"></div>
     <div class="page" id="page-inventario"></div>
     <div class="page" id="page-clientes"></div>
+    <!-- 827. Recompras — a quién escribirle hoy porque se le está acabando -->
+    <div class="page" id="page-recompras"></div>
     <div class="page" id="page-gastos"></div>
     <div class="page" id="page-proveedores"></div>
     <div class="page" id="page-pedidos"></div>
@@ -1544,6 +1546,55 @@ body.solo-lectura .barra-sesion{background:var(--blue-bg);border-bottom-color:va
     <div id="bus-resultados" style="max-height:58vh;overflow-y:auto"></div>
     <div style="padding:9px 18px;border-top:1px solid var(--border);font-size:11px;color:var(--ink-3);display:flex;gap:14px;flex-wrap:wrap">
       <span>↑↓ moverse</span><span>↵ abrir</span><span>Esc cerrar</span>
+    </div>
+  </div>
+</div>
+
+<!-- 827. ¿Cuánto rinde cada producto? — el llenado de una sentada.
+     Sin este dato, la pantalla de Recompras no tiene de dónde calcular nada.
+     Entrar producto por producto a ponerle un número a setenta productos es
+     justo la clase de tarea que nadie hace nunca; aquí se llenan todos de
+     corrido y se guardan de un golpe. -->
+<div class="modal-bg" id="modal-duraciones">
+  <div class="modal" style="max-width:720px">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">¿Cuánto rinde cada producto?</div>
+        <div style="font-size:12px;color:var(--ink-3);margin-top:2px">Días que le dura UNA unidad a una persona normal</div>
+      </div>
+      <button class="modal-close" onclick="closeModal('modal-duraciones')">✕</button>
+    </div>
+    <div id="dur-contenido" style="max-height:62vh;overflow:auto"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-duraciones')">Cancelar</button>
+      <button class="btn btn-lime" id="btn-guardar-duraciones" onclick="guardarDuraciones()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- 827. Ficha de contacto del cliente: el teléfono se guarda una vez y ya. -->
+<div class="modal-bg" id="modal-contacto">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-header">
+      <span class="modal-title" id="con-titulo">Contacto</span>
+      <button class="modal-close" onclick="closeModal('modal-contacto')">✕</button>
+    </div>
+    <input type="hidden" id="con-cliente">
+    <div class="f-group">
+      <label class="f-label">WhatsApp</label>
+      <input type="tel" inputmode="numeric" id="con-telefono" class="f-input" placeholder="3001234567">
+      <div style="font-size:11px;color:var(--ink-3);margin-top:4px">
+        Queda guardado: la próxima vez le escribes de un toque.</div>
+    </div>
+    <div class="f-group">
+      <label class="f-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" id="con-nomolestar" style="width:auto;margin:0">
+        <span>No volver a avisarme de este cliente</span>
+      </label>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-contacto')">Cancelar</button>
+      <button class="btn btn-lime" onclick="guardarContactoCliente()">Guardar</button>
     </div>
   </div>
 </div>
@@ -2698,6 +2749,7 @@ let DATA = {
   tiendasConsignacion:[], consignaciones:[],  // 488. consignación física en tiendas
   gastosRecurrentes:[],  // 597. plantillas de gastos fijos mensuales (arriendo, nómina, etc.)
   papelera:[],  // 619. registros eliminados, recuperables por 7 días
+  clientesInfo:[],  // 827. teléfono, último aviso y "no molestar" de cada cliente
   bitacora:[],  // 785. quién tocó qué y cuándo
   usuarios:[]   // 801. quién entra y con qué permiso
 };
@@ -3085,29 +3137,52 @@ function calcularDeudores() {
   return Object.values(deudaMap).sort((a,b) => b.total - a.total);
 }
 
-// 638. RECORDATORIO DE RECOMPRA — un producto con "duracionDias" (días que
-// dura una unidad tomándolo a diario) permite estimar cuándo un cliente se
-// va a quedar sin producto: empieza a consumirlo al día siguiente de la
-// compra, y dura cant × duracionDias días. UMBRAL_RECOMPRA_DIAS controla
-// con cuánta anticipación aparece el aviso.
-const UMBRAL_RECOMPRA_DIAS = 5;
+// ============================================================
+// 638/827. RECOMPRAS — a quién escribirle porque se le está acabando
+//
+// Ángel: "necesito saber más o menos cuánto le va a durar cada producto y
+// cada vez que se esté acabando, copiarle para decirle cómo le ha ido, que a
+// la orden si necesita más, que tiene un descuento".
+//
+// El motor existía desde el 638 y llevaba MESES apagado: calculaba la fecha
+// de agotamiento a partir de `duracionDias` del producto, pero ningún producto
+// tenía ese campo lleno. 242 clientes, cero avisos. Un cálculo perfecto sobre
+// un dato que nadie llenó no vale nada — por eso el 827 trae, antes que nada,
+// la pantalla para llenarlo de una sentada (ver duracionesHtml).
+//
+// LO QUE CAMBIA EN EL CÁLCULO, Y ES LO IMPORTANTE:
+//
+// La duración del producto es una etiqueta, y las etiquetas mienten. Una whey
+// de 5 libras le dura un mes a quien entrena seis días y tres meses a quien va
+// suelto. Así que cuando un cliente YA recompró el mismo producto, se usa SU
+// ritmo real —los días que de verdad pasaron entre una compra y la siguiente—
+// y la etiqueta se queda solo para quien todavía no tiene historia.
+//
+// Con el tiempo el sistema se afina solo: entre más le compran, más preciso.
+// Y nunca inventa: si no hay ni etiqueta ni historia, ese producto no avisa.
+// ============================================================
+const UMBRAL_RECOMPRA_DIAS = 7;   // 827. una semana de anticipación (antes 5)
+const DIAS_SILENCIO_AVISO = 10;   // tras escribirle, no vuelve a aparecer en N días
+
+// Lo que la app sabe de un cliente por fuera de sus ventas (teléfono, último
+// aviso, no molestar). La clave es la misma que agrupa nombres (791).
+function infoDeCliente(nombre) {
+  const k = claveBusqueda(nombre);
+  return DATA.clientesInfo.find(c => c.id === k) || null;
+}
 
 function calcularRecompras() {
-  const hoy = new Date();
-  const masReciente = {}; // key: cliente|prodId -> última venta de ese producto a ese cliente
+  const hoyStr = today();
 
+  // --- Paso 1: todas las compras de cada par cliente+producto, en orden ---
+  const historial = {};   // key: claveCliente|prodId -> [{fecha, cant}]
   const considerarLinea = (cliente, prodId, cant, fecha) => {
     if(!prodId || !fecha) return;
-    const prod = DATA.inventario.find(p => p.id === prodId);
-    const duracionDias = Number(prod?.duracionDias||0);
-    if(!prod || duracionDias <= 0) return; // producto sin duración configurada — no aplica
-    const key = (cliente || 'Sin nombre') + '|' + prodId;
-    const anterior = masReciente[key];
-    if(!anterior || fecha > anterior.fecha) {
-      masReciente[key] = { cliente: cliente || 'Sin nombre', prodId, prodNombre: prod.nombre, cant: Number(cant||0), fecha, duracionDias };
-    }
+    const key = claveBusqueda(cliente || 'Sin nombre') + '|' + prodId;
+    (historial[key] = historial[key] || []).push({
+      fecha, cant: Number(cant||0), cliente: cliente || 'Sin nombre', prodId
+    });
   };
-
   DATA.ventas.forEach(v => {
     if(v.esMultiple && v.productosVenta?.length) {
       v.productosVenta.forEach(p => considerarLinea(v.cliente, p.prodId, p.cant, v.fecha));
@@ -3116,20 +3191,251 @@ function calcularRecompras() {
     }
   });
 
-  return Object.values(masReciente).map(r => {
-    // 639. Empieza a consumir al día siguiente de la compra y le dura
-    // cant × duracionDias días — ese es el último día de producto.
-    const diasTotales = r.cant * r.duracionDias;
-    const fechaAgotamiento = new Date(r.fecha + 'T00:00:00');
+  const deudores = {};
+  calcularDeudores().forEach(d => { deudores[claveBusqueda(d.cliente)] = d.total; });
+
+  const salida = [];
+  Object.values(historial).forEach(compras => {
+    compras.sort((a,b) => a.fecha < b.fecha ? -1 : 1);
+    const ultima = compras[compras.length - 1];
+    const prod = DATA.inventario.find(p => p.id === ultima.prodId);
+    if(!prod) return;
+
+    // --- Paso 2: cuántos días le dura, según lo que SE SABE de él ---
+    // 827. El ritmo real manda sobre la etiqueta. Se mide entre compras
+    //      consecutivas y se promedia; con dos compras ya hay un dato, y es
+    //      mejor dato que cualquier estimado de la etiqueta.
+    let diasPorUnidad = Number(prod.duracionDias||0);
+    let origen = diasPorUnidad > 0 ? 'estimado del producto' : null;
+    if(compras.length >= 2) {
+      const intervalos = [];
+      for(let i = 1; i < compras.length; i++) {
+        const d = diasEntreFechas(compras[i-1].fecha, compras[i].fecha);
+        // Dos compras el mismo día son una sola compra partida en dos
+        // renglones, no un ciclo de cero días.
+        const unidades = Math.max(1, Number(compras[i-1].cant||1));
+        if(d > 0) intervalos.push(d / unidades);
+      }
+      if(intervalos.length) {
+        diasPorUnidad = Math.round(intervalos.reduce((a,b) => a+b, 0) / intervalos.length);
+        origen = 'su ritmo real (' + intervalos.length + ' recompra' + (intervalos.length !== 1 ? 's' : '') + ')';
+      }
+    }
+    if(!(diasPorUnidad > 0)) return;   // ni etiqueta ni historia: no se inventa
+
+    // --- Paso 3: cuándo se le acaba ---
+    const diasTotales = Math.max(1, Number(ultima.cant||1)) * diasPorUnidad;
+    const fechaAgotamiento = new Date(ultima.fecha + 'T00:00:00');
     fechaAgotamiento.setDate(fechaAgotamiento.getDate() + diasTotales);
-    const diasRestantes = Math.floor((fechaAgotamiento - hoy) / 86400000);
-    return { ...r, fechaAgotamiento: fechaLocal(fechaAgotamiento), diasRestantes };
-  })
-  // 640. Mostramos desde "ya se le debió acabar" (tope de 60 días para no
-  // acumular compras viejas para siempre) hasta el umbral de anticipación.
-  .filter(r => r.diasRestantes <= UMBRAL_RECOMPRA_DIAS && r.diasRestantes >= -60)
-  .sort((a,b) => a.diasRestantes - b.diasRestantes);
+    // 827. Días de CALENDARIO, no de reloj. Restando Date contra Date, a media
+    //      tarde "le quedan 2 días" se convierte en 1 porque sobran 14 horas, y
+    //      el mismo aviso cambia de número según la hora a la que uno abra la
+    //      app. `diasEntreFechas` compara fechas a secas, que es como lo cuenta
+    //      una persona.
+    const diasRestantes = diasEntreFechas(hoyStr, fechaLocal(fechaAgotamiento));
+
+    // 640. Desde "ya se le debió acabar" (tope de 60 días, para no arrastrar
+    //      compras viejas para siempre) hasta el umbral de anticipación.
+    if(diasRestantes > UMBRAL_RECOMPRA_DIAS || diasRestantes < -60) return;
+
+    const info = infoDeCliente(ultima.cliente);
+    if(info && info.noMolestar) return;
+    // 827. Si ya se le escribió hace poco, no vuelve a salir: la lista es
+    //      "a quién le falta escribirle", no "a quién se le está acabando".
+    //      Sin esto, el mismo cliente aparece todos los días hasta que compre
+    //      y uno termina escribiéndole tres veces en una semana.
+    if(info && info.ultimoAviso && diasEntreFechas(info.ultimoAviso, hoyStr) < DIAS_SILENCIO_AVISO) return;
+
+    salida.push({
+      cliente: ultima.cliente, prodId: ultima.prodId, prodNombre: prod.nombre,
+      cant: ultima.cant, fecha: ultima.fecha, duracionDias: diasPorUnidad, origen,
+      compras: compras.length,
+      fechaAgotamiento: fechaLocal(fechaAgotamiento), diasRestantes,
+      telefono: info ? (info.telefono||'') : '',
+      // 827. Si debe plata, el mensaje NO puede ser de venta. Ofrecerle más
+      //      producto a quien tiene saldo pendiente es una metida de pata que
+      //      además entierra el cobro.
+      debe: deudores[claveBusqueda(ultima.cliente)] || 0
+    });
+  });
+
+  return salida.sort((a,b) => a.diasRestantes - b.diasRestantes);
 }
+
+// ============================================================
+// 827. ¿CUÁNTO RINDE CADA PRODUCTO? — el dato que faltaba
+//
+// La app propone un número leyendo el TAMAÑO del nombre (300g, 120 cápsulas,
+// 5 libras), pero no lo guarda sola: aparece en gris dentro de la casilla y
+// Ángel lo confirma o lo corrige. Un estimado guardado a espaldas de uno
+// termina mandando mensajes equivocados a clientes de verdad, y eso no se
+// deshace. La máquina sugiere; la persona decide.
+//
+// Las dosis de referencia son las de uso corriente en suplementación:
+// creatina 5 g/día, proteína un scoop (~30 g) al día, cápsulas 2 al día,
+// barras/unidades sueltas una al día. Donde el nombre no dice el tamaño, no
+// se sugiere nada: mejor una casilla vacía que un número inventado.
+// ============================================================
+function sugerirDuracion(nombre) {
+  const n = String(nombre||'').toUpperCase().replace(',', '.');
+
+  const cap = n.match(/(\d{2,4})\s*(?:C[AÁ]PSULAS?|CAPS?|SOFTGELS?|TABLETAS?)/);
+  if(cap) return Math.round(Number(cap[1]) / 2);          // 2 cápsulas al día
+
+  const lb = n.match(/(\d{1,2}(?:\.\d)?)\s*(?:LB|LBS|LIBRAS?|L)\b/);
+  if(lb) return Math.round((Number(lb[1]) * 454) / 30);   // scoop de 30 g al día
+
+  const kg = n.match(/(\d(?:\.\d)?)\s*KG\b/);
+  if(kg) return Math.round((Number(kg[1]) * 1000) / 30);
+
+  const g = n.match(/(\d{2,4})\s*G\b/);
+  if(g) {
+    const gramos = Number(g[1]);
+    // La creatina se toma de a 5 g; lo demás en polvo, de a 30.
+    const dosis = /CREATIN/.test(n) ? 5 : 30;
+    return Math.round(gramos / dosis);
+  }
+
+  const caja = n.match(/X\s*(\d{1,2})\b/);
+  if(caja) return Number(caja[1]);                        // una unidad al día
+
+  return 0;   // sin tamaño en el nombre: no se inventa
+}
+
+window.abrirDuraciones = () => {
+  if(!exigirAdmin()) return;
+  // Se ordenan por UNIDADES VENDIDAS: los diez primeros son casi toda la
+  // venta, y con esos diez la pantalla de recompras ya sirve. Llenar los
+  // setenta no es requisito de nada.
+  const vendidas = {};
+  DATA.ventas.forEach(v => {
+    const lineas = (v.esMultiple && v.productosVenta?.length)
+      ? v.productosVenta.map(p => ({ prodId:p.prodId, cant:p.cant }))
+      : [{ prodId:v.prodId, cant:v.cant }];
+    lineas.forEach(l => { if(l.prodId) vendidas[l.prodId] = (vendidas[l.prodId]||0) + Number(l.cant||0); });
+  });
+
+  const prods = [...DATA.inventario]
+    .map(p => ({ ...p, vendidas: vendidas[p.id] || 0 }))
+    .sort((a,b) => b.vendidas - a.vendidas || (a.nombre||'').localeCompare(b.nombre||''));
+
+  const fila = (p, i) => {
+    const sug = sugerirDuracion(p.nombre);
+    const actual = Number(p.duracionDias||0);
+    return '<div style="display:flex;align-items:center;gap:10px;padding:9px 2px;'
+      + (i ? 'border-top:1px solid var(--border)' : '') + '">'
+      + '<span style="flex:1;min-width:0">'
+        + '<span style="display:block;font-size:12.5px;font-weight:500;color:var(--ink);overflow:hidden;'
+          + 'text-overflow:ellipsis;white-space:nowrap">' + escTxt(p.nombre) + '</span>'
+        + '<span style="display:block;font-size:10.5px;color:var(--ink-3)">'
+          + (p.vendidas > 0 ? p.vendidas + ' vendidas' : 'sin ventas') + '</span>'
+      + '</span>'
+      + '<input type="number" inputmode="numeric" min="0" class="f-input dur-input"'
+        + ' data-id="' + escAttr(p.id) + '" style="width:92px;padding:6px 8px;font-size:13px;text-align:center"'
+        + ' value="' + (actual > 0 ? actual : '') + '"'
+        + ' placeholder="' + (sug > 0 ? sug : '—') + '">'
+      + '<span style="font-size:11.5px;color:var(--ink-3);width:34px">días</span>'
+    + '</div>';
+  };
+
+  const conSugerencia = prods.filter(p => !(Number(p.duracionDias) > 0) && sugerirDuracion(p.nombre) > 0).length;
+  document.getElementById('dur-contenido').innerHTML =
+    '<div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);'
+      + 'padding:11px 13px;margin-bottom:12px;font-size:12px;color:var(--ink-2);line-height:1.45">'
+      + 'Escribe cuántos días le dura <strong>una unidad</strong> a una persona que lo toma normal. '
+      + 'El número gris es una sugerencia sacada del tamaño del nombre — tócala para usarla o escribe la tuya. '
+      + '<strong>Lo que dejes vacío nunca avisa</strong>, que es justo lo que quieres para shakers y accesorios.'
+      + (conSugerencia > 0
+          ? '<div style="margin-top:9px"><button class="btn btn-sm" onclick="usarSugerencias()">'
+            + '↓ Usar las ' + conSugerencia + ' sugerencias</button></div>'
+          : '')
+    + '</div>'
+    + prods.map(fila).join('');
+  openModal('modal-duraciones');
+};
+
+window.usarSugerencias = () => {
+  document.querySelectorAll('.dur-input').forEach(inp => {
+    if(!inp.value && inp.placeholder && inp.placeholder !== '—') inp.value = inp.placeholder;
+  });
+};
+
+window.guardarDuraciones = async () => {
+  if(!exigirAdmin()) return;
+  const btn = document.getElementById('btn-guardar-duraciones');
+  const cambios = [];
+  document.querySelectorAll('.dur-input').forEach(inp => {
+    const prod = DATA.inventario.find(p => p.id === inp.dataset.id);
+    if(!prod) return;
+    const nuevo = Number(inp.value) || 0;
+    if(nuevo !== Number(prod.duracionDias||0)) cambios.push({ prod, nuevo });
+  });
+  if(!cambios.length) { closeModal('modal-duraciones'); toast('No cambiaste ninguna'); return; }
+  btn.disabled = true; btn.textContent = 'Guardando…';
+  for(const c of cambios) {
+    await updateDoc(doc(db,'inventario',c.prod.id), { duracionDias: c.nuevo });
+    c.prod.duracionDias = c.nuevo;   // 686. parche en memoria
+  }
+  btn.disabled = false; btn.textContent = 'Guardar';
+  closeModal('modal-duraciones');
+  toast('✅ ' + cambios.length + (cambios.length === 1 ? ' producto actualizado' : ' productos actualizados'));
+  if(currentPage) renderPage(currentPage);
+};
+
+// ============================================================
+// 827. CONTACTO DEL CLIENTE — el teléfono se escribe UNA vez
+//
+// Antes, mandar un recordatorio pedía teclear el número a mano cada vez. Ese
+// era el verdadero motivo por el que nadie usaba la función: no era el
+// mensaje, era buscar el contacto. Ahora queda guardado con el cliente.
+// ============================================================
+window.abrirContactoCliente = (cliente) => {
+  if(!exigirAdmin()) return;
+  const info = infoDeCliente(cliente);
+  document.getElementById('con-titulo').textContent = cliente;
+  document.getElementById('con-cliente').value = cliente;
+  document.getElementById('con-telefono').value = info ? (info.telefono||'') : '';
+  document.getElementById('con-nomolestar').checked = !!(info && info.noMolestar);
+  openModal('modal-contacto');
+};
+
+async function escribirInfoCliente(cliente, campos) {
+  const k = claveBusqueda(cliente);
+  // Un id vacío revienta Firestore ("" no es un documento). Pasa con una venta
+  // sin nombre de cliente, que sí existe en los datos viejos.
+  if(!k) { toast('Esa venta no tiene nombre de cliente', 'error'); return; }
+  const existente = DATA.clientesInfo.find(c => c.id === k);
+  // 806. OJO: el oyente de colecciones ordena por createdAt. Un documento sin
+  //       ese campo NO llega nunca a DATA — el mismo tropiezo que tuvo
+  //       `usuarios`. Por eso createdAt va siempre, también al crear aquí.
+  const datos = { nombre: cliente, ...campos };
+  if(existente) {
+    await updateDoc(doc(db,'clientesInfo',k), datos);
+    Object.assign(existente, datos);
+  } else {
+    await setDoc(doc(db,'clientesInfo',k), { ...datos, createdAt: serverTimestamp() });
+    DATA.clientesInfo.push({ id:k, ...datos });
+  }
+}
+
+window.guardarContactoCliente = async () => {
+  if(!exigirAdmin()) return;
+  const cliente = document.getElementById('con-cliente').value;
+  const telefono = document.getElementById('con-telefono').value.trim().replace(/\D/g,'');
+  const noMolestar = document.getElementById('con-nomolestar').checked;
+  await escribirInfoCliente(cliente, { telefono, noMolestar });
+  closeModal('modal-contacto');
+  toast('✅ Guardado');
+  if(currentPage) renderPage(currentPage);
+};
+
+// "Ya le escribí": lo saca de la lista por DIAS_SILENCIO_AVISO días.
+window.marcarAvisado = async (cliente) => {
+  if(!exigirAdmin()) return;
+  await escribirInfoCliente(cliente, { ultimoAviso: today() });
+  toast('✅ Anotado: ya le escribiste a ' + cliente.split(' ')[0]);
+  if(currentPage) renderPage(currentPage);
+};
 
 function calcularMargenVenta(v) {
   // Venta múltiple: sumamos el margen de cada línea, con fallback por línea
@@ -3225,6 +3531,9 @@ const MENU = [
   { id:'inicio', label:'Inicio', ico:'⚡', group:'Día a día' },
   { id:'ventas', label:'Ventas', ico:'🛒', group:'Día a día' },
   { id:'deudores', label:'Deudores', ico:'💳', group:'Día a día' },
+  // 827. Recompras — a quién escribirle hoy porque se le está acabando lo
+  //      que compró. Va en Día a día: es una tarea diaria, no un informe.
+  { id:'recompras', label:'Recompras', ico:'🔄', group:'Día a día' },
   { id:'gastos', label:'Gastos', ico:'💸', group:'Día a día' },
 
   // --- Quién compra ---
@@ -3471,7 +3780,13 @@ document.getElementById('li-pass')?.addEventListener('keydown', e => {
 // Cada cambio en Firebase actualiza DATA y redibuja la página
 // ============================================================
 function startListeners() {
-  const cols = ['ventas','inventario','gastos','proveedores','pedidos','metas','combos','consumos','distribuidores','cierres','tiendasConsignacion','consignaciones','gastosRecurrentes','papelera'];
+  // 827. `clientesInfo` guarda lo que una venta no sabe de un cliente: su
+  //       teléfono, cuándo se le escribió por última vez y si pidió que no lo
+  //       molesten. Los clientes no son una colección —salen de las ventas—,
+  //       así que el id del documento es `claveBusqueda(nombre)`: así
+  //       "ISABELLA CERTUCHE" y "Isabella Certuche." son el mismo registro y
+  //       el teléfono no se pierde cuando el nombre se escribe distinto.
+  const cols = ['ventas','inventario','gastos','proveedores','pedidos','metas','combos','consumos','distribuidores','cierres','tiendasConsignacion','consignaciones','gastosRecurrentes','papelera','clientesInfo'];
   // 806. `usuarios` va con su propio oyente: no tiene createdAt y el bucle
   //      de arriba ordena por ese campo, así que ahí no entra.
   onSnapshot(collection(db,'usuarios'), snap => {
@@ -3583,7 +3898,7 @@ function buildNav() {
     items.forEach(m => {
     const badge = (m.id === 'deudores' && enMoraNav > 0)
       ? `<span style="margin-left:auto;background:var(--red);color:var(--on-ink);border-radius:20px;padding:1px 8px;font-size:10px;font-weight:700">${enMoraNav}</span>`
-      : (m.id === 'clientes' && recomprasNav > 0)
+      : (m.id === 'recompras' && recomprasNav > 0)   // 827. el badge se mudó con la pantalla
       ? `<span style="margin-left:auto;background:var(--blue);color:var(--on-ink);border-radius:20px;padding:1px 8px;font-size:10px;font-weight:700">${recomprasNav}</span>`
       : '';
     html += `<button class="nav-btn${m.id===currentPage?' active':''}" onclick="showPage('${m.id}')" style="display:flex;align-items:center">
@@ -3639,6 +3954,7 @@ function renderPage(id) {
     pedidos:renderPedidos, metas:renderMetas, combos:renderCombos,
     informes:renderInformes,
     resumen:renderResumenMes, usuarios:renderUsuarios,
+    recompras:renderRecompras,
     deudores:renderDeudores,
     distribuidores:renderDistribuidores,
     consignacion:renderConsignacion,
@@ -6627,6 +6943,177 @@ window.verLotesProducto = (prodId) => {
 // Se construye automáticamente desde el historial de ventas
 // Muestra compras totales, producto favorito, última compra
 // ============================================================
+// ============================================================
+// 827. A QUIÉN ESCRIBIRLE — la pantalla
+//
+// Es una lista de tareas de un día, no una base de datos para navegar. Por eso
+// va ordenada por urgencia (primero al que ya se le acabó), cada renglón trae
+// el mensaje ya escrito, y lo que hace falta es un toque: copiar, o abrir
+// WhatsApp si el teléfono ya está guardado.
+//
+// El mensaje cambia según el caso, y eso importa más que el diseño:
+//   · si DEBE plata → el mensaje es de cobro, no de venta. Ofrecerle más
+//     producto a quien tiene saldo pendiente entierra el cobro y queda mal.
+//   · si ya se le acabó → "¿cómo te fue?", en pasado.
+//   · si le falta poco → se le avisa con los días que le quedan.
+// El descuento NO va por defecto: si el mensaje siempre trae descuento, el
+// cliente aprende a esperar el descuento. Es un botón aparte, para cuando
+// Ángel decida usarlo.
+// ============================================================
+function mensajeRecompra(r, conDescuento) {
+  const nombre = String(r.cliente||'').split(' ')[0];
+  const corto = nombre.charAt(0).toUpperCase() + nombre.slice(1).toLowerCase();
+  const prod = r.prodNombre;
+
+  if(r.debe > 0) {
+    return 'Hola ' + corto + '! ¿Cómo vas con el ' + prod + '? '
+      + 'Te escribo también para recordarte el saldo pendiente de ' + fmt(r.debe) + '. '
+      + 'Cualquier cosa me dices y lo cuadramos.';
+  }
+  const base = r.diasRestantes <= 0
+    ? 'Hola ' + corto + '! Ya debes estar terminando el ' + prod + '. ¿Cómo te fue con él?'
+    : 'Hola ' + corto + '! Calculo que te queda ' + prod + ' para unos ' + r.diasRestantes
+      + ' día' + (r.diasRestantes !== 1 ? 's' : '') + '. ¿Cómo te ha ido?';
+  const cierre = conDescuento
+    ? ' Si quieres reponer, esta vez te lo dejo con descuento. Me dices y te lo aparto.'
+    : ' Si quieres reponer me dices y te lo aparto.';
+  return base + cierre;
+}
+
+window.copiarMensajeRecompra = async (cliente, prodId, conDescuento) => {
+  const r = calcularRecompras().find(x => x.cliente === cliente && x.prodId === prodId);
+  if(!r) return;
+  const texto = mensajeRecompra(r, !!conDescuento);
+  try {
+    await navigator.clipboard.writeText(texto);
+    toast('📋 Mensaje copiado');
+  } catch(e) {
+    // 827. En iOS el portapapeles falla si no hay gesto directo, y en ese caso
+    //      quedarse callado sería lo peor: se muestra el texto para copiarlo
+    //      a mano en vez de dejar a Ángel creyendo que ya lo tiene.
+    document.getElementById('det-title').textContent = 'Copia el mensaje';
+    document.getElementById('det-sub').textContent = cliente;
+    document.getElementById('det-contenido').innerHTML =
+      '<textarea class="f-input" style="width:100%;height:150px;font-size:13px" readonly>'
+      + escTxt(texto) + '</textarea>';
+    openModal('modal-detalle');
+  }
+};
+
+window.whatsappRecompra = (cliente, prodId, conDescuento) => {
+  const r = calcularRecompras().find(x => x.cliente === cliente && x.prodId === prodId);
+  if(!r) return;
+  let tel = String(r.telefono||'').replace(/\D/g,'');
+  if(!tel) { abrirContactoCliente(cliente); return; }
+  if(tel.length === 10) tel = '57' + tel;   // 410. sin indicativo, Colombia
+  window.open('https://wa.me/' + tel + '?text=' + encodeURIComponent(mensajeRecompra(r, !!conDescuento)), '_blank');
+};
+
+let recompraDescuento = false;
+window.toggleDescuentoRecompra = () => { recompraDescuento = !recompraDescuento; renderRecompras(); };
+
+function renderRecompras() {
+  const lista = calcularRecompras();
+  const sinDuracion = DATA.inventario.filter(p => !(Number(p.duracionDias) > 0)).length;
+  const total = DATA.inventario.length;
+
+  // Si no hay ni un producto con duración, la pantalla no puede calcular nada.
+  // En vez de mostrar una lista vacía —que parece que no hay nada que hacer—
+  // dice exactamente qué falta y abre la pantalla para llenarlo.
+  if(sinDuracion === total && total > 0) {
+    document.getElementById('page-recompras').innerHTML =
+      '<div class="page-header"><div><div class="page-title">Recompras</div>'
+      + '<div class="page-sub">A quién escribirle porque se le está acabando</div></div></div>'
+      + '<div class="card" style="padding:26px;text-align:center">'
+        + '<div style="font-size:32px;margin-bottom:10px">⏳</div>'
+        + '<div style="font-size:14px;font-weight:700;color:var(--ink);margin-bottom:7px">'
+          + 'Falta un dato para que esto funcione</div>'
+        + '<div style="font-size:12.5px;color:var(--ink-2);line-height:1.5;max-width:460px;margin:0 auto 16px">'
+          + 'Para saber cuándo se le acaba a alguien lo que compró, la app necesita saber '
+          + '<strong>cuántos días rinde cada producto</strong>. Todavía no hay ninguno con ese dato. '
+          + 'Con los 10 que más vendes ya empieza a servir.</div>'
+        + '<button class="btn btn-lime" onclick="abrirDuraciones()">Llenar las duraciones</button>'
+      + '</div>';
+    return;
+  }
+
+  const fila = (r) => {
+    const vencido = r.diasRestantes < 0;
+    const hoyMismo = r.diasRestantes === 0;
+    const color = vencido ? 'var(--red)' : hoyMismo ? 'var(--amber)' : 'var(--blue-ink)';
+    const cuando = vencido
+      ? 'Se le acabó hace ' + (-r.diasRestantes) + ' día' + (-r.diasRestantes !== 1 ? 's' : '')
+      : hoyMismo ? 'Se le acaba hoy'
+      : 'Le queda para ' + r.diasRestantes + ' día' + (r.diasRestantes !== 1 ? 's' : '');
+    const cl = escAttr(r.cliente), pid = escAttr(r.prodId);
+    return '<div style="padding:12px 0;border-top:1px solid var(--border)">'
+      + '<div style="display:flex;align-items:baseline;gap:9px;flex-wrap:wrap">'
+        + '<span style="font-size:13.5px;font-weight:700;color:var(--ink);cursor:pointer" '
+          + 'onclick="abrirFichaCliente(\'' + cl + '\')">' + escTxt(r.cliente) + ' ›</span>'
+        + (r.debe > 0
+            ? '<span style="font-size:10.5px;font-weight:700;color:var(--red);background:var(--red-bg);'
+              + 'border:1px solid var(--red-bd);border-radius:20px;padding:1px 8px">debe ' + fmt(r.debe) + '</span>'
+            : '')
+        + '<span style="margin-left:auto;font-size:12px;font-weight:700;color:' + color + '">' + cuando + '</span>'
+      + '</div>'
+      + '<div style="font-size:11.5px;color:var(--ink-3);margin-top:2px;line-height:1.45">'
+        + escTxt(r.prodNombre) + ' · ' + r.cant + ' el ' + fCorta(r.fecha)
+        + ' · <span title="De dónde sale el cálculo">' + escTxt(r.origen) + '</span>'
+      + '</div>'
+      + '<div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:9px">'
+        + '<button class="btn btn-sm btn-lime" onclick="whatsappRecompra(\'' + cl + '\',\'' + pid + '\',' + (recompraDescuento?'true':'false') + ')">'
+          + (r.telefono ? '💬 WhatsApp' : '💬 Poner número') + '</button>'
+        + '<button class="btn btn-sm" onclick="copiarMensajeRecompra(\'' + cl + '\',\'' + pid + '\',' + (recompraDescuento?'true':'false') + ')">📋 Copiar</button>'
+        + '<button class="btn btn-sm" onclick="marcarAvisado(\'' + cl + '\')">✓ Ya le escribí</button>'
+        + '<button class="btn btn-sm" style="color:var(--ink-3)" onclick="abrirContactoCliente(\'' + cl + '\')">⚙️</button>'
+      + '</div>'
+    + '</div>';
+  };
+
+  const vencidos = lista.filter(r => r.diasRestantes < 0);
+  const proximos = lista.filter(r => r.diasRestantes >= 0);
+
+  const bloque = (titulo, sub, items, borde) => items.length
+    ? '<div class="card" style="padding:16px;margin-bottom:16px;border-left:3px solid ' + borde + '">'
+      + '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2)">'
+        + titulo + ' — ' + items.length + '</div>'
+      + '<div style="font-size:11.5px;color:var(--ink-3);margin:3px 0 2px;line-height:1.4">' + sub + '</div>'
+      + items.map(fila).join('')
+    + '</div>'
+    : '';
+
+  const avisoFaltantes = sinDuracion > 0
+    ? '<div style="background:var(--amber-bg);border:1px solid var(--amber-bd);border-radius:var(--radius);'
+      + 'padding:11px 13px;margin-bottom:16px;font-size:12px;color:var(--amber-ink);line-height:1.45">'
+      + 'Hay <strong>' + sinDuracion + '</strong> de ' + total + ' productos sin duración, así que a sus '
+      + 'compradores no se les puede avisar. '
+      + '<button onclick="abrirDuraciones()" style="background:none;border:none;padding:0;color:var(--amber-ink);'
+      + 'font-weight:700;cursor:pointer;text-decoration:underline;font-size:12px">Completarlas</button>'
+    + '</div>'
+    : '';
+
+  document.getElementById('page-recompras').innerHTML =
+    '<div class="page-header">'
+      + '<div><div class="page-title">Recompras</div>'
+      + '<div class="page-sub">A quién escribirle porque se le está acabando</div></div>'
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap">'
+        + '<button class="btn btn-sm" onclick="abrirDuraciones()">⏱️ Duraciones</button>'
+        + '<button class="btn btn-sm" style="' + (recompraDescuento
+            ? 'background:var(--ink);color:var(--on-ink);border-color:var(--ink)' : '')
+          + '" onclick="toggleDescuentoRecompra()">🏷️ Con descuento' + (recompraDescuento ? ' ✓' : '') + '</button>'
+      + '</div>'
+    + '</div>'
+    + avisoFaltantes
+    + (lista.length
+        ? bloque('🔴 Ya se les acabó', 'Lo compraron hace rato y la cuenta dice que ya se terminó.', vencidos, 'var(--red)')
+          + bloque('🔵 Se les acaba esta semana', 'Todavía les queda, pero es el momento de escribirles.', proximos, 'var(--blue)')
+        : '<div class="card"><div class="empty-state" style="padding:34px">'
+          + '<div class="empty-state-icon">✅</div>'
+          + '<div class="empty-state-text">No hay a quién escribirle hoy</div>'
+          + '<div class="empty-state-sub">Aquí aparecen los clientes a los que se les está acabando lo que compraron.</div>'
+        + '</div></div>');
+}
+
 function renderClientes() {
   const cm = {};
   DATA.ventas.forEach(v => {
@@ -6639,26 +7126,24 @@ function renderClientes() {
   });
   const clientes = Object.values(cm).sort((a,b)=>b.total-a.total);
 
-  // 643. Recompras próximas — clientes a los que se les debe estar acabando
-  // (o ya se les acabó) un producto con duración configurada (ver calcularRecompras).
-  const recompras = calcularRecompras();
-  const recomprasHtml = recompras.length ? `
-    <div class="card" style="margin-bottom:16px">
-      <div class="card-title">🔄 Recompras próximas</div>
-      ${recompras.map(r => {
-        const vencido = r.diasRestantes < 0;
-        const etiqueta = vencido ? 'Se le acabó hace ' + (-r.diasRestantes) + ' día' + (-r.diasRestantes!==1?'s':'')
-          : r.diasRestantes === 0 ? 'Se le acaba hoy'
-          : 'Se le acaba en ' + r.diasRestantes + ' día' + (r.diasRestantes!==1?'s':'');
-        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">'
-          + '<div>'
-            + '<div style="font-size:13px;font-weight:600;color:var(--ink)">' + r.cliente + '</div>'
-            + '<div style="font-size:11px;color:var(--ink-3)">' + r.prodNombre + ' · <span style="color:' + (vencido?'var(--red)':'var(--blue-ink)') + ';font-weight:600">' + etiqueta + '</span></div>'
-          + '</div>'
-          + '<button class="btn btn-xs" style="color:var(--blue-ink);border-color:var(--blue-bd)" onclick="abrirRecordatorioRecompra(\'' + r.cliente.replace(/'/g,"\\'") + '\',\'' + r.prodId + '\')">💬 Recordatorio</button>'
-        + '</div>';
-      }).join('')}
-    </div>` : '';
+  // 643/827. Aquí vivía una tarjeta con las recompras próximas y un botón de
+  //      recordatorio por cliente. Se fue a su propia pantalla (Recompras, en
+  //      Día a día), donde cabe lo que de verdad hace falta: el mensaje ya
+  //      escrito, el WhatsApp con el número guardado y el "ya le escribí".
+  //      Aquí queda solo el aviso de cuántos hay, para no partir la misma
+  //      información en dos sitios que después se contradicen.
+  const nRecompras = calcularRecompras().length;
+  const recomprasHtml = nRecompras
+    ? '<div class="card" style="margin-bottom:16px;padding:13px 16px;display:flex;align-items:center;'
+      + 'gap:10px;flex-wrap:wrap;border-left:3px solid var(--blue)">'
+      + '<span style="font-size:17px">🔄</span>'
+      + '<span style="flex:1;min-width:190px;font-size:12.5px;color:var(--ink-2);line-height:1.4">'
+        + 'Hay <strong style="color:var(--ink)">' + nRecompras + '</strong> cliente'
+        + (nRecompras !== 1 ? 's' : '') + ' a ' + (nRecompras !== 1 ? 'quienes' : 'quien')
+        + ' se le está acabando lo que compró.</span>'
+      + '<button class="btn btn-sm btn-lime" onclick="showPage(\'recompras\')">Ver a quién escribirle</button>'
+    + '</div>'
+    : '';
 
   // 778. Tocar un cliente abre su ficha: cuántas veces compró, qué se
   //      lleva, mes a mes y qué debe. La fila entera es el botón — pedir
@@ -10292,25 +10777,10 @@ window.abrirRecordatorioCobro = (nombreCliente) => {
   openModal('modal-recordatorio');
 };
 
-// 644. Recordatorio de recompra — mismo modal/flujo de WhatsApp que el de
-// cobro, pero avisando que el producto se le está por acabar (o ya se le
-// acabó) al cliente, según calcularRecompras().
-window.abrirRecordatorioRecompra = (cliente, prodId) => {
-  const r = calcularRecompras().find(x => x.cliente === cliente && x.prodId === prodId);
-  if(!r) return;
-
-  // 645. Mensaje base = opción "ya se debió acabar" — funciona igual de bien
-  // si todavía faltan unos días, y es la que se prefirió como plantilla.
-  const nombreCorto = cliente.split(' ')[0];
-  const mensaje = r.diasRestantes <= 0
-    ? 'Hola ' + nombreCorto + '! Ya deberías estar por terminar tu ' + r.prodNombre + '. ¿Cómo te fue? Cuéntanos si quieres reponer o probar algo distinto esta vez.'
-    : 'Hola ' + nombreCorto + '! Ya deberías estar por terminar tu ' + r.prodNombre + ' (calculamos que te queda para unos ' + r.diasRestantes + ' día' + (r.diasRestantes!==1?'s':'') + ' más). ¿Cómo te fue? Cuéntanos si quieres reponer o probar algo distinto esta vez.';
-
-  document.getElementById('rec-cliente').value = cliente;
-  document.getElementById('rec-telefono').value = '';
-  document.getElementById('rec-mensaje').value = mensaje;
-  openModal('modal-recordatorio');
-};
+// 644/827. `abrirRecordatorioRecompra` se borró. Armaba el mensaje y abría el
+// modal de WhatsApp, pero pedía teclear el número A MANO cada vez — que era
+// justo el motivo por el que la función no se usaba nunca. Lo reemplaza la
+// pantalla de Recompras, donde el teléfono queda guardado con el cliente.
 
 // 409. Abre WhatsApp Web/App con el mensaje editado y el número ingresado
 window.enviarRecordatorioWhatsApp = () => {

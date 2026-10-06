@@ -1143,5 +1143,30 @@ Ahora todos llevan su nombre. Lo que no se puede es darle a cada uno un color pr
 **La dona en Inicio.** Una tercera, con los productos del ciclo que se esté mirando. Los productos salen de `productosDelRango`, extraída de `resumenDelMes` para que Inicio y el Resumen del mes cuenten con la **misma** cuenta — dos sitios sumando lo mismo por su lado es como nació el lío del 818.
 
 
+### 14.33 Recompras: a quién escribirle porque se le está acabando (comentario 827)
+
+Ángel: *"necesito saber más o menos cuánto le va a durar cada producto y cada vez que se esté acabando, copiarle para decirle cómo le ha ido, que a la orden si necesita más, que tiene un descuento"*.
+
+**Lo primero que apareció al mirar: esto ya existía y llevaba meses apagado.** El cálculo de recompras está desde el 638, con su alerta en Inicio, su badge en el menú y hasta un botón que abría WhatsApp con el mensaje escrito. Lo que pasaba es que **ningún producto tenía `duracionDias`**: 242 clientes, cero avisos. *Un cálculo perfecto sobre un dato que nadie llenó no vale nada.*
+
+De ahí la regla que ordena todo este comentario: **la parte difícil no era calcular, era conseguir el dato y quitar la fricción de usarlo.**
+
+**El llenado de una sentada.** Entrar producto por producto a ponerle un número a setenta productos es la clase de tarea que nadie hace nunca. La pantalla nueva los lista todos de corrido —ordenados por unidades vendidas, que son los que importan— con una casilla al lado y guardado en bloque. La app **sugiere** un número leyendo el tamaño del nombre (300g a 5 g/día = 60 días; 120 cápsulas a 2/día = 60; 5 libras a un scoop de 30 g = 76) pero lo muestra en gris dentro de la casilla y **no lo guarda solo**. Un estimado guardado a espaldas de uno termina mandando mensajes equivocados a clientes de verdad, y eso no se deshace. La máquina sugiere; la persona decide. Lo que quede vacío nunca avisa — que es justo lo que se quiere para shakers y accesorios.
+
+**El cambio de fondo: la etiqueta miente, el cliente no.** Una whey de 5 libras le dura un mes a quien entrena seis días y tres meses a quien va suelto. Así que cuando un cliente **ya recompró** el mismo producto, manda **su ritmo real** —los días que de verdad pasaron entre una compra y la siguiente, divididos por las unidades que se llevó— y la etiqueta queda solo para quien todavía no tiene historia. El sistema se afina solo: entre más le compran a alguien, más preciso es su aviso. Y la pantalla dice de dónde sale cada número ("su ritmo real (2 recompras)" o "estimado del producto"), porque un cálculo que no se puede auditar no se usa.
+
+**Tres decisiones que evitan quedar mal con un cliente:**
+
+- **Si debe plata, el mensaje es de cobro, no de venta.** Ofrecerle más producto a quien tiene saldo pendiente entierra el cobro y queda feo. La deuda viaja con el aviso y cambia el texto.
+- **"Ya le escribí" lo silencia 10 días.** Sin eso, el mismo cliente aparece todos los días hasta que compre y uno termina escribiéndole tres veces en una semana. La lista es *a quién le falta escribirle*, no *a quién se le está acabando*.
+- **El descuento NO va por defecto.** Si el mensaje siempre trae descuento, el cliente aprende a esperar el descuento. Es un botón aparte, para cuando Ángel decida usarlo.
+
+**El cuello de botella real era el teléfono.** La función vieja armaba bien el mensaje pero pedía teclear el número **a mano cada vez** — ese, y no el texto, era el motivo por el que nadie la usaba. Ahora el teléfono se guarda con el cliente en `clientesInfo`, una colección nueva cuyo id es `claveBusqueda(nombre)` (791): así "ISABELLA CERTUCHE" e "Isabella Certuche." son el mismo registro y el teléfono no se pierde cuando el nombre se escribe distinto. **OJO:** el oyente de colecciones ordena por `createdAt`, así que todo documento nuevo de esa colección tiene que llevarlo — es el mismo tropiezo que tuvo `usuarios` (806).
+
+**Días de calendario, no de reloj.** Restar `Date` contra `Date` hacía que "le quedan 2 días" se volviera 1 a media tarde, porque sobraban catorce horas: el mismo aviso cambiaba de número según la hora a la que uno abriera la app. Se cuenta con `diasEntreFechas`, que compara fechas a secas, como lo cuenta una persona.
+
+Probado con 20 casos: la etiqueta cuando no hay historia, el ritmo real cuando la hay, dos formas de escribir el nombre como un solo cliente, las cantidades que aplazan el aviso, el tope de 60 días para no perseguir compras viejas, "no molestar", el silencio tras avisar, la deuda y el orden por urgencia.
+
+
 ---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*
