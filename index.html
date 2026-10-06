@@ -3163,6 +3163,16 @@ function calcularDeudores() {
 // ============================================================
 const UMBRAL_RECOMPRA_DIAS = 7;   // 827. una semana de anticipación (antes 5)
 const DIAS_SILENCIO_AVISO = 10;   // tras escribirle, no vuelve a aparecer en N días
+// 828. Cuánto tiempo sigue vivo un aviso después de que el producto se acabó.
+//      Estaba en 60 días y con datos reales eso daba 86 avisos el primer día,
+//      80 de ellos de compras de MAYO y JUNIO. Escribirle a alguien en octubre
+//      diciéndole "ya se te debió acabar" lo que compró el 6 de mayo no es un
+//      recordatorio: es una confesión de que uno no estaba mirando.
+//      La mediana de vencimiento era 23 días; con tope de 14 quedan 29 avisos,
+//      todos de gente a la que de verdad se le acabó hace poco.
+//      Pasadas dos semanas sin volver, eso ya no es un cliente recomprando:
+//      es un cliente que se perdió, y eso merece otro mensaje y otra pantalla.
+const TOPE_VENCIDO_DIAS = 14;
 
 // Lo que la app sabe de un cliente por fuera de sus ventas (teléfono, último
 // aviso, no molestar). La clave es la misma que agrupa nombres (791).
@@ -3205,6 +3215,12 @@ function calcularRecompras() {
     // 827. El ritmo real manda sobre la etiqueta. Se mide entre compras
     //      consecutivas y se promedia; con dos compras ya hay un dato, y es
     //      mejor dato que cualquier estimado de la etiqueta.
+    // 828. Barras, sachets, geles: se toman una vez y ya. No se les puede
+    //       calcular "cuándo se le acaba" —se acaba el mismo día— y avisar por
+    //       eso sería escribirle a todo el que compró una barra. Marcados así,
+    //       no avisan nunca, y además dejan de contar como "falta llenarlos":
+    //       quedan decididos, no pendientes.
+    if(prod.sinRecompra) return;
     let diasPorUnidad = Number(prod.duracionDias||0);
     let origen = diasPorUnidad > 0 ? 'estimado del producto' : null;
     if(compras.length >= 2) {
@@ -3236,7 +3252,7 @@ function calcularRecompras() {
 
     // 640. Desde "ya se le debió acabar" (tope de 60 días, para no arrastrar
     //      compras viejas para siempre) hasta el umbral de anticipación.
-    if(diasRestantes > UMBRAL_RECOMPRA_DIAS || diasRestantes < -60) return;
+    if(diasRestantes > UMBRAL_RECOMPRA_DIAS || diasRestantes < -TOPE_VENCIDO_DIAS) return;
 
     const info = infoDeCliente(ultima.cliente);
     if(info && info.noMolestar) return;
@@ -3259,7 +3275,19 @@ function calcularRecompras() {
     });
   });
 
-  return salida.sort((a,b) => a.diasRestantes - b.diasRestantes);
+  // 828. El orden estaba AL REVÉS donde más importa. Ordenando por días
+  //       restantes de menor a mayor, arriba quedaba el MÁS vencido — o sea lo
+  //       más muerto de la lista en el primer renglón. Ahora:
+  //         · primero los vencidos, y entre ellos el más RECIENTE (al que se le
+  //           acabó ayer es al que más probable le compra hoy);
+  //         · después los que están por acabarse, el más próximo primero.
+  //       Las dos mitades se leen de "más urgente" a "menos", que es como uno
+  //       trabaja una lista de llamadas.
+  const vencidos = salida.filter(r => r.diasRestantes < 0)
+    .sort((a,b) => b.diasRestantes - a.diasRestantes);
+  const proximos = salida.filter(r => r.diasRestantes >= 0)
+    .sort((a,b) => a.diasRestantes - b.diasRestantes);
+  return vencidos.concat(proximos);
 }
 
 // ============================================================
@@ -3322,23 +3350,35 @@ window.abrirDuraciones = () => {
   const fila = (p, i) => {
     const sug = sugerirDuracion(p.nombre);
     const actual = Number(p.duracionDias||0);
-    return '<div style="display:flex;align-items:center;gap:10px;padding:9px 2px;'
+    const unaVez = !!p.sinRecompra;
+    return '<div style="display:flex;align-items:center;gap:9px;padding:9px 2px;flex-wrap:wrap;'
       + (i ? 'border-top:1px solid var(--border)' : '') + '">'
-      + '<span style="flex:1;min-width:0">'
+      + '<span style="flex:1;min-width:140px">'
         + '<span style="display:block;font-size:12.5px;font-weight:500;color:var(--ink);overflow:hidden;'
           + 'text-overflow:ellipsis;white-space:nowrap">' + escTxt(p.nombre) + '</span>'
         + '<span style="display:block;font-size:10.5px;color:var(--ink-3)">'
           + (p.vendidas > 0 ? p.vendidas + ' vendidas' : 'sin ventas') + '</span>'
       + '</span>'
+      // 828. "De una sola vez": barras, sachets, geles. Al marcarlo, la casilla
+      //      de días se apaga — poner un número ahí no significaría nada.
+      + '<button type="button" class="dur-unavez" data-id="' + escAttr(p.id) + '"'
+        + ' data-on="' + (unaVez ? '1' : '0') + '" onclick="marcarUnaVez(this)"'
+        + ' title="Se toma una vez y ya: nunca avisa"'
+        + ' style="padding:5px 10px;border-radius:14px;font-size:11px;font-weight:600;cursor:pointer;'
+        + 'white-space:nowrap;border:1.5px solid ' + (unaVez ? 'var(--ink)' : 'var(--border)') + ';'
+        + 'background:' + (unaVez ? 'var(--ink)' : 'transparent') + ';'
+        + 'color:' + (unaVez ? 'var(--on-ink)' : 'var(--ink-3)') + '">'
+        + (unaVez ? '✓ Una sola vez' : 'Una sola vez') + '</button>'
       + '<input type="number" inputmode="numeric" min="0" class="f-input dur-input"'
-        + ' data-id="' + escAttr(p.id) + '" style="width:92px;padding:6px 8px;font-size:13px;text-align:center"'
+        + ' data-id="' + escAttr(p.id) + '" style="width:78px;padding:6px 8px;font-size:13px;text-align:center'
+        + (unaVez ? ';opacity:.35' : '') + '"' + (unaVez ? ' disabled' : '')
         + ' value="' + (actual > 0 ? actual : '') + '"'
         + ' placeholder="' + (sug > 0 ? sug : '—') + '">'
-      + '<span style="font-size:11.5px;color:var(--ink-3);width:34px">días</span>'
+      + '<span style="font-size:11.5px;color:var(--ink-3);width:30px">días</span>'
     + '</div>';
   };
 
-  const conSugerencia = prods.filter(p => !(Number(p.duracionDias) > 0) && sugerirDuracion(p.nombre) > 0).length;
+  const conSugerencia = prods.filter(p => !p.sinRecompra && !(Number(p.duracionDias) > 0) && sugerirDuracion(p.nombre) > 0).length;
   document.getElementById('dur-contenido').innerHTML =
     '<div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);'
       + 'padding:11px 13px;margin-bottom:12px;font-size:12px;color:var(--ink-2);line-height:1.45">'
@@ -3354,6 +3394,17 @@ window.abrirDuraciones = () => {
   openModal('modal-duraciones');
 };
 
+window.marcarUnaVez = (btn) => {
+  const on = btn.dataset.on !== '1';
+  btn.dataset.on = on ? '1' : '0';
+  btn.textContent = on ? '✓ Una sola vez' : 'Una sola vez';
+  btn.style.borderColor = on ? 'var(--ink)' : 'var(--border)';
+  btn.style.background = on ? 'var(--ink)' : 'transparent';
+  btn.style.color = on ? 'var(--on-ink)' : 'var(--ink-3)';
+  const inp = document.querySelector('.dur-input[data-id="' + btn.dataset.id + '"]');
+  if(inp) { inp.disabled = on; inp.style.opacity = on ? '.35' : ''; if(on) inp.value = ''; }
+};
+
 window.usarSugerencias = () => {
   document.querySelectorAll('.dur-input').forEach(inp => {
     if(!inp.value && inp.placeholder && inp.placeholder !== '—') inp.value = inp.placeholder;
@@ -3367,14 +3418,19 @@ window.guardarDuraciones = async () => {
   document.querySelectorAll('.dur-input').forEach(inp => {
     const prod = DATA.inventario.find(p => p.id === inp.dataset.id);
     if(!prod) return;
-    const nuevo = Number(inp.value) || 0;
-    if(nuevo !== Number(prod.duracionDias||0)) cambios.push({ prod, nuevo });
+    const btnUV = document.querySelector('.dur-unavez[data-id="' + inp.dataset.id + '"]');
+    const unaVez = !!(btnUV && btnUV.dataset.on === '1');
+    const dias = unaVez ? 0 : (Number(inp.value) || 0);
+    if(dias !== Number(prod.duracionDias||0) || unaVez !== !!prod.sinRecompra) {
+      cambios.push({ prod, dias, unaVez });
+    }
   });
   if(!cambios.length) { closeModal('modal-duraciones'); toast('No cambiaste ninguna'); return; }
   btn.disabled = true; btn.textContent = 'Guardando…';
   for(const c of cambios) {
-    await updateDoc(doc(db,'inventario',c.prod.id), { duracionDias: c.nuevo });
-    c.prod.duracionDias = c.nuevo;   // 686. parche en memoria
+    await updateDoc(doc(db,'inventario',c.prod.id), { duracionDias: c.dias, sinRecompra: c.unaVez });
+    c.prod.duracionDias = c.dias;    // 686. parche en memoria
+    c.prod.sinRecompra = c.unaVez;
   }
   btn.disabled = false; btn.textContent = 'Guardar';
   closeModal('modal-duraciones');

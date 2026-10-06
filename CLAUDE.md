@@ -1168,5 +1168,24 @@ De ahí la regla que ordena todo este comentario: **la parte difícil no era cal
 Probado con 20 casos: la etiqueta cuando no hay historia, el ritmo real cuando la hay, dos formas de escribir el nombre como un solo cliente, las cantidades que aplazan el aviso, el tope de 60 días para no perseguir compras viejas, "no molestar", el silencio tras avisar, la deuda y el orden por urgencia.
 
 
+### 14.34 Los tres arreglos que solo aparecieron al usarlo (comentario 828)
+
+El 827 se desplegó, Ángel llenó las duraciones, abrió la pantalla y salieron **86 avisos, 80 de ellos de compras de mayo y junio**. Tres cosas estaban mal, y ninguna se veía sin datos reales.
+
+**1. El aviso vivía demasiado tiempo.** El tope de vencidos estaba en 60 días (heredado del 640). Con duraciones largas eso significa que una creatina comprada el 6 de mayo —90 días de duración— seguía apareciendo en octubre. Escribirle a alguien cinco meses después diciéndole "ya se te debió acabar" no es un recordatorio: es una confesión de que uno no estaba mirando.
+
+Se midió la distribución antes de elegir el número, en vez de ponerlo a ojo: mediana de vencimiento 23 días; con tope de 7 quedan 13 avisos, con 14 quedan 29, con 21 quedan 38. **Se eligió 14.** Pasadas dos semanas sin volver, eso ya no es un cliente recomprando — es un cliente perdido, y merece otro mensaje y otra pantalla.
+
+**2. Lo que Ángel pidió literalmente habría roto el sistema.** Pidió *"mándame el aviso a partir de lo que se vendió el mes pasado"*. Filtrar por fecha de compra suena razonable y es exactamente lo contrario de lo que hace falta: una creatina de 90 días comprada el mes pasado todavía tiene 60 días por delante y no hay nada que avisar; **la compra que hay que avisar hoy es la de hace tres meses**. Con ese filtro, creatina y whey —los dos productos que sostienen el negocio— no avisarían nunca.
+
+Lo que él quería no era filtrar por cuándo compró, era que no le llegaran avisos muertos, y eso se arregla por el otro lado: por cuánto hace que se acabó. Con el tope de 14 días **se van todas las compras de mayo** y sobreviven las de junio cuyos productos de 90–120 días se están acabando justo ahora. El resultado es el que pedía; el camino, no.
+
+*Regla:* cuando lo que piden rompería lo que necesitan, hay que decirlo y proponer el otro camino, no ejecutar al pie de la letra.
+
+**3. El orden estaba al revés donde más importaba.** La lista se ordenaba por días restantes de menor a mayor, así que arriba del todo quedaba **el más vencido** — lo más muerto de la lista en el primer renglón. Ahora los vencidos van del más reciente al más viejo (al que se le acabó ayer es al que más probable le compra hoy) y después los próximos a acabarse. Las dos mitades se leen de más urgente a menos, que es como se trabaja una lista de llamadas.
+
+**Y los productos de una sola vez.** Ángel: *"hay cosas como los sachets o la crispy bar, que es una barra de proteína, que solo es para tomarse una vez y ya"*. A esos no se les puede calcular "cuándo se le acaba" —se acaba el mismo día— y avisar por eso sería escribirle a todo el que compró una barra. Se marcan con un botón **"Una sola vez"** (`sinRecompra`), que los deja fuera del cálculo para siempre y, de paso, los saca del contador de "faltan N por llenar": quedan **decididos**, no pendientes. Dejarlos en blanco funcionaba igual, pero la pantalla le seguiría reprochando algo que ya resolvió.
+
+
 ---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*
