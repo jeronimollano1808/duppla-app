@@ -12732,56 +12732,7 @@ function comparativoDistHtml() {
     + '<td style="text-align:right;font-weight:800;font-variant-numeric:tabular-nums">' + fmt(total) + '</td>'
   + '</tr>';
 
-  // ---- 824. La dona: el reparto del canal en todo el periodo visible ----
-  //      La gráfica de columnas de arriba responde "cómo va mes a mes". Esta
-  //      responde la otra pregunta, la que se hace uno al entrar: "de todo lo
-  //      que compró el canal, ¿cuánto pesa cada quién".
-  //
-  //      Los colores NO se vuelven a repartir aquí: se toman los que ya trae
-  //      cada fila (`f.color`), los mismos de las columnas y de la tabla. Esa
-  //      es la regla: el color sigue al distribuidor, no a su puesto. Si en
-  //      las columnas GO UP es azul, en la dona es azul.
-  //
-  //      "Sin vincular" se queda como pedazo propio y en ámbar, como en la
-  //      tabla: no es un distribuidor más, es plata del canal que no le quedó
-  //      a nadie, y esconderla dentro de "Otros" sería taparla.
-  const pedazosDist = [];
-  conColor.forEach(f => pedazosDist.push({
-    id: f.id, nombre: f.nombre, valor: f.total, color: f.color,
-    sub: 'en ' + f.meses.filter(v => v > 0).length + ' de ' + ciclos.length + ' meses'
-  }));
-  const grisesSinSueltas = resto.filter(f => !f.suelta && f.total > 0);
-  if(grisesSinSueltas.length) pedazosDist.push({
-    nombre: 'Otros ' + grisesSinSueltas.length,
-    valor: grisesSinSueltas.reduce((s,f) => s + f.total, 0),
-    color: paletaDist.otros, sub: 'los demás, en la tabla', esOtros: true
-  });
-  // El pedazo de "Sin vincular" va en gris oscuro, NO en ámbar, aunque en la
-  // tabla sea ámbar. Razón: el ámbar ya es el color de la serie 4 (ahí está
-  // NAGATOMO en la gráfica de arriba), y dos ámbares en el mismo anillo se
-  // leen como el mismo distribuidor. Un color de aviso no puede ser también
-  // un color de serie. El ⚠️ del nombre hace el trabajo que hacía el color.
-  const sueltasFila = filas.find(f => f.suelta);
-  if(sueltasFila) pedazosDist.push({
-    nombre: '⚠️ Sin vincular', valor: sueltasFila.total,
-    color: 'var(--ink-3)', rayado: true,
-    sub: 'ventas del canal sin dueño', esOtros: true
-  });
-  const donaDist = donaHtml(pedazosDist, {
-    centro: fmtCorto(total),
-    centroSub: 'compró el canal',
-    fmtValor: v => fmt(v),
-    alClic: 'abrirFichaDistribuidor'
-  });
-  const cardDona = donaDist ? '<div class="card" style="margin-bottom:16px;padding:16px">'
-    + '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2)">'
-      + '🍩 Quién pesa en el canal</div>'
-    + '<div style="font-size:11.5px;color:var(--ink-3);margin:3px 0 13px;line-height:1.4">'
-      + 'Reparto de los ' + ciclos.length + ' meses de abajo. Toca un nombre para ver su historial.</div>'
-    + donaDist
-  + '</div>' : '';
-
-  return cardDona + '<div class="card" style="margin-bottom:16px;padding:16px">'
+  return '<div class="card" style="margin-bottom:16px;padding:16px">'
     + '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:3px">'
       + '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2)">'
         + '📊 Cuánto compró cada uno, mes a mes</div>'
@@ -12801,6 +12752,120 @@ function comparativoDistHtml() {
       + '<tbody>' + filasHtml + filaTotal + '</tbody>'
     + '</table></div>'
   + '</div>';
+}
+
+// ============================================================
+// 825. LA DONA DEL CANAL, MES A MES
+//
+// Ángel, sobre la primera versión: "necesito que sea mensual, mes a mes, que
+// yo abra y se vea; no un historial histórico, si no, eso no se entiende".
+//
+// Tenía razón y el error es de concepto, no de código. Una dona del acumulado
+// de seis meses responde "quién ha pesado desde siempre", que es una pregunta
+// que casi nadie se hace y que además se pone más rígida cada mes: con un año
+// de datos, un distribuidor que dejó de comprar en marzo seguiría ocupando su
+// pedazo. La pregunta de verdad es "ESTE mes, ¿quién está moviendo el canal?",
+// y esa solo se contesta con un mes a la vez.
+//
+// La dona ahora sigue el selector de ciclo que YA tenía la página
+// (`distCicloOffset`, 698): abre en el ciclo actual, y los chips de mes viven
+// dentro de esta misma tarjeta, que es lo primero que uno ve al entrar. Tocar
+// un mes cambia la dona Y las fichas de abajo — un solo mando para toda la
+// pantalla, no dos selectores peleando.
+//
+// El color se sigue tomando del comparativo (824): el azul es el mismo
+// distribuidor en la dona, en las columnas y en la tabla, mire uno el mes que
+// mire. Si el color se repartiera por el ranking DE ESTE MES, cambiar de mes
+// repintaría a todo el mundo y no se podría seguir a nadie con la vista.
+// ============================================================
+function donaDistMesHtml() {
+  const comp = comparativoDistribuidores();
+  const paleta = comp.paleta || coloresDeSerie();
+  // Color por entidad, decidido una sola vez en el comparativo.
+  const colorDe = {};
+  comp.filas.forEach(f => { if(!f.suelta) colorDe[f.id] = f.color; });
+
+  const verTodo = distCicloOffset === -1;
+  const c = verTodo ? null : getCicloActual(distCicloOffset);
+  const enVentana = v => verTodo || (v.fecha >= c.inicio && v.fecha <= c.fin);
+
+  const porDist = DATA.distribuidores.map(d => {
+    const suyas = DATA.ventas.filter(v => v.distribuidorId === d.id && enVentana(v));
+    return { id: d.id, nombre: d.nombre, total: suyas.reduce((s,v) => s + ingresoVenta(v), 0), n: suyas.length };
+  }).filter(d => d.total > 0).sort((a,b) => b.total - a.total);
+
+  const sueltas = DATA.ventas.filter(v => v.canal === 'distribuidor' && !v.distribuidorId && enVentana(v));
+  const totalSueltas = sueltas.reduce((s,v) => s + ingresoVenta(v), 0);
+
+  // Los chips de mes se pintan SIEMPRE, aunque el mes elegido esté vacío: si
+  // desaparecieran justo cuando no hay ventas, no habría forma de volver a un
+  // mes que sí las tiene. Un mes sin ventas se dice con palabras.
+  const nCiclos = ciclosDisponibles();
+  let chips = '';
+  for(let i = 0; i <= nCiclos; i++) {
+    const ci = getCicloActual(i);
+    const act = !verTodo && i === distCicloOffset;
+    const mes = ci.label.charAt(0).toUpperCase() + ci.label.slice(1).replace(' de ', ' ');
+    chips += '<button onclick="verCicloDistribuidores(' + i + ')" style="padding:6px 13px;border-radius:20px;'
+      + 'white-space:nowrap;cursor:pointer;font-size:12.5px;border:1.5px solid ' + (act?'var(--ink)':'var(--border)') + ';'
+      + 'background:' + (act?'var(--ink)':'var(--surface)') + ';color:' + (act?'var(--on-ink)':'var(--ink-2)') + ';'
+      + 'font-weight:' + (act?'600':'400') + '">' + (i === 0 ? 'Este mes' : mes) + '</button>';
+  }
+  chips += '<button onclick="verCicloDistribuidores(-1)" style="padding:6px 13px;border-radius:20px;'
+    + 'white-space:nowrap;cursor:pointer;font-size:12.5px;border:1.5px solid ' + (verTodo?'var(--ink)':'var(--border)') + ';'
+    + 'background:' + (verTodo?'var(--ink)':'var(--surface)') + ';color:' + (verTodo?'var(--on-ink)':'var(--ink-2)') + ';'
+    + 'font-weight:' + (verTodo?'600':'400') + '">Todo</button>';
+
+  const etiqueta = verTodo
+    ? 'Todo el historial'
+    : (c.label.charAt(0).toUpperCase() + c.label.slice(1).replace(' de ', ' ')
+       + (distCicloOffset === 0 ? ' · en curso' : ''));
+
+  const hayAlgo = porDist.length > 0 || totalSueltas > 0;
+  const cabecera = '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2)">'
+      + '🍩 Quién movió el canal</div>'
+    + '<div style="font-size:11.5px;color:var(--ink-3);margin:3px 0 11px;line-height:1.4">'
+      + escTxt(etiqueta) + (verTodo ? '' : ' · del ' + fCorta(c.inicio) + ' al ' + fCorta(c.fin))
+      // La invitación a tocar un nombre solo tiene sentido si hay nombres.
+      + (hayAlgo ? '. Toca un nombre para ver su historial.' : '') + '</div>'
+    + '<div style="display:flex;gap:7px;overflow-x:auto;padding-bottom:4px;margin-bottom:14px">' + chips + '</div>';
+
+  if(!hayAlgo) {
+    return '<div class="card" style="margin-bottom:16px;padding:16px">' + cabecera
+      + '<div style="padding:22px 0;text-align:center;color:var(--ink-3);font-size:12.5px">'
+        + 'Ningún distribuidor compró en ' + escTxt(etiqueta.replace(' · en curso', '')) + '.</div>'
+    + '</div>';
+  }
+
+  // Mismo tope del 824: los 6 con color propio van solos, el resto se junta.
+  const pedazos = [];
+  const conColorPropio = porDist.filter(d => colorDe[d.id] && colorDe[d.id] !== paleta.otros);
+  const grises = porDist.filter(d => !colorDe[d.id] || colorDe[d.id] === paleta.otros);
+  conColorPropio.forEach(d => pedazos.push({
+    id: d.id, nombre: d.nombre, valor: d.total, color: colorDe[d.id],
+    sub: d.n + ' compra' + (d.n !== 1 ? 's' : '') + ' en el mes'
+  }));
+  if(grises.length) pedazos.push({
+    nombre: 'Otros ' + grises.length,
+    valor: grises.reduce((s,d) => s + d.total, 0),
+    color: paleta.otros, sub: 'los demás, en la tabla de abajo', esOtros: true
+  });
+  // 824. "Sin vincular" va rayado, nunca en ámbar: el ámbar ya es un color de
+  //      serie y dos ámbares en el mismo anillo se leen como el mismo nombre.
+  if(totalSueltas > 0) pedazos.push({
+    nombre: '⚠️ Sin vincular', valor: totalSueltas, color: 'var(--ink-3)', rayado: true,
+    sub: sueltas.length + ' venta' + (sueltas.length !== 1 ? 's' : '') + ' del canal sin dueño', esOtros: true
+  });
+
+  const totalMes = pedazos.reduce((s,p) => s + p.valor, 0);
+  const dona = donaHtml(pedazos, {
+    centro: fmtCorto(totalMes),
+    centroSub: verTodo ? 'compró el canal' : 'en el mes',
+    fmtValor: v => fmt(v),
+    alClic: 'abrirFichaDistribuidor'
+  });
+
+  return '<div class="card" style="margin-bottom:16px;padding:16px">' + cabecera + dona + '</div>';
 }
 
 // ============================================================
@@ -14749,28 +14814,13 @@ function renderDistribuidores() {
     });
   const sinRegistrar = Object.values(sinRegistrarMap).sort((a,b) => b.total - a.total);
 
-  // 702. Selector de ciclo — mismo patrón que Inicio. Por defecto arranca en
-  //      el ciclo actual ("cada mes desde cero"), pero el historial completo
-  //      sigue a un clic, y "Todo" muestra el acumulado de siempre.
+  // 702/825. El selector de ciclo que se construía aquí se subió entero a la
+  //      tarjeta de la dona (`donaDistMesHtml`), que es lo primero que se ve al
+  //      entrar. Sigue siendo el MISMO mando —la misma `verCicloDistribuidores`
+  //      y la misma variable `distCicloOffset`—, así que tocar un mes allá
+  //      cambia también estas tarjetas. Lo único que queda aquí es la etiqueta
+  //      que dice qué ventana se está mirando.
   const etiquetaVentana = verTodo ? 'Todo el historial' : (distCicloOffset === 0 ? 'este ciclo' : cicloDist.label);
-  let chipsDist = '';
-  for(let i = 0; i <= nCiclosDist; i++) {
-    const c = getCicloActual(i);
-    const activo = !verTodo && i === distCicloOffset;
-    const mes = c.label.charAt(0).toUpperCase() + c.label.slice(1).replace(' de ', ' ');
-    chipsDist += '<button onclick="verCicloDistribuidores(' + i + ')" style="'
-      + 'padding:6px 13px;border-radius:20px;white-space:nowrap;cursor:pointer;font-size:12.5px;'
-      + 'border:1.5px solid ' + (activo?'var(--ink)':'var(--border)') + ';'
-      + 'background:' + (activo?'var(--ink)':'var(--surface)') + ';'
-      + 'color:' + (activo?'var(--on-ink)':'var(--ink-2)') + ';font-weight:' + (activo?'600':'400') + '">'
-      + (i === 0 ? 'Este ciclo' : mes) + '</button>';
-  }
-  chipsDist += '<button onclick="verCicloDistribuidores(-1)" style="'
-    + 'padding:6px 13px;border-radius:20px;white-space:nowrap;cursor:pointer;font-size:12.5px;'
-    + 'border:1.5px solid ' + (verTodo?'var(--ink)':'var(--border)') + ';'
-    + 'background:' + (verTodo?'var(--ink)':'var(--surface)') + ';'
-    + 'color:' + (verTodo?'var(--on-ink)':'var(--ink-2)') + ';font-weight:' + (verTodo?'600':'400') + '">Todo</button>';
-  const selectorDistHtml = '<div style="display:flex;gap:7px;overflow-x:auto;padding-bottom:4px;margin-bottom:14px">' + chipsDist + '</div>';
 
   // 774. Se quitaron "Total canal dist." y "Vinculado": el comparativo de
   //      arriba ya trae los dos —la fila Total y la fila "Sin vincular"— y
@@ -14781,7 +14831,12 @@ function renderDistribuidores() {
       + '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2)">👤 Detalle por distribuidor</div>'
       + '<div style="font-size:11.5px;color:var(--ink-3)">' + etiquetaVentana + '</div>'
     + '</div>'
-    + selectorDistHtml
+    // 825. Los chips de mes que estaban aquí se subieron a la tarjeta de la
+    //      dona, que es lo primero de la pantalla. Son los MISMOS chips (la
+    //      misma `verCicloDistribuidores`), no otro selector: tenerlos dos
+    //      veces en una página es la clase de repetición que Ángel marcó en
+    //      Gastos. El renglón de la derecha sigue diciendo qué ventana se
+    //      está mirando, para que estas tarjetas no queden sin contexto.
     + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px">'
     + '<div class="metric-card"><div class="metric-label">Margen real</div><div class="metric-value" style="font-size:18px;color:' + (margenTotal>=0?'var(--green)':'var(--red)') + '">' + fmt(margenTotal) + '</div><div class="metric-sub">lo que deja el canal en ' + etiquetaVentana + '</div></div>'
     + '<div class="metric-card"><div class="metric-label">Distribuidores</div><div class="metric-value" style="font-size:18px">' + DATA.distribuidores.length + '</div><div class="metric-sub">registrados</div></div>'
@@ -14952,8 +15007,11 @@ function renderDistribuidores() {
       + '<button class="btn btn-lime btn-sm" onclick="abrirNuevoDistribuidor()">+ Agregar</button>'
       + '</div>'
     + '</div>'
-    // 774. El comparativo va de primero: es a lo que Ángel entra cuando toca
-    //      "Distribuidores" en el menú.
+    // 774/825. Primero la dona del MES —con sus chips de mes, que son el mando
+    //      de toda la pantalla— y debajo el comparativo mes a mes. Ese es el
+    //      orden en que se pregunta: "este mes quién movió" y después "cómo
+    //      viene cada uno".
+    + donaDistMesHtml()
     + comparativoDistHtml()
     + sinRegistrarHtml
     + resumenHtml
