@@ -1187,5 +1187,21 @@ Lo que él quería no era filtrar por cuándo compró, era que no le llegaran av
 **Y los productos de una sola vez.** Ángel: *"hay cosas como los sachets o la crispy bar, que es una barra de proteína, que solo es para tomarse una vez y ya"*. A esos no se les puede calcular "cuándo se le acaba" —se acaba el mismo día— y avisar por eso sería escribirle a todo el que compró una barra. Se marcan con un botón **"Una sola vez"** (`sinRecompra`), que los deja fuera del cálculo para siempre y, de paso, los saca del contador de "faltan N por llenar": quedan **decididos**, no pendientes. Dejarlos en blanco funcionaba igual, pero la pantalla le seguiría reprochando algo que ya resolvió.
 
 
+### 14.35 Los distribuidores fuera de Recompras (comentario 829)
+
+Ángel: *"quiero que de esa lista no entren los distribuidores, que los saquen todos"*.
+
+A un gimnasio no se le acaba nada: lo que compra lo revende. Que se le agote depende de cómo le esté yendo **a él** vendiendo, no de cuántos días rinde un tarro. Escribirle a OLIMPO GYM "ya se te debió acabar tu creatina" es hablarle como si se la estuviera tomando.
+
+Se filtra por **dos caminos, no por uno**, porque ninguno solo alcanza:
+
+- por el **canal** de la venta (`canal === 'distribuidor'` o con `distribuidorId`), y
+- por el **nombre**, contra los distribuidores registrados usando `claveBusqueda` (791) — porque una venta a un gimnasio se pudo registrar como "directo" por descuido, y ese descuido no puede traducirse en un mensaje raro a un cliente.
+
+El subtítulo de la pantalla pasó a decir "**Clientes** a quienes escribirles": es mejor que la pantalla diga a quién cubre, a que Ángel se pregunte por qué no ve a OLIMPO GYM.
+
+*Lo que queda pendiente, y es otra cosa:* al distribuidor sí le sirve un aviso de reposición, pero calculado sobre su **ritmo de compra**, no sobre el consumo de una persona. Es otra pantalla y otro mensaje.
+
+
 ---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*

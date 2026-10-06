@@ -3193,7 +3193,25 @@ function calcularRecompras() {
       fecha, cant: Number(cant||0), cliente: cliente || 'Sin nombre', prodId
     });
   };
+  // 829. FUERA LOS DISTRIBUIDORES. Ángel: "quiero que de esa lista no entren
+  //      los distribuidores, que los saquen todos".
+  //
+  //      Y es que a un gimnasio no se le "acaba" nada: lo que compra lo revende.
+  //      Que se le agote depende de cómo le esté yendo a ÉL vendiendo, no de
+  //      cuántos días rinde un tarro. Escribirle a OLIMPO GYM "ya se te debió
+  //      acabar tu creatina" es hablarle como si se la estuviera tomando.
+  //
+  //      Se filtra por DOS caminos, no por uno, porque ninguno solo alcanza:
+  //        · por el canal de la venta (canal distribuidor o con distribuidorId);
+  //        · y por el NOMBRE, contra los distribuidores registrados — porque
+  //          una venta a un gimnasio se pudo registrar como "directo" por
+  //          descuido, y ese descuido no puede traducirse en un mensaje raro.
+  const esDistribuidor = {};
+  DATA.distribuidores.forEach(d => { esDistribuidor[claveBusqueda(d.nombre)] = true; });
+
   DATA.ventas.forEach(v => {
+    if(v.canal === 'distribuidor' || v.distribuidorId) return;
+    if(esDistribuidor[claveBusqueda(v.cliente || '')]) return;
     if(v.esMultiple && v.productosVenta?.length) {
       v.productosVenta.forEach(p => considerarLinea(v.cliente, p.prodId, p.cant, v.fecha));
     } else {
@@ -7151,7 +7169,10 @@ function renderRecompras() {
   document.getElementById('page-recompras').innerHTML =
     '<div class="page-header">'
       + '<div><div class="page-title">Recompras</div>'
-      + '<div class="page-sub">A quién escribirle porque se le está acabando</div></div>'
+      // 829. El subtítulo dice "clientes" a propósito: los distribuidores no
+      //      entran aquí, y es mejor que la pantalla lo diga a que Ángel se
+      //      pregunte por qué no ve a OLIMPO GYM.
+      + '<div class="page-sub">Clientes a quienes escribirles porque se les está acabando</div></div>'
       + '<div style="display:flex;gap:8px;flex-wrap:wrap">'
         + '<button class="btn btn-sm" onclick="abrirDuraciones()">⏱️ Duraciones</button>'
         + '<button class="btn btn-sm" style="' + (recompraDescuento
@@ -7166,7 +7187,8 @@ function renderRecompras() {
         : '<div class="card"><div class="empty-state" style="padding:34px">'
           + '<div class="empty-state-icon">✅</div>'
           + '<div class="empty-state-text">No hay a quién escribirle hoy</div>'
-          + '<div class="empty-state-sub">Aquí aparecen los clientes a los que se les está acabando lo que compraron.</div>'
+          + '<div class="empty-state-sub">Aquí aparecen los clientes a los que se les está acabando lo que compraron. '
+          + 'Los distribuidores no entran: a ellos no se les acaba, lo revenden.</div>'
         + '</div></div>');
 }
 
