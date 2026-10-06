@@ -1113,6 +1113,14 @@ Probado con 13 casos (`registradores`): tres autores conviviendo con ventas sin 
 
 **La paleta se validó con el script, no a ojo** (`validate_palette.js` de la skill de dataviz): las seis series pasan los cinco chequeos en claro y en oscuro, incluida la separación para daltonismo (ΔE adyacente 9,1 en claro / 8,4 en oscuro). El único WARN es de contraste contra el fondo claro en tres tonos, y lo cubre justo lo que ya hay: etiquetas visibles y tabla completa. El gris de "Otros" sale reprobado a propósito —no es un matiz categórico, es el gris de quitar énfasis—.
 
+**825. La corrección: mes a mes, no acumulado.** Ángel, viendo la primera versión de la dona de Distribuidores: *"necesito que sea mensual, mes a mes, que yo abra y se vea; no un historial histórico, si no, eso no se entiende"*. Tenía razón, y el error era de concepto, no de código.
+
+Una dona del acumulado de seis meses responde "quién ha pesado desde siempre" — una pregunta que casi nadie se hace, y que además se vuelve más rígida cada mes: con un año de datos, un distribuidor que dejó de comprar en marzo seguiría ocupando su pedazo. La pregunta real es **"este mes, ¿quién está moviendo el canal?"**, y esa solo se contesta con un mes a la vez.
+
+La dona pasó a seguir el selector de ciclo que la página **ya tenía** (`distCicloOffset`, del 698): abre en el ciclo en curso, y los chips de mes se subieron a la tarjeta de la dona, que es lo primero que se ve al entrar. Son los mismos chips, no un selector nuevo — tocar un mes cambia la dona **y** las fichas de abajo. Tener dos selectores de mes en una pantalla es la repetición que Ángel marcó en Gastos (773).
+
+Dos detalles que solo aparecen con datos reales: los chips se pintan **siempre**, aunque el mes elegido esté vacío (si desaparecieran justo cuando no hay ventas, no habría forma de volver a un mes que sí las tiene — un mes vacío se dice con palabras); y el color se sigue tomando del comparativo, no del ranking del mes: si se repartiera por el puesto de cada mes, cambiar de mes repintaría a todos y no se podría seguir a nadie con la vista.
+
 **Y se miró renderizada**, que es lo que ningún validador hace: montada en un navegador con datos de prueba (12 productos, 9 distribuidores, ventas sin vincular), en claro y en oscuro, a 430px y a 1200px. De ahí salieron dos arreglos que no se ven en el código: los dos grises indistinguibles, y la leyenda estirándose hasta el borde en pantalla ancha —con el nombre a la izquierda y la cifra a media pantalla de distancia—, ahora con tope de 520px.
 
 
