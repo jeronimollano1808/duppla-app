@@ -93,6 +93,12 @@
   --serie-1:#2a78d6; --serie-2:#eb6834; --serie-3:#1baf7a;
   --serie-4:#eda100; --serie-5:#e87ba4; --serie-6:#008300;
   --serie-otros:#9CA3AF;
+  /* 826. Escala de grises para la cola de las donas: del 7º en adelante, cada
+     uno sigue teniendo su nombre y su pedazo, pero en gris. Validada como
+     rampa ordinal (monótona, escalones ≥ .06 de luminosidad, y el extremo
+     claro por encima de 2:1 contra el fondo). */
+  --gris-cola-1:#AEB4BB; --gris-cola-2:#99A0A8; --gris-cola-3:#848C95;
+  --gris-cola-4:#6F7881; --gris-cola-5:#5B646D; --gris-cola-6:#484F57;
   --shadow-sm:0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);
   --shadow:0 4px 6px -1px rgba(0,0,0,.07),0 2px 4px -1px rgba(0,0,0,.04);
   --shadow-lg:0 10px 15px -3px rgba(0,0,0,.08),0 4px 6px -2px rgba(0,0,0,.04);
@@ -134,6 +140,12 @@
   --serie-1:#3987e5; --serie-2:#d95926; --serie-3:#199e70;
   --serie-4:#c98500; --serie-5:#d55181; --serie-6:#008300;
   --serie-otros:#6F7885;
+  /* 826. La rampa de la cola, re-escalonada para fondo oscuro: va al revés
+     (el primero es el más oscuro) y el extremo que toca el fondo también
+     despega de él. No es la de arriba invertida a ojo: está validada contra
+     el fondo oscuro. */
+  --gris-cola-1:#4B5159; --gris-cola-2:#5D646D; --gris-cola-3:#707880;
+  --gris-cola-4:#848C95; --gris-cola-5:#99A1A9; --gris-cola-6:#AEB6BE;
   /* En oscuro una sombra no se ve: el relieve lo da el borde. */
   --shadow-sm:0 1px 2px rgba(0,0,0,.4);
   --shadow:0 4px 10px rgba(0,0,0,.45);
@@ -155,6 +167,12 @@
     --serie-1:#3987e5; --serie-2:#d95926; --serie-3:#199e70;
     --serie-4:#c98500; --serie-5:#d55181; --serie-6:#008300;
     --serie-otros:#6F7885;
+    /* 826. La rampa de la cola, re-escalonada para fondo oscuro: va al revés
+       (el primero es el más oscuro) y el extremo que toca el fondo también
+       despega de él. No es la de arriba invertida a ojo: está validada contra
+       el fondo oscuro. */
+    --gris-cola-1:#4B5159; --gris-cola-2:#5D646D; --gris-cola-3:#707880;
+    --gris-cola-4:#848C95; --gris-cola-5:#99A1A9; --gris-cola-6:#AEB6BE;
     --shadow-sm:0 1px 2px rgba(0,0,0,.4);
     --shadow:0 4px 10px rgba(0,0,0,.45);
     --shadow-lg:0 12px 28px rgba(0,0,0,.55);
@@ -8469,6 +8487,37 @@ function renderInicio() {
       <span style="position:absolute;top:12px;right:13px;color:var(--ink-3);font-size:13px" aria-hidden="true">›</span>
     </div>`;
 
+  // ---- 826. La dona de productos, en Inicio ----
+  // Ángel: "quiero la gráfica de la dona en el inicio, una gráfica con los
+  // productos que se han vendido".
+  //
+  // Es del ciclo que se esté mirando, no del histórico: Inicio es la pantalla
+  // del mes. Mide PLATA, igual que la del Resumen (824), y lleva las unidades
+  // en el renglón de cada producto. Los productos salen de `productosDelRango`,
+  // la misma cuenta que usa el Resumen del mes — no hay dos sumas distintas.
+  const prodsCiclo = productosDelRango(ciclo.inicio, ciclo.fin);
+  const donaProductosHtml = prodsCiclo.length
+    ? '<div class="card" style="padding:16px;margin-bottom:16px">'
+      + '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap">'
+        + '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2)">'
+          + '🍩 Qué se vendió</div>'
+        + '<button onclick="showPage(\'resumen\')" style="background:none;border:none;cursor:pointer;'
+          + 'font-size:11.5px;color:var(--blue);font-weight:600;padding:0">Ver el resumen del mes →</button>'
+      + '</div>'
+      + '<div style="font-size:11.5px;color:var(--ink-3);margin:3px 0 13px;line-height:1.4">'
+        + prodsCiclo.length + ' producto' + (prodsCiclo.length !== 1 ? 's' : '') + ' en este ciclo, '
+        + 'por la plata que dejó cada uno.</div>'
+      + donaHtml(repartoParaDona(prodsCiclo.map(p => ({
+          nombre: p.nombre, valor: p.dinero,
+          sub: p.unidades + ' unidad' + (p.unidades !== 1 ? 'es' : '')
+        }))), {
+          centro: fmtCorto(prodsCiclo.reduce((s,p) => s + p.dinero, 0)),
+          centroSub: prodsCiclo.reduce((s,p) => s + p.unidades, 0) + ' unidades',
+          fmtValor: v => fmt(v)
+        })
+    + '</div>'
+    : '';
+
   document.getElementById('page-inicio').innerHTML = `
     <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px">
       <div>
@@ -8526,6 +8575,11 @@ function renderInicio() {
           Solo en el ciclo en curso — en un ciclo cerrado la pregunta "¿cómo
           vamos?" ya no tiene sentido. */''}
     ${esCicloActual ? crecimientoHtml() : ''}
+
+    ${/* 826. La dona va después de los números del ciclo y del crecimiento:
+          primero cuánto, después si vamos mejor o peor, y enseguida de qué
+          salió esa plata. */''}
+    ${donaProductosHtml}
 
     <div style="display:flex;flex-direction:column;gap:12px">
       ${equilibrioHtml}
@@ -10475,6 +10529,150 @@ window.desvincularVentaDistribuidor = async (ventaId) => {
   if(document.getElementById('modal-limpiar-vinculos')?.classList.contains('open')) abrirLimpiarVinculos();
   toast('✅ Venta desvinculada');
 };
+
+// ============================================================
+// 826. VENTAS SIN DUEÑO — y el botón que faltaba para darles uno
+//
+// Ángel: "veo que compras aún no se le añaden siempre a los distribuidores,
+// quiero que nada quede sin dueño".
+//
+// Al mirar los datos apareció la causa, y no era de los datos: la app sabía
+// DESVINCULAR (683) pero no sabía VINCULAR. Si una venta del canal quedaba sin
+// distribuidor —porque se registró antes del 762, o porque alguien la
+// desvinculó de más— no existía ninguna forma, dentro de la app, de volver a
+// ponerle dueño. Nueve ventas por $2.026.500 llevaban meses así, todas de
+// RAICES SALUDABLES., que SÍ está registrada: el nombre estaba escrito en la
+// venta, solo que nadie podía usarlo para vincularla.
+//
+// Por eso esto no es un parche a mano sobre la base de datos: es la pieza que
+// faltaba. Arreglar los nueve registros de hoy sin dejar el botón habría
+// dejado el mismo hueco abierto para el siguiente.
+//
+// Cómo decide a quién pertenece cada una: por el nombre del cliente escrito en
+// la venta, comparado con `claveBusqueda` (791) — el mismo normalizador que ya
+// agrupa "OLIMPO GYM." con "OLIMPO GYM". Solo propone lo que calza sin duda.
+// Una variante de verdad distinta ("OLIMPO GIMNASIO" frente a "OLIMPO GYM")
+// NO se propone sola: ahí hay que escoger a mano, porque adivinarlo sería
+// meterle plata a un distribuidor que a lo mejor no la vendió.
+// ============================================================
+function ventasSinDuenio() {
+  const porClave = {};
+  DATA.distribuidores.forEach(d => { porClave[claveBusqueda(d.nombre)] = d; });
+  return DATA.ventas
+    .filter(v => v.canal === 'distribuidor' && !v.distribuidorId)
+    .map(v => {
+      const calce = porClave[claveBusqueda(v.cliente || '')] || null;
+      return { venta: v, calce };
+    })
+    .sort((a,b) => (b.venta.fecha > a.venta.fecha ? 1 : -1));
+}
+
+window.vincularVentaADistribuidor = async (ventaId, distId) => {
+  if(!exigirAdmin()) return;
+  const v = DATA.ventas.find(x => x.id === ventaId);
+  const d = DATA.distribuidores.find(x => x.id === distId);
+  if(!v || !d) return;
+  await updateDoc(doc(db,'ventas',ventaId), { distribuidorId: distId });
+  // La bitácora (785) tiene que enterarse: cambiar de dueño una venta mueve
+  // plata de un historial a otro, y eso es justo lo que uno quiere poder
+  // revisar después.
+  await registrarEnBitacora({ accion:'vinculó', coleccion:'ventas', docId:ventaId,
+    titulo: tituloRegistro('ventas', v),
+    cambios: [{ campo:'Distribuidor', antes:'Sin dueño', despues:d.nombre }] });
+  v.distribuidorId = distId;   // 686. parche en memoria, sin esperar al servidor
+  renderDistribuidores();
+  toast('✅ ' + (v.producto||'Venta') + ' → ' + d.nombre);
+};
+
+window.vincularTodasLasQueCalzan = async () => {
+  if(!exigirAdmin()) return;
+  const lista = ventasSinDuenio().filter(x => x.calce);
+  if(!lista.length) { toast('No hay ninguna que calce por nombre'); return; }
+  const porNombre = {};
+  lista.forEach(x => { porNombre[x.calce.nombre] = (porNombre[x.calce.nombre]||0) + 1; });
+  const resumen = Object.entries(porNombre).map(([n,c]) => '· ' + n + ': ' + c + ' venta' + (c!==1?'s':'')).join('\n');
+  if(!confirm('Se van a asignar ' + lista.length + ' venta' + (lista.length!==1?'s':'') + ':\n\n' + resumen
+    + '\n\nEl nombre del cliente de cada una coincide con el del distribuidor. Queda apuntado en la bitácora y se puede deshacer una por una.')) return;
+  for(const x of lista) {
+    await updateDoc(doc(db,'ventas',x.venta.id), { distribuidorId: x.calce.id });
+    await registrarEnBitacora({ accion:'vinculó', coleccion:'ventas', docId:x.venta.id,
+      titulo: tituloRegistro('ventas', x.venta),
+      cambios: [{ campo:'Distribuidor', antes:'Sin dueño', despues:x.calce.nombre }] });
+    x.venta.distribuidorId = x.calce.id;
+  }
+  renderDistribuidores();
+  toast('✅ ' + lista.length + ' venta' + (lista.length!==1?'s':'') + ' con dueño');
+};
+
+// La tarjeta. Solo aparece cuando hay algo que arreglar: una pantalla que
+// avisa de un problema que no existe es ruido permanente.
+function sinDuenioHtml() {
+  const lista = ventasSinDuenio();
+  if(!lista.length) return '';
+  const calzan = lista.filter(x => x.calce);
+  const dudosas = lista.filter(x => !x.calce);
+  const total = lista.reduce((s,x) => s + ingresoVenta(x.venta), 0);
+
+  const opciones = d => DATA.distribuidores
+    .slice().sort((a,b) => (a.nombre||'').localeCompare(b.nombre||''))
+    .map(x => '<option value="' + escAttr(x.id) + '">' + escTxt(x.nombre) + '</option>').join('');
+
+  const fila = (x) => '<div style="display:flex;align-items:center;gap:9px;padding:9px 0;border-top:1px solid var(--border);flex-wrap:wrap">'
+    + '<span style="flex:1;min-width:150px">'
+      + '<span style="display:block;font-size:12.5px;font-weight:600;color:var(--ink)">'
+        + escTxt(x.venta.cliente || '(sin nombre de cliente)') + '</span>'
+      + '<span style="display:block;font-size:11px;color:var(--ink-3)">'
+        + fCorta(x.venta.fecha) + ' · ' + escTxt((x.venta.producto||'').slice(0,34)) + '</span>'
+    + '</span>'
+    + '<span style="font-size:12.5px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap">'
+      + fmt(ingresoVenta(x.venta)) + '</span>'
+    + (x.calce
+        ? '<button class="btn btn-sm btn-lime" style="white-space:nowrap" '
+          + 'onclick="vincularVentaADistribuidor(\'' + escAttr(x.venta.id) + '\',\'' + escAttr(x.calce.id) + '\')">'
+          + '→ ' + escTxt(x.calce.nombre) + '</button>'
+        : '<span style="display:flex;gap:6px;align-items:center">'
+          + '<select class="f-input" style="padding:5px 8px;font-size:12px;width:auto" id="sd-' + escAttr(x.venta.id) + '">'
+            + '<option value="">— ¿de quién es? —</option>' + opciones()
+          + '</select>'
+          + '<button class="btn btn-sm" onclick="vincularVentaADistribuidor(\'' + escAttr(x.venta.id) + '\','
+            + 'document.getElementById(\'sd-' + escAttr(x.venta.id) + '\').value)">Asignar</button>'
+        + '</span>')
+  + '</div>';
+
+  return '<div class="card" style="margin-bottom:16px;padding:16px;border-left:3px solid var(--amber)">'
+    + '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap">'
+      + '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--amber-ink)">'
+        + '⚠️ Ventas sin dueño — ' + lista.length + '</div>'
+      + '<div style="font-size:12.5px;font-weight:700;color:var(--ink)">' + fmt(total) + '</div>'
+    + '</div>'
+    + '<div style="font-size:11.5px;color:var(--ink-3);margin:4px 0 11px;line-height:1.45">'
+      + 'Ventas del canal distribuidor que no le cuentan a nadie: no salen en el historial de ningún '
+      + 'distribuidor ni en su ranking.'
+      + (calzan.length
+          ? (calzan.length === 1
+              ? ' Una calza por nombre con un distribuidor ya registrado.'
+              : ' ' + calzan.length + ' calzan por nombre con distribuidores ya registrados.')
+          : '')
+    + '</div>'
+    + (calzan.length
+        // 811. Las frases se escriben enteras. "las 1 que calzan" no lo dice
+        //      nadie, y conjugar pegando sufijos es como salió «quedóaron».
+        ? '<button class="btn btn-lime" style="width:100%;margin-bottom:6px" onclick="vincularTodasLasQueCalzan()">'
+          + (calzan.length === 1
+              ? '✓ Asignar la que calza por nombre'
+              : '✓ Asignar las ' + calzan.length + ' que calzan por nombre') + '</button>'
+        : '')
+    + calzan.map(fila).join('')
+    + (dudosas.length
+        ? '<div style="font-size:11.5px;color:var(--ink-3);margin-top:12px;padding-top:10px;border-top:1px solid var(--border);line-height:1.45">'
+          + (dudosas.length === 1
+              ? 'Esta no calza con ningún nombre registrado. Escógele dueño, o créalo primero si no está en la lista.'
+              : 'Estas ' + dudosas.length + ' no calzan con ningún nombre registrado. Escógele dueño a cada una, '
+                + 'o créalo primero si no está en la lista.') + '</div>'
+          + dudosas.map(fila).join('')
+        : '')
+  + '</div>';
+}
 
 // ============================================================
 // 683. LIMPIEZA MASIVA DE VÍNCULOS MAL PUESTOS
@@ -12640,7 +12838,9 @@ function comparativoDistribuidores() {
 
 function comparativoDistHtml() {
   const { ciclos, filas, totalesMes, total, hayMas } = comparativoDistribuidores();
-  const paletaDist = comparativoDistribuidores.paleta || coloresDeSerie();
+  // 826. `paletaDist` se usaba para pintar las columnas apiladas y su leyenda.
+  //       Con la gráfica fuera, los colores de esta tarjeta son los puntitos
+  //       de la tabla, que ya vienen en `f.color` de cada fila.
 
   if(!filas.length) {
     return '<div class="card" style="margin-bottom:16px"><div class="empty-state" style="padding:26px">'
@@ -12650,59 +12850,20 @@ function comparativoDistHtml() {
       + '</div></div>';
   }
 
-  const maxMes = Math.max(...totalesMes, 1);
-
-  // ---- Gráfica: columnas apiladas, una por mes ----
-  // Cada segmento es un distribuidor. Los 2px de separación son del fondo:
-  // sin ellos dos colores pegados se leen como uno solo.
-  // 800. Los que no tienen color propio se apilan en UNA sola banda "Otros",
-  //      no en ocho bandas grises. Con catorce distribuidores la versión
-  //      anterior dibujaba ocho tiras grises por columna y la gráfica se leía
-  //      como ruido: lo que debería resaltar —quién carga el mes— quedaba
-  //      enterrado bajo rayas del mismo color. La tabla de abajo sigue
-  //      mostrando a todos, uno por uno, que es donde se consulta el detalle.
-  const conColor = filas.filter(f => !f.suelta && f.color !== paletaDist.otros);
-  const resto    = filas.filter(f => f.suelta || f.color === paletaDist.otros);
-
-  const columnas = ciclos.map((c, i) => {
-    const t = totalesMes[i];
-    const alturaPct = Math.round((t / maxMes) * 100);
-    const piezas = conColor.map(f => ({ nombre: f.nombre, v: f.meses[i], color: f.color }));
-    const vOtros = resto.reduce((a, f) => a + f.meses[i], 0);
-    if(vOtros > 0) piezas.push({ nombre: resto.length + ' más', v: vOtros, color: paletaDist.otros });
-    const segmentos = piezas
-      .filter(x => x.v > 0)
-      .reverse()  // el primero del ranking queda arriba de la pila
-      .map(x => '<div title="' + escAttr(x.nombre) + ': ' + fmt(x.v) + '" style="flex:' + x.v
-        + ' 1 0;min-height:3px;background:' + x.color + ';border-radius:3px"></div>')
-      .join('');
-    return '<div onclick="verCicloDistribuidores(' + c.offset + ')" style="flex:1;min-width:0;display:flex;'
-      + 'flex-direction:column;justify-content:flex-end;cursor:pointer" title="' + c.completo + ': ' + fmt(t) + '">'
-      + '<div style="font-size:9.5px;font-weight:700;color:var(--ink-2);text-align:center;margin-bottom:4px;'
-        + 'white-space:nowrap;font-variant-numeric:tabular-nums">' + fmtCorto(t) + '</div>'
-      + (t > 0
-          ? '<div style="height:' + Math.max(4, alturaPct) + '%;display:flex;flex-direction:column;gap:2px">' + segmentos + '</div>'
-          : '<div style="height:3px;background:var(--border);border-radius:2px"></div>')
-    + '</div>';
-  }).join('');
-
-  const etiquetasMes = ciclos.map(c =>
-    '<div style="flex:1;min-width:0;text-align:center;font-size:10.5px;color:var(--ink-3);'
-    + 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + c.etiqueta + '</div>').join('');
-
-  // ---- Leyenda: la identidad nunca queda solo en el color ----
-  // 800. La leyenda nombra solo a los que tienen color propio. Catorce
-  //      nombres, doce de ellos con el mismo punto gris, no es una leyenda:
-  //      es una lista que estorba.
-  const leyenda = conColor.map(f =>
-    '<span style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:var(--ink-2)">'
-    + '<span style="width:9px;height:9px;border-radius:3px;background:' + f.color + ';flex-shrink:0"></span>'
-    + escTxt(f.nombre) + '</span>').join('')
-    + (resto.length
-        ? '<span style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:var(--ink-3)">'
-          + '<span style="width:9px;height:9px;border-radius:3px;background:' + paletaDist.otros + ';flex-shrink:0"></span>'
-          + 'Otros ' + resto.length + ' · en la tabla</span>'
-        : '');
+  // 826. Aquí estaba la gráfica de columnas apiladas, mes a mes. Ángel: "la
+  //      que aparece abajo de la dona en distribuidores es innecesaria porque
+  //      la de la dona ya cumple".
+  //
+  //      Y es cierto para lo que esa gráfica hacía bien —ver quién carga cada
+  //      mes—, que es justo lo que la dona mensual (825) responde mejor: la
+  //      dona reparte UN mes con nombres y porcentajes, y cambiar de mes es un
+  //      toque. Las columnas pedían leer catorce bandas de colores apiladas en
+  //      un celular para sacar la misma conclusión.
+  //
+  //      Lo que NO se fue es la tabla: la columna por mes con el valor exacto
+  //      de cada distribuidor es el único sitio donde se compara a alguien
+  //      consigo mismo a lo largo del año, y eso la dona no lo da. Una gráfica
+  //      se quita cuando otra la cubre; un dato no se quita nunca.
 
   // ---- Tabla: el dato exacto, celda por celda ----
   const th = '<th style="position:sticky;left:0;background:var(--surface);z-index:1;min-width:128px">Distribuidor</th>'
@@ -12735,7 +12896,7 @@ function comparativoDistHtml() {
   return '<div class="card" style="margin-bottom:16px;padding:16px">'
     + '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:3px">'
       + '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2)">'
-        + '📊 Cuánto compró cada uno, mes a mes</div>'
+        + '📋 Cuánto compró cada uno, mes a mes</div>'
       + (hayMas || distComparativoTodo
           ? '<button onclick="toggleComparativoDist()" style="background:none;border:none;cursor:pointer;'
             + 'font-size:11.5px;color:var(--blue);font-weight:600;padding:0">'
@@ -12743,10 +12904,7 @@ function comparativoDistHtml() {
           : '')
     + '</div>'
     + '<div style="font-size:11.5px;color:var(--ink-3);margin-bottom:13px;line-height:1.4">'
-      + 'Toca un nombre para ver su historial completo, o un mes para ver ese ciclo abajo.</div>'
-    + '<div style="display:flex;gap:7px;align-items:stretch;height:155px">' + columnas + '</div>'
-    + '<div style="display:flex;gap:7px;margin-top:7px;padding-top:7px;border-top:1px solid var(--border)">' + etiquetasMes + '</div>'
-    + '<div style="display:flex;flex-wrap:wrap;gap:10px 16px;margin:13px 0 4px">' + leyenda + '</div>'
+      + 'El número exacto de cada mes. Toca un nombre para ver su historial completo.</div>'
     + '<div class="table-wrap" style="margin-top:10px"><table class="tbl">'
       + '<thead><tr>' + th + '</tr></thead>'
       + '<tbody>' + filasHtml + filaTotal + '</tbody>'
@@ -12852,26 +13010,34 @@ function donaDistMesHtml() {
   //      mes: puede cambiarle de un mes a otro, pero dentro de un mismo mes
   //      nunca hay dos pedazos del mismo color, que es lo que importa para
   //      leer el anillo.
+  // 826. Todos con su nombre, ninguno dentro de un "Otros". Los 6 más grandes
+  //      DEL MES llevan los colores de la paleta; del 7º en adelante, la escala
+  //      de grises del tema (ver grisDeCola). El color de los seis sigue saliendo del
+  //      mapa global, así que quien compra todos los meses conserva SU color de
+  //      un mes a otro y se le puede seguir la pista; al que asoma un mes suelto
+  //      se le presta uno de los que queden libres ese mes.
   const pedazos = [];
-  const nombrados = porDist.slice(0, DONA_MAX_PEDAZOS);
-  const grises = porDist.slice(DONA_MAX_PEDAZOS);
-  const usados = new Set(nombrados.map(d => colorDe[d.id]).filter(Boolean));
+  const cabeza = porDist.slice(0, DONA_MAX_PEDAZOS);
+  const cola = porDist.slice(DONA_MAX_PEDAZOS);
+  const usados = new Set(cabeza.map(d => colorDe[d.id]).filter(Boolean));
   const libres = paleta.series.filter(c => !usados.has(c));
-  nombrados.forEach(d => pedazos.push({
+  cabeza.forEach(d => pedazos.push({
     id: d.id, nombre: d.nombre, valor: d.total,
-    color: colorDe[d.id] || libres.shift() || paleta.otros,
+    color: colorDe[d.id] || libres.shift() || paleta.cola[0],
     sub: d.n + ' compra' + (d.n !== 1 ? 's' : '') + ' en el mes'
   }));
-  if(grises.length) pedazos.push({
-    nombre: 'Otros ' + grises.length,
-    valor: grises.reduce((s,d) => s + d.total, 0),
-    color: paleta.otros, sub: 'los demás, en la tabla de abajo', esOtros: true
-  });
+  cola.forEach((d, i) => pedazos.push({
+    id: d.id, nombre: d.nombre, valor: d.total,
+    color: grisDeCola(i, cola.length, paleta.cola), esCola: true,
+    sub: d.n + ' compra' + (d.n !== 1 ? 's' : '') + ' en el mes'
+  }));
   // 824. "Sin vincular" va rayado, nunca en ámbar: el ámbar ya es un color de
   //      serie y dos ámbares en el mismo anillo se leen como el mismo nombre.
+  //      Y va de último aunque sea grande: no es un distribuidor, es un
+  //      pendiente — con el botón para resolverlo justo debajo (826).
   if(totalSueltas > 0) pedazos.push({
-    nombre: '⚠️ Sin vincular', valor: totalSueltas, color: 'var(--ink-3)', rayado: true,
-    sub: sueltas.length + ' venta' + (sueltas.length !== 1 ? 's' : '') + ' del canal sin dueño', esOtros: true
+    nombre: '⚠️ Sin dueño', valor: totalSueltas, color: 'var(--ink-3)', rayado: true,
+    sub: sueltas.length + ' venta' + (sueltas.length !== 1 ? 's' : '') + ' por asignar', esOtros: true
   });
 
   const totalMes = pedazos.reduce((s,p) => s + p.valor, 0);
@@ -13630,7 +13796,12 @@ function coloresDeSerie() {
   const leer = (n, porDefecto) => (cs.getPropertyValue(n) || '').trim() || porDefecto;
   return {
     series: [1,2,3,4,5,6].map((i, k) => leer('--serie-' + i, ['#2a78d6','#eb6834','#1baf7a','#eda100','#e87ba4','#008300'][k])),
-    otros: leer('--serie-otros', '#9CA3AF')
+    otros: leer('--serie-otros', '#9CA3AF'),
+    // 826. La rampa de grises de la cola de las donas, también del tema: en
+    //      claro va de claro a oscuro y en oscuro al revés, porque una rampa
+    //      que no despega del fondo deja pedazos invisibles.
+    cola: [1,2,3,4,5,6].map((i, k) => leer('--gris-cola-' + i,
+      ['#AEB4BB','#99A0A8','#848C95','#6F7881','#5B646D','#484F57'][k]))
   };
 }
 
@@ -13664,25 +13835,45 @@ function coloresDeSerie() {
 // ============================================================
 const DONA_MAX_PEDAZOS = 6;
 
-// Agrupa una lista cualquiera en los N que más pesan + "Otros".
+// 826. Ángel: "no quiero que digas en las gráficas Otros cuatro".
+//
+//      Tenía razón y el motivo es más fuerte que el gusto: en producción, la
+//      dona de octubre sacaba un pedazo con nombre del 50% y un "Otros 3"
+//      anónimo del otro 50%. El pedazo más grande de la gráfica era una
+//      bolsa sin nombre — o sea, la gráfica escondía justo lo que uno viene
+//      a ver. Una lista de nombres con un "y otros cuatro" al final no es una
+//      lista de nombres.
+//
+//      Ahora TODOS llevan su nombre. Lo que no se puede es darles a todos un
+//      color propio: la paleta tiene seis matices que de verdad se distinguen
+//      entre sí y para un daltónico, y el séptimo inventado es indistinguible
+//      del tercero. Así que:
+//        · los 6 más grandes llevan los seis colores de la paleta;
+//        · del 7º en adelante, una ESCALA DE GRISES de claro a oscuro.
+//      El gris dice "esto es la cola" sin esconder a nadie: cada uno sigue
+//      teniendo su renglón, su nombre, su porcentaje y su plata, y dos grises
+//      vecinos se distinguen porque son escalones distintos, no el mismo gris
+//      repetido ocho veces (que era el problema del 800).
+function grisDeCola(i, n, rampa) {
+  const r = rampa || coloresDeSerie().cola;
+  if(n <= 1) return r[2];
+  // Repartimos los escalones a lo largo de la cola, sea cual sea su tamaño:
+  // con 3 rezagados se usan 3 escalones bien separados, no los 3 primeros.
+  const paso = (r.length - 1) / Math.max(1, n - 1);
+  return r[Math.round(i * paso)];
+}
+
+// Ordena una lista y le pone color a cada uno. Nadie se agrupa.
 // `items` = [{ nombre, valor, sub?, id? }] — se devuelve ya con color.
 function repartoParaDona(items, max) {
   const tope = max || DONA_MAX_PEDAZOS;
   const paleta = coloresDeSerie();
   const ordenados = [...items].filter(i => Number(i.valor) > 0)
     .sort((a,b) => b.valor - a.valor);
-  const cabeza = ordenados.slice(0, tope).map((i, k) => ({ ...i, color: paleta.series[k] }));
-  const cola = ordenados.slice(tope);
-  if(cola.length) {
-    cabeza.push({
-      nombre: 'Otros ' + cola.length,
-      valor: cola.reduce((s,i) => s + Number(i.valor||0), 0),
-      sub: 'los demás, sumados',
-      color: paleta.otros,
-      esOtros: true
-    });
-  }
-  return cabeza;
+  const cola = Math.max(0, ordenados.length - tope);
+  return ordenados.map((i, k) => k < tope
+    ? { ...i, color: paleta.series[k] }
+    : { ...i, color: grisDeCola(k - tope, cola, paleta.cola), esCola: true });
 }
 
 // El anillo. `opciones`: { centro, centroSub, fmtValor, alClic }
@@ -13746,7 +13937,11 @@ function donaHtml(pedazos, opciones) {
   + '</svg>';
 
   const leyenda = pedazos.map(p => {
-    const pct = Math.round((Number(p.valor||0) / total) * 100);
+    // 826. Un pedazo que existe no puede decir "0%": con catorce productos los
+    //      de la cola redondean a cero y parece que no vendieron nada. "<1%"
+    //      dice la verdad — es poco, pero no es nada.
+    const crudo = (Number(p.valor||0) / total) * 100;
+    const pct = (crudo > 0 && crudo < 0.5) ? '<1' : Math.round(crudo);
     const tocable = o.alClic && p.id && !p.esOtros;
     const apertura = tocable
       ? '<div class="dona-fila" role="button" tabindex="0" style="cursor:pointer"'
@@ -13982,24 +14177,37 @@ function renderUsuarios() {
 let resumenOffset = 0;
 window.verMesResumen = (o) => { resumenOffset = Number(o); renderResumenMes(); };
 
+// Las unidades salen de las LÍNEAS, no de las ventas: una venta de
+// "3 creatinas + 1 whey" son 4 unidades, no 1. Y el dinero de una venta de
+// varias líneas se reparte entre ellas, de modo que la suma por producto da
+// exactamente el total del periodo (probado como invariante).
+// 826. Está aparte para que la dona de Inicio y el Resumen del mes cuenten los
+//      productos con la MISMA cuenta. Dos sitios sumando lo mismo por su lado
+//      es como nació el lío de "utilidad neta" del 818.
+function acumularProductos(mapa, v) {
+  const lineas = lineasDeVenta(v);
+  const ing = ingresoVenta(v);
+  lineas.forEach(l => {
+    const k = String(l.nombre || '(sin nombre)').trim();
+    mapa[k] = mapa[k] || { nombre:k, unidades:0, dinero:0, ventas:0 };
+    mapa[k].unidades += Number(l.cant || 0);
+    mapa[k].dinero   += ing / lineas.length;
+    mapa[k].ventas   += 1;
+  });
+}
+
+function productosDelRango(inicio, fin) {
+  const mapa = {};
+  DATA.ventas.filter(v => v.fecha >= inicio && v.fecha <= fin)
+    .forEach(v => acumularProductos(mapa, v));
+  return Object.values(mapa).map(p => ({ ...p, dinero: Math.round(p.dinero) }))
+    .sort((a,b) => b.dinero - a.dinero || b.unidades - a.unidades);
+}
+
 function resumenDelMes(offset) {
   const c = getCicloActual(offset);
   const ventas = DATA.ventas.filter(v => v.fecha >= c.inicio && v.fecha <= c.fin);
-
-  // Las unidades salen de las LÍNEAS, no de las ventas: una venta de
-  // "3 creatinas + 1 whey" son 4 unidades, no 1.
-  const acumular = (mapa, v) => {
-    const lineas = lineasDeVenta(v);
-    const ing = ingresoVenta(v);
-    lineas.forEach(l => {
-      const k = String(l.nombre || '(sin nombre)').trim();
-      mapa[k] = mapa[k] || { nombre:k, unidades:0, dinero:0, ventas:0 };
-      mapa[k].unidades += Number(l.cant || 0);
-      // El dinero de una venta de varias líneas se reparte entre ellas.
-      mapa[k].dinero   += ing / lineas.length;
-      mapa[k].ventas   += 1;
-    });
-  };
+  const acumular = acumularProductos;
 
   const mapa = {};
   ventas.forEach(v => acumular(mapa, v));
@@ -15029,6 +15237,9 @@ function renderDistribuidores() {
     //      orden en que se pregunta: "este mes quién movió" y después "cómo
     //      viene cada uno".
     + donaDistMesHtml()
+    // 826. Si hay ventas sin dueño, van justo debajo de la dona: son el motivo
+    //      de que la dona tenga un pedazo rayado, y arreglarlas es de un toque.
+    + sinDuenioHtml()
     + comparativoDistHtml()
     + sinRegistrarHtml
     + resumenHtml
