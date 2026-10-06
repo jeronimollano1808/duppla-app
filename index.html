@@ -12837,12 +12837,29 @@ function donaDistMesHtml() {
     + '</div>';
   }
 
-  // Mismo tope del 824: los 6 con color propio van solos, el resto se junta.
+  // 825. Los que se nombran son los 6 más grandes DE ESTE MES, no los 6 más
+  //      grandes del histórico. En producción la primera versión sacaba, para
+  //      octubre, un pedazo con nombre del 50% y un "Otros 3" anónimo del otro
+  //      50%: adentro de ese gris estaba gente que ese mes compró más que el
+  //      que sí aparecía. Un "Otros" no puede ser el pedazo más grande de la
+  //      gráfica — si lo es, la gráfica está escondiendo justo lo que vino uno
+  //      a ver.
+  //
+  //      El color sigue saliendo del mapa global (`colorDe`), así que quien
+  //      compra todos los meses conserva SU color en todos los meses y se le
+  //      puede seguir la pista de un mes a otro. Al que asoma un mes suelto y
+  //      no tiene color propio se le presta uno de los que queden libres ESE
+  //      mes: puede cambiarle de un mes a otro, pero dentro de un mismo mes
+  //      nunca hay dos pedazos del mismo color, que es lo que importa para
+  //      leer el anillo.
   const pedazos = [];
-  const conColorPropio = porDist.filter(d => colorDe[d.id] && colorDe[d.id] !== paleta.otros);
-  const grises = porDist.filter(d => !colorDe[d.id] || colorDe[d.id] === paleta.otros);
-  conColorPropio.forEach(d => pedazos.push({
-    id: d.id, nombre: d.nombre, valor: d.total, color: colorDe[d.id],
+  const nombrados = porDist.slice(0, DONA_MAX_PEDAZOS);
+  const grises = porDist.slice(DONA_MAX_PEDAZOS);
+  const usados = new Set(nombrados.map(d => colorDe[d.id]).filter(Boolean));
+  const libres = paleta.series.filter(c => !usados.has(c));
+  nombrados.forEach(d => pedazos.push({
+    id: d.id, nombre: d.nombre, valor: d.total,
+    color: colorDe[d.id] || libres.shift() || paleta.otros,
     sub: d.n + ' compra' + (d.n !== 1 ? 's' : '') + ' en el mes'
   }));
   if(grises.length) pedazos.push({
