@@ -489,11 +489,6 @@ body{
    14. MÉTRICAS / KPI CARDS
    Tarjetas de números grandes para el dashboard
    ============================================================ */
-.metrics-grid{
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
-  gap:12px;margin-bottom:20px;
-}
 .metric-card{
   background:var(--surface);
   border:1px solid var(--border);
@@ -994,9 +989,7 @@ body.solo-lectura .barra-sesion{background:var(--blue-bg);border-bottom-color:va
   /* Formularios de una sola columna */
   .f-row,.f-row.trio{grid-template-columns:1fr}
   /* Métricas en 2 columnas */
-  .metrics-grid{grid-template-columns:1fr 1fr}
   /* Dashboard en una columna */
-  .dash-grid{grid-template-columns:1fr!important}
 }
 </style>
 </head>
@@ -1156,7 +1149,6 @@ body.solo-lectura .barra-sesion{background:var(--blue-bg);border-bottom-color:va
          cómo va el ciclo. El Dashboard sigue existiendo tal cual para el
          detalle; Inicio es el resumen accionable de todos los días. -->
     <div class="page active" id="page-inicio"></div>
-    <div class="page" id="page-dashboard"></div>
     <div class="page" id="page-ventas"></div>
     <div class="page" id="page-inventario"></div>
     <div class="page" id="page-clientes"></div>
@@ -2864,23 +2856,9 @@ function generarTopProductosHtml(pm, ordenarPor) {
     : '<div class="empty-state" style="padding:16px"><div class="empty-state-text">Sin ventas en este período</div></div>';
 }
 
-// 429. Toggle del ranking — usa el pm ya calculado (window._dashPM), NO llama
-//      renderDashboard(), así que es instantáneo sin importar cuántas ventas haya.
-window.setDashRankingPor = (tipo) => {
-  window.dashRankingPor = tipo;
-  const cont = document.getElementById('dash-top-productos');
-  if(cont && window._dashPM) cont.innerHTML = generarTopProductosHtml(window._dashPM, tipo);
-  // Actualizamos el estilo visual de los botones del toggle
-  ['ingresos','margen'].forEach(t => {
-    const btn = document.getElementById('dash-rank-btn-'+t);
-    if(!btn) return;
-    const activo = t === tipo;
-    btn.style.background = activo ? 'var(--ink)' : 'transparent';
-    btn.style.color = activo ? 'var(--on-ink)' : 'var(--ink-3)';
-    btn.style.borderColor = activo ? 'var(--ink)' : 'var(--border)';
-  });
-};
-
+// 429/830. El toggle del ranking del Dashboard se fue con el Dashboard. La
+//      misma pregunta —"¿cuál me deja más plata?"— la contesta ahora la dona
+//      de Inicio con su botón "Por margen" (ver 830).
 // ============================================================
 // 432. agruparProductosPorMarca — helper reutilizable para buscadores
 // Recibe una lista de productos y un callback que genera el HTML de
@@ -3618,7 +3596,6 @@ const MENU = [
   { id:'consignacion', label:'Consignación', ico:'🏪', group:'Quién compra' },
 
   // --- Cómo vamos: para mirar, no para registrar ---
-  { id:'dashboard', label:'Dashboard', ico:'📊', group:'Cómo vamos' },
   // 782. Informes — lo que se le pasa a un contador, a un banco o a un socio.
   { id:'informes', label:'Informes', ico:'📄', group:'Cómo vamos' },
   { id:'metas', label:'Metas', ico:'🎯', group:'Cómo vamos' },
@@ -3891,7 +3868,7 @@ function startListeners() {
       //      a la app se pintaba con DATA vacío y se quedaba mostrando $0 en
       //      todo hasta que navegaras a otra página y volvieras. Cualquier
       //      página futura que resuma varias colecciones debe sumarse aquí.
-      if(currentPage === col || currentPage === 'dashboard' || currentPage === 'inicio') renderPage(currentPage);
+      if(currentPage === col || currentPage === 'inicio') renderPage(currentPage);
       // 797. En cuanto están las tres, se repinta lo que esté a la vista para
       //      cambiar el esqueleto por los datos de verdad.
       else if(datosListos) renderPage(currentPage);
@@ -4022,7 +3999,7 @@ function renderPage(id) {
   }
   const renders = {
     inicio:renderInicio,
-    dashboard:renderDashboard, ventas:renderVentas,
+    ventas:renderVentas,
     inventario:renderInventario, clientes:renderClientes,
     gastos:renderGastos, proveedores:renderProveedores,
     pedidos:renderPedidos, metas:renderMetas, combos:renderCombos,
@@ -4303,9 +4280,6 @@ let metodoPagoAbono = 'efectivo';
 let metodoPagoEdit  = 'efectivo';
 let metodoPagoCombo = 'efectivo'; // 438. Método de pago en venta de combos
 
-let dashPeriodo = 'mes';
-let dashFechaInicio = '';
-let dashFechaFin = '';
 
 // 568. Ciclo activo en la página Ventas — por defecto el ciclo ACTUAL, para
 // que la "hoja" de ventas arranque en 0 cada vez que empieza un mes nuevo,
@@ -4327,62 +4301,6 @@ const DUPPLA_DIA_INICIO_MES = 3;
 //      declarada por si algún dato viejo la referencia.
 // 817. `DUPPLA_MES_TRANSICION` se borró: su propio comentario (726) ya
 //      decía que no se usaba desde la unificación del ciclo.
-
-function getPeriodoFechas() {
-  // 231. Calcula el rango de fechas según el período seleccionado
-  const now = new Date();
-  if(dashPeriodo === 'hoy') {
-    const t = today();
-    return { label: 'Hoy', inicio: t, fin: t };
-  }
-  if(dashPeriodo === 'semana') {
-    const day = now.getDay();
-    const mon = new Date(now);
-    mon.setDate(now.getDate() - (day===0?6:day-1));
-    mon.setHours(0,0,0,0);
-    const sun = new Date(mon); sun.setDate(mon.getDate()+6);
-    const i = fechaLocal(mon);
-    const f = fechaLocal(sun);
-    return { label: `${mon.toLocaleDateString('es-CO',{day:'numeric',month:'short'})} – ${sun.toLocaleDateString('es-CO',{day:'numeric',month:'short'})}`, inicio:i, fin:f };
-  }
-  if(dashPeriodo === 'mes') {
-    // 529. "Este mes" usa el ciclo del día 3 — si hoy es antes del día 3,
-    //      el ciclo actual empezó el día 3 del mes ANTERIOR.
-    const mesParaCiclo = now.getDate() <= DUPPLA_DIA_INICIO_MES
-      ? new Date(now.getFullYear(), now.getMonth()-1, 1)
-      : now;
-    const mesStr = fechaLocal(mesParaCiclo).slice(0,7);
-    const { inicio, fin } = calcularRangoMeta(mesStr, DUPPLA_DIA_INICIO_MES);
-    const labelMes = mesParaCiclo.toLocaleDateString('es-CO',{month:'long',year:'numeric'});
-    return { label: labelMes + ' (cierra el 3)', inicio, fin };
-  }
-  if(dashPeriodo === 'mes_anterior') {
-    // 530. "Mes anterior" — mismo ciclo, un mes atrás del ciclo actual
-    const mesActualCiclo = now.getDate() <= DUPPLA_DIA_INICIO_MES
-      ? new Date(now.getFullYear(), now.getMonth()-1, 1)
-      : now;
-    const mesAnteriorCiclo = new Date(mesActualCiclo.getFullYear(), mesActualCiclo.getMonth()-1, 1);
-    const mesStr = fechaLocal(mesAnteriorCiclo).slice(0,7);
-    const { inicio, fin } = calcularRangoMeta(mesStr, DUPPLA_DIA_INICIO_MES);
-    const labelMes = mesAnteriorCiclo.toLocaleDateString('es-CO',{month:'long',year:'numeric'});
-    return { label: labelMes + ' (cierra el 3)', inicio, fin };
-  }
-  if(dashPeriodo === 'anio') {
-    const i = now.getFullYear() + '-01-01';
-    const f = now.getFullYear() + '-12-31';
-    return { label: String(now.getFullYear()), inicio:i, fin:f };
-  }
-  if(dashPeriodo === 'personalizado' && dashFechaInicio && dashFechaFin) {
-    return { label: `${dashFechaInicio} → ${dashFechaFin}`, inicio:dashFechaInicio, fin:dashFechaFin };
-  }
-  // Default: mes actual (cierra el 3)
-  const mesParaCiclo = now.getDate() <= DUPPLA_DIA_INICIO_MES
-    ? new Date(now.getFullYear(), now.getMonth()-1, 1)
-    : now;
-  const mesStr = fechaLocal(mesParaCiclo).slice(0,7);
-  const { inicio, fin } = calcularRangoMeta(mesStr, DUPPLA_DIA_INICIO_MES);
-  return { label: mesParaCiclo.toLocaleDateString('es-CO',{month:'long',year:'numeric'}) + ' (cierra el 3)', inicio, fin };
-}
 
 // 569. Rango de fechas del ciclo activo en la página Ventas — mismo ciclo
 // día 3 que usa el Dashboard, pero con su propio estado (ventasPeriodo)
@@ -4407,338 +4325,6 @@ window.setVentasPeriodo = (p) => {
   renderVentas();
 };
 
-window.setDashPeriodo = (p) => {
-  // 232. Cambia el período y redibuja el dashboard
-  dashPeriodo = p;
-  if(p === 'personalizado') {
-    document.getElementById('dash-personalizado')?.style && (document.getElementById('dash-personalizado').style.display = 'flex');
-  } else {
-    const el = document.getElementById('dash-personalizado');
-    if(el) el.style.display = 'none';
-    renderDashboard();
-  }
-};
-
-window.aplicarFechasPersonalizadas = () => {
-  dashFechaInicio = document.getElementById('dash-fecha-ini').value;
-  dashFechaFin = document.getElementById('dash-fecha-fin').value;
-  if(!dashFechaInicio || !dashFechaFin) { alert('Selecciona ambas fechas'); return; }
-  renderDashboard();
-};
-
-function renderDashboard() {
-  const { label, inicio, fin } = getPeriodoFechas();
-
-  // 233. Filtramos ventas y gastos por el período seleccionado
-  const pv = DATA.ventas.filter(v => v.fecha >= inicio && v.fecha <= fin);
-  const pg = DATA.gastos.filter(g => g.fecha >= inicio && g.fecha <= fin);
-
-  const tv = pv.reduce((s,v)=>s+ingresoVenta(v),0);
-
-  // 818. ANTES: `const util = tv - tg`, con `tg` = la suma de TODOS los gastos
-  //      del periodo, compra de mercancía incluida. Eso no es la utilidad: es
-  //      "lo que salió del banco", y mezclar las dos cosas hacía que el
-  //      Dashboard mostrara un número, Inicio otro y los Informes un tercero.
-  //      Ángel leía el que le tocaba según la pantalla.
-  //
-  //      Ahora los tres pasan por `estadoFinanciero`, que es el único motor:
-  //      utilidad neta = margen bruto − gastos de operación − financieros, y
-  //      la mercancía NO resta (es inventario, ver GLOSARIO.mercancia).
-  //      Un concepto, un nombre, un número.
-  const Fdash = estadoFinanciero(inicio, fin, {});
-  const util = Fdash.utilidadNeta;
-  const gananciaBruta = Fdash.utilidadBruta;
-  const hoyV = DATA.ventas.filter(v => v.fecha === today());
-  const totalHoy = hoyV.reduce((s,v)=>s+ingresoVenta(v),0);
-  const carteraPeriodo = Math.round(pv.reduce((s,v)=>s+Number(v.saldo||0),0));
-  // 818. El cálculo del costo vendido que estaba aquí a mano (comentario 372)
-  //      se borró: `estadoFinanciero` hace exactamente lo mismo y además
-  //      respeta el costo congelado al cerrar el mes (787). Mantener la copia
-  //      significaba que un arreglo en el motor no llegaba al Dashboard.
-
-  // 774. El banner de STOCK BAJO se eliminó del Dashboard (ver 774 en MENU).
-  //      Era el bloque más grande de la página —una ficha por producto— para
-  //      decir algo que no exige actuar hoy. Las alertas que quedan (mora,
-  //      recompras) sí piden una llamada.
-  // 577. Alerta de deudores en mora — mismo patrón visual que STOCK BAJO, para
-  //      que la deuda vieja no se pierda de vista aunque Ventas ya no la
-  //      muestre por defecto (Ventas filtra por ciclo; esto no).
-  const deudoresMoraDash = calcularDeudores().filter(d => d.enMora);
-  const alertDeudoresHtml = deudoresMoraDash.length ? `
-    <div style="background:var(--red-bg);border:1px solid var(--red-bd);border-radius:var(--radius-lg);padding:12px 16px;margin-bottom:16px">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-        <span>⏰</span>
-        <span style="font-size:12px;font-weight:700;color:var(--red)">DEUDORES EN MORA — ${deudoresMoraDash.length} cliente${deudoresMoraDash.length>1?'s':''}</span>
-        <button onclick="showPage('deudores')" style="margin-left:auto;font-size:11px;background:none;border:none;color:var(--red);cursor:pointer;font-weight:600;text-decoration:underline">Ver deudores →</button>
-      </div>
-      <div style="display:flex;flex-wrap:wrap;gap:6px">
-        ${deudoresMoraDash.map(d => `<span style="background:var(--surface);border:1px solid var(--red-bd);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;color:var(--red)">
-          ⏰ ${d.cliente} (${fmt(d.total)} · ${d.diasMora}d)
-        </span>`).join('')}
-      </div>
-    </div>` : '';
-
-  // 641. Alerta de recompra — clientes a los que se les debe estar
-  // acabando (o ya se les acabó) un producto con duración configurada.
-  const recomprasDash = calcularRecompras();
-  const alertRecomprasHtml = recomprasDash.length ? `
-    <div style="background:var(--blue-bg);border:1px solid var(--blue-bd);border-radius:var(--radius-lg);padding:12px 16px;margin-bottom:16px">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-        <span>🔄</span>
-        <span style="font-size:12px;font-weight:700;color:var(--blue-ink)">PRÓXIMOS A RECOMPRAR — ${recomprasDash.length} cliente${recomprasDash.length>1?'s':''}</span>
-        <button onclick="showPage('clientes')" style="margin-left:auto;font-size:11px;background:none;border:none;color:var(--blue-ink);cursor:pointer;font-weight:600;text-decoration:underline">Ver clientes →</button>
-      </div>
-      <div style="display:flex;flex-wrap:wrap;gap:6px">
-        ${recomprasDash.map(r => `<span style="background:var(--surface);border:1px solid var(--blue-bd);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;color:var(--blue-ink)">
-          🔄 ${r.cliente} — ${r.prodNombre} (${r.diasRestantes<0?'hace '+(-r.diasRestantes)+'d':r.diasRestantes+'d'})
-        </span>`).join('')}
-      </div>
-    </div>` : '';
-
-  // 235. Botones del selector de período
-  const periodos = [
-    { id:'hoy', label:'Hoy' },
-    { id:'semana', label:'Semana' },
-    { id:'mes', label:'Este mes' },
-    { id:'mes_anterior', label:'Mes anterior' },
-    { id:'anio', label:'Este año' },
-    { id:'personalizado', label:'Personalizado' },
-  ];
-  const filtroHtml = `
-    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:16px">
-      ${periodos.map(p => `
-        <button onclick="setDashPeriodo('${p.id}')"
-          style="padding:5px 12px;border-radius:20px;border:1.5px solid ${dashPeriodo===p.id?'var(--ink)':'var(--border)'};
-          background:${dashPeriodo===p.id?'var(--ink)':'var(--surface)'};
-          color:${dashPeriodo===p.id?'var(--on-ink)':'var(--ink-2)'};
-          font-size:12px;font-weight:${dashPeriodo===p.id?'600':'400'};cursor:pointer;transition:all .15s">
-          ${p.label}
-        </button>`).join('')}
-      <div id="dash-personalizado" style="display:${dashPeriodo==='personalizado'?'flex':'none'};align-items:center;gap:6px;flex-wrap:wrap">
-        <input type="date" id="dash-fecha-ini" value="${dashFechaInicio}" class="f-input" style="width:140px;padding:5px 8px;font-size:12px">
-        <span style="font-size:12px;color:var(--ink-3)">→</span>
-        <input type="date" id="dash-fecha-fin" value="${dashFechaFin}" class="f-input" style="width:140px;padding:5px 8px;font-size:12px">
-        <button class="btn btn-sm btn-lime" onclick="aplicarFechasPersonalizadas()">Aplicar</button>
-      </div>
-    </div>`;
-
-  // 656. Ventas por canal — antes eran DOS tarjetas separadas (un gráfico de
-  //      barras solo con ingreso, y una tabla con ingreso+margen) mostrando
-  //      básicamente la misma info. Fusionadas en una: la tabla de
-  //      rentabilidad con una barrita de proporción de ingreso por fila.
-  const canales = { web:0, directo:0, distribuidor:0 };
-  pv.forEach(v => { if(canales[v.canal]!==undefined) canales[v.canal]+=ingresoVenta(v); });
-  const maxC = Math.max(...Object.values(canales), 1);
-  const cNames = { web:'Web', directo:'Directo', distribuidor:'Dist.' };
-  const cColors = { web:'var(--blue-bd)', directo:'var(--lime-accent)', distribuidor:'var(--amber-bd)' };
-
-  // 414. RENTABILIDAD POR CANAL — margen real (no solo volumen) de Web/Directo/Distribuidor
-  //      Responde: ¿cuál canal deja más plata realmente, no solo cuál mueve más dinero?
-  const canalesMargen = { web:0, directo:0, distribuidor:0 };
-  const canalesConCosto = { web:false, directo:false, distribuidor:false };
-  pv.forEach(v => {
-    if(canalesMargen[v.canal]===undefined) return;
-    const m = calcularMargenVenta(v);
-    if(m !== null) { canalesMargen[v.canal] += m; canalesConCosto[v.canal] = true; }
-  });
-  const canalRentabilidadHtml = Object.entries(canales).map(([k,ingreso]) => {
-    if(ingreso === 0) return '';
-    const margenK = canalesMargen[k];
-    const pctMargenK = ingreso > 0 ? Math.round((margenK/ingreso)*100) : 0;
-    const pctBarra = Math.round((ingreso/maxC)*100);
-    return `
-    <div style="padding:7px 0;border-bottom:1px solid var(--border)">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
-        <span style="font-size:12px;font-weight:500;color:var(--ink)">${cNames[k]}</span>
-        <div style="text-align:right">
-          <span style="font-size:12px;color:var(--ink-3)">${fmt(ingreso)} ingreso</span>
-          <span style="font-size:12px;font-weight:700;color:${margenK>=0?'var(--green)':'var(--red)'};margin-left:8px">
-            ${canalesConCosto[k] ? fmt(margenK) + ' margen (' + pctMargenK + '%)' : 'margen N/D'}
-          </span>
-        </div>
-      </div>
-      <div style="height:5px;border-radius:3px;background:var(--surface-2);overflow:hidden">
-        <div style="height:100%;width:${pctBarra}%;background:${cColors[k]}"></div>
-      </div>
-    </div>`;
-  }).join('') || '<div style="padding:10px;color:var(--ink-3);font-size:12px;text-align:center">Sin ventas en este período</div>';
-
-  // 383. FLUJO DE CAJA — cuánto entró en efectivo vs. transferencia en el período
-  //      Tomamos el pago inicial de cada venta del período (campo 'pagado'),
-  //      más cualquier abono fechado dentro del período (puede ser de una venta
-  //      de un período anterior que se está cobrando ahora).
-  let cajaEfectivo = 0, cajaTransferencia = 0;
-  pv.forEach(v => {
-    const pagadoV = Number(v.pagado||0);
-    if(pagadoV > 0) {
-      if(v.metodoPago === 'mixto') {
-        cajaEfectivo += Number(v.mixtoEfectivo||0);
-        cajaTransferencia += Number(v.mixtoTransferencia||0);
-      } else if(v.metodoPago === 'transferencia') {
-        cajaTransferencia += pagadoV;
-      } else {
-        cajaEfectivo += pagadoV;
-      }
-    }
-  });
-  // 384. Abonos fechados dentro del período, vengan de cualquier venta (incluso de períodos anteriores)
-  DATA.ventas.forEach(v => {
-    (v.abonos||[]).forEach(a => {
-      if(!a.fecha || a.fecha < inicio || a.fecha > fin) return;
-      if(a.metodoPago === 'transferencia') cajaTransferencia += Number(a.valor||0);
-      else cajaEfectivo += Number(a.valor||0);
-    });
-  });
-  // 733. Cobros de cuentas viejas (ver 727). Están fuera de DATA.ventas, así
-  //      que si no se suman aquí el flujo de caja se queda corto por esa plata.
-  DATA.cobros.forEach(c => {
-    if(!c.fecha || c.fecha < inicio || c.fecha > fin) return;
-    const val = ingresoVenta(c);
-    if(c.metodoPago === 'mixto') {
-      cajaEfectivo      += Number(c.mixtoEfectivo||0);
-      cajaTransferencia += Number(c.mixtoTransferencia||0);
-    } else if(c.metodoPago === 'transferencia') cajaTransferencia += val;
-    else cajaEfectivo += val;
-  });
-  const cajaTotal = cajaEfectivo + cajaTransferencia;
-  const pctEfectivo = cajaTotal > 0 ? Math.round((cajaEfectivo/cajaTotal)*100) : 0;
-  const pctTransferencia = 100 - pctEfectivo;
-
-  const cajaHtml = `
-    <div style="display:flex;justify-content:space-between;margin-bottom:10px">
-      <span style="font-size:12px;color:var(--ink-2)">💵 Efectivo: <strong>${fmt(cajaEfectivo)}</strong> (${pctEfectivo}%)</span>
-      <span style="font-size:12px;color:var(--ink-2)">📲 Transferencia: <strong>${fmt(cajaTransferencia)}</strong> (${pctTransferencia}%)</span>
-    </div>
-    <div style="display:flex;height:10px;border-radius:6px;overflow:hidden;background:var(--surface-2)">
-      <div style="width:${pctEfectivo}%;background:var(--lime-accent)"></div>
-      <div style="width:${pctTransferencia}%;background:#93C5FD"></div>
-    </div>
-    <div style="font-size:11px;color:var(--ink-3);margin-top:8px">Total recibido en el período: ${fmt(cajaTotal)}</div>`;
-
-  // 373. Top productos del período — ahora acumulamos también el margen real
-  //      rankingTop: 'ingresos' (default) o 'margen' — controlado por toggle en la UI
-  const pm={};
-  pv.forEach(v=>{
-    // Para ventas múltiples, repartimos por cada producto de la línea
-    if(v.esMultiple && v.productosVenta?.length) {
-      v.productosVenta.forEach(p => {
-        if(!pm[p.nombre]) pm[p.nombre]={cant:0,total:0,margen:0,sinCosto:false};
-        pm[p.nombre].cant += Number(p.cant||0);
-        pm[p.nombre].total += Number(p.precio||0)*Number(p.cant||0);
-        // 430. FIX: aplicamos el mismo fallback al costo actual del inventario
-        //      que ya usa calcularMargenVenta() — antes esta rama solo miraba
-        //      p.costoUnit y quedaba en N/D para ventas múltiples viejas.
-        let costo = p.costoUnit;
-        if(costo == null) {
-          const prod = DATA.inventario.find(x => x.id === p.prodId);
-          costo = prod ? Number(prod.costo||0) : null;
-        }
-        if(costo != null) pm[p.nombre].margen += (Number(p.precio||0)-Number(costo||0))*Number(p.cant||0);
-        else pm[p.nombre].sinCosto = true;
-      });
-      return;
-    }
-    if(!pm[v.producto]) pm[v.producto]={cant:0,total:0,margen:0,sinCosto:false};
-    pm[v.producto].cant+=Number(v.cant||0);
-    pm[v.producto].total+=ingresoVenta(v);
-    const margenV = calcularMargenVenta(v);
-    if(margenV !== null) pm[v.producto].margen += margenV;
-    else pm[v.producto].sinCosto = true;
-  });
-  // 427. FIX RENDIMIENTO: guardamos pm calculado en una variable global para
-  //      que el toggle Ingresos/Margen pueda reordenar y repintar SOLO el
-  //      ranking, sin recalcular ventas/canales/caja/rentabilidad del dashboard.
-  window._dashPM = pm;
-  const ordenarPor = window.dashRankingPor || 'ingresos';
-  const topHtml = generarTopProductosHtml(pm, ordenarPor);
-
-  // Meta del mes — 531. usa el ciclo del día 3, igual que el resto de la app
-  const hoyParaMeta = new Date();
-  const mesParaCicloMeta = hoyParaMeta.getDate() <= DUPPLA_DIA_INICIO_MES
-    ? new Date(hoyParaMeta.getFullYear(), hoyParaMeta.getMonth()-1, 1)
-    : hoyParaMeta;
-  const mesActual = fechaLocal(mesParaCicloMeta).slice(0,7);
-  const metaActual = DATA.metas.find(m => m.mes === mesActual);
-  let tvMesActual = 0;
-  if(metaActual) {
-    const rangoMeta = calcularRangoMeta(mesActual, metaActual.diaInicio || DUPPLA_DIA_INICIO_MES);
-    tvMesActual = DATA.ventas.filter(v=>v.fecha >= rangoMeta.inicio && v.fecha <= rangoMeta.fin).reduce((s,v)=>s+ingresoVenta(v),0);
-  }
-  const metaHtml = metaActual ? `
-    <div class="card" style="margin-bottom:16px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <div class="card-title" style="margin:0">Meta del mes</div>
-        <span style="font-size:14px;font-weight:700;color:var(--lime)">${Math.min(100,Math.round((tvMesActual/metaActual.ventasMeta)*100))}%</span>
-      </div>
-      <div style="font-size:12px;color:var(--ink-2);margin-bottom:8px">${fmt(tvMesActual)} de ${fmt(metaActual.ventasMeta)}</div>
-      <div class="prog"><div class="prog-fill prog-lime" style="width:${Math.min(100,Math.round((tvMesActual/metaActual.ventasMeta)*100))}%"></div></div>
-    </div>` : '';
-
-  document.getElementById('page-dashboard').innerHTML = `
-    <div class="page-header">
-      <div>
-        <div class="page-title">Dashboard</div>
-        <div class="page-sub" style="font-weight:500;color:var(--ink-2)">${label}</div>
-      </div>
-      <button class="btn btn-sm" onclick="exportarReporte()">↓ CSV</button>
-      <button class="btn btn-sm" onclick="exportarReportePDF()">↓ PDF</button>
-    </div>
-    ${/* 812. Aquí iba la interpolación de alertHtml, el banner de stock bajo.
-          En la limpieza del
-          774 se borró el cálculo y se dejó el uso, así que el template lanzaba
-          ReferenceError ANTES de asignar el innerHTML y el Dashboard quedaba
-          EN BLANCO. Semanas. Y se llevó por delante el acceso a las descargas
-          CSV y PDF, que viven en esta misma cabecera.
-          La lección: al borrar una variable hay que buscar su nombre en TODO
-          el archivo, no solo donde se calculaba. Un template literal no avisa
-          en tiempo de carga — revienta el día que alguien abre la página. */''}
-    ${alertDeudoresHtml}
-    ${alertRecomprasHtml}
-    ${filtroHtml}
-    <div class="metrics-grid">
-      ${tarjetaConcepto('vendido', fmt(tv), 'Hoy: ' + fmt(totalHoy), 'var(--lime)')}
-      ${tarjetaConcepto('gastos', fmt(Fdash.gastosOperacion + Fdash.gastosFinancieros),
-          Fdash.compras > 0 ? '+ ' + fmt(Fdash.compras) + ' de mercancía' : pg.length + ' registros', 'var(--red)')}
-      ${tarjetaConcepto('utilidadNeta', fmt(util),
-          Fdash.compras > 0 ? 'la mercancía no entra aquí' : (util>=0?'Positivo':'Negativo'),
-          util>=0?'var(--green)':'var(--red)')}
-      ${tarjetaConcepto('margenBruto', fmt(gananciaBruta), 'lo que dejó lo vendido', 'var(--blue)')}
-      <div class="metric-card">
-        <div class="metric-label">Ventas</div>
-        <div class="metric-value">${pv.length}</div>
-        <div class="metric-sub">Hoy: ${hoyV.length}</div>
-      </div>
-      <div class="metric-card">
-        <div class="metric-label">Cartera pendiente</div>
-        <div class="metric-value" style="color:${carteraPeriodo>0?'var(--red)':'var(--green)'}">${fmt(carteraPeriodo)}</div>
-        <div class="metric-sub">${pv.filter(v=>saldoReal(v)>0).length} por cobrar</div>
-      </div>
-    </div>
-    ${metaHtml}
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px" class="dash-grid">
-      <div class="card">
-        <div class="card-title">Ventas por canal — ${label}</div>
-        ${canalRentabilidadHtml}
-      </div>
-      <div class="card">
-        <div class="card-title">Flujo de caja — ${label}</div>
-        ${cajaHtml}
-      </div>
-      <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-          <div class="card-title" style="margin:0">Top productos — ${label}</div>
-          <!-- 374. Toggle para rankear por ingresos o por margen real — repinta solo el ranking -->
-          <div style="display:flex;gap:4px">
-            <button id="dash-rank-btn-ingresos" onclick="setDashRankingPor('ingresos')"
-              style="padding:3px 9px;border-radius:14px;border:1px solid ${ordenarPor==='ingresos'?'var(--ink)':'var(--border)'};background:${ordenarPor==='ingresos'?'var(--ink)':'transparent'};color:${ordenarPor==='ingresos'?'var(--on-ink)':'var(--ink-3)'};font-size:10px;font-weight:600;cursor:pointer">Ingresos</button>
-            <button id="dash-rank-btn-margen" onclick="setDashRankingPor('margen')"
-              style="padding:3px 9px;border-radius:14px;border:1px solid ${ordenarPor==='margen'?'var(--ink)':'var(--border)'};background:${ordenarPor==='margen'?'var(--ink)':'transparent'};color:${ordenarPor==='margen'?'var(--on-ink)':'var(--ink-3)'};font-size:10px;font-weight:600;cursor:pointer">Margen</button>
-          </div>
-        </div>
-        <div id="dash-top-productos">${topHtml}</div>
-      </div>
-    </div>`;
-}
 // ============================================================
 // 55. PÁGINA: VENTAS
 // Lista de ventas con filtro de búsqueda y exportación CSV
@@ -6241,43 +5827,6 @@ window.guardarEditarVenta = async () => {
 // 251. EXPORTAR REPORTE DEL PERÍODO
 // Genera un CSV con ventas, gastos y resumen del período activo
 // ============================================================
-window.exportarReporte = () => {
-  const { label, inicio, fin } = getPeriodoFechas();
-  const pv = DATA.ventas.filter(v => v.fecha >= inicio && v.fecha <= fin);
-  const pg = DATA.gastos.filter(g => g.fecha >= inicio && g.fecha <= fin);
-
-  const tv = pv.reduce((s,v)=>s+ingresoVenta(v),0);
-  const tg = pg.reduce((s,g)=>s+Number(g.valor||0),0);
-
-  // 252. Armamos el CSV con 3 secciones: resumen, ventas y gastos
-  const rows = [
-    ['REPORTE DUPPLA — ' + label],
-    [],
-    ['RESUMEN'],
-    ['Total ingresos', tv],
-    ['Total gastos', tg],
-    ['Utilidad neta', tv - tg],
-    ['Ventas realizadas', pv.length],
-    ['Cartera pendiente', Math.round(pv.reduce((s,v)=>s+Number(v.saldo||0),0))],
-    [],
-    ['VENTAS'],
-    ['Fecha','Cliente','Producto','Canal','Tipo precio','Método pago','Total','Pagado','Saldo','Estado'],
-    ...pv.map(v=>[v.fecha,v.cliente||'',v.producto,v.canal,v.tipoPrecio||'',v.metodoPago||'efectivo',v.total,v.pagado||0,v.saldo||0,v.estadoPago||'']),
-    [],
-    ['GASTOS'],
-    ['Fecha','Categoría','Descripción','Valor'],
-    ...pg.map(g=>[g.fecha,g.cat,g.desc,g.valor])
-  ];
-
-  const csv = rows.map(r => Array.isArray(r) ? r.map(c=>`"${c}"`).join(',') : `"${r}"`).join('\n');
-  const nombre = `DUPPLA_Reporte_${inicio}_${fin}.csv`;
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'}));
-  a.download = nombre;
-  a.click();
-  toast(`✅ Reporte exportado: ${nombre}`);
-};
-
 window.exportarCSV = () => {
   const header = ['Fecha','Canal','Producto','Cliente','Cantidad','Precio','Total','Nota'];
   const rows = DATA.ventas.map(v => [v.fecha,v.canal,v.producto,v.cliente||'',v.cant,v.precio,v.total,v.nota||'']);
@@ -6316,129 +5865,6 @@ window.exportarBackupCompleto = () => {
 // Usa la misma fuente de datos que exportarReporte (CSV) pero con
 // formato visual: resumen, top productos por margen, y cartera.
 // ============================================================
-window.exportarReportePDF = () => {
-  const { label, inicio, fin } = getPeriodoFechas();
-  const pv = DATA.ventas.filter(v => v.fecha >= inicio && v.fecha <= fin);
-  const pg = DATA.gastos.filter(g => g.fecha >= inicio && g.fecha <= fin);
-
-  const tv = pv.reduce((s,v)=>s+ingresoVenta(v),0);
-  const tg = pg.reduce((s,g)=>s+Number(g.valor||0),0);
-  const cartera = Math.round(pv.reduce((s,v)=>s+Number(v.saldo||0),0));
-
-  // 401. Margen real del período — reutilizamos calcularMargenVenta()
-  let margenTotal = 0;
-  pv.forEach(v => { const m = calcularMargenVenta(v); if(m !== null) margenTotal += m; });
-
-  // 402. Top 5 productos por ingresos (reutilizamos la misma lógica de agrupación que el dashboard)
-  const pm = {};
-  pv.forEach(v => {
-    if(v.esMultiple && v.productosVenta) {
-      v.productosVenta.forEach(p => {
-        if(!pm[p.nombre]) pm[p.nombre] = {cant:0,total:0};
-        pm[p.nombre].cant += Number(p.cant||0);
-        pm[p.nombre].total += Number(p.precio||0)*Number(p.cant||0);
-      });
-    } else {
-      if(!pm[v.producto]) pm[v.producto] = {cant:0,total:0};
-      pm[v.producto].cant += Number(v.cant||0);
-      pm[v.producto].total += ingresoVenta(v);
-    }
-  });
-  const top5 = Object.entries(pm).sort((a,b)=>b[1].total-a[1].total).slice(0,5);
-
-  // 403. Construcción del PDF
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ unit:'mm', format:'letter' });
-  const pageW = doc.internal.pageSize.getWidth();
-  const margin = 18;
-  let y = 22;
-
-  // Encabezado de marca
-  doc.setFillColor(200,224,90); doc.rect(0,0,pageW,12,'F');
-  doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.setTextColor(15,17,23);
-  doc.text('DUPPLA', margin, 8.5);
-  doc.setTextColor(0,0,0);
-  y = 22;
-
-  doc.setFont('helvetica','bold'); doc.setFontSize(16);
-  doc.text('Reporte mensual', margin, y); y += 7;
-  doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.setTextColor(100);
-  doc.text(label, margin, y); doc.setTextColor(0); y += 12;
-
-  // Resumen financiero en tabla de 2 columnas
-  doc.setFont('helvetica','bold'); doc.setFontSize(11);
-  doc.text('Resumen financiero', margin, y); y += 7;
-  doc.setDrawColor(220); doc.setLineWidth(0.2);
-  doc.line(margin, y, pageW-margin, y); y += 7;
-
-  const resumenFilas = [
-    ['Ingresos totales', fmt(tv)],
-    ['Gastos totales', fmt(tg)],
-    ['Utilidad neta', fmt(tv-tg)],
-    ['Margen real (ventas con costo)', fmt(margenTotal)],
-    ['Ventas realizadas', String(pv.length)],
-    ['Cartera pendiente (por cobrar)', fmt(cartera)],
-  ];
-  doc.setFont('helvetica','normal'); doc.setFontSize(10);
-  resumenFilas.forEach(([label2,val]) => {
-    doc.text(label2, margin, y);
-    doc.setFont('helvetica','bold');
-    doc.text(val, pageW-margin, y, { align:'right' });
-    doc.setFont('helvetica','normal');
-    y += 7;
-  });
-  y += 6;
-
-  // Top productos
-  doc.setFont('helvetica','bold'); doc.setFontSize(11);
-  doc.text('Top 5 productos del período', margin, y); y += 7;
-  doc.line(margin, y, pageW-margin, y); y += 6;
-  doc.setFontSize(9);
-  doc.text('Producto', margin, y);
-  doc.text('Cant.', pageW-margin-40, y, { align:'right' });
-  doc.text('Total', pageW-margin, y, { align:'right' });
-  y += 5;
-  doc.setFont('helvetica','normal');
-  if(top5.length === 0) {
-    doc.text('Sin ventas en este período.', margin, y); y += 6;
-  } else {
-    top5.forEach(([nombre,d]) => {
-      const nombreCorto = nombre.length > 45 ? nombre.slice(0,45)+'…' : nombre;
-      doc.text(nombreCorto, margin, y);
-      doc.text(String(d.cant), pageW-margin-40, y, { align:'right' });
-      doc.text(fmt(d.total), pageW-margin, y, { align:'right' });
-      y += 6;
-    });
-  }
-  y += 6;
-
-  // Cartera pendiente — detalle por cliente
-  if(cartera > 0) {
-    doc.setFont('helvetica','bold'); doc.setFontSize(11);
-    doc.text('Cartera pendiente por cobrar', margin, y); y += 7;
-    doc.line(margin, y, pageW-margin, y); y += 6;
-    doc.setFont('helvetica','normal'); doc.setFontSize(9);
-    const deudaPorCliente = {};
-    pv.filter(v=>Number(v.saldo||0)>0).forEach(v => {
-      const key = v.cliente || 'Sin nombre';
-      deudaPorCliente[key] = (deudaPorCliente[key]||0) + Number(v.saldo||0);
-    });
-    Object.entries(deudaPorCliente).sort((a,b)=>b[1]-a[1]).forEach(([cliente,monto]) => {
-      doc.text(cliente, margin, y);
-      doc.text(fmt(monto), pageW-margin, y, { align:'right' });
-      y += 6;
-    });
-  }
-
-  // Pie de página
-  doc.setFontSize(8); doc.setTextColor(150);
-  doc.text('Generado automáticamente por DUPPLA · ' + new Date().toLocaleDateString('es-CO'), margin, 280);
-
-  const nombreArchivo = 'DUPPLA_Reporte_' + inicio + '_' + fin + '.pdf';
-  doc.save(nombreArchivo);
-  toast('✅ Reporte PDF generado');
-};
-
 // ============================================================
 // 56. PÁGINA: INVENTARIO
 // Lista de productos con stock, precios y ajuste rápido
@@ -8778,6 +8204,54 @@ function estadoFinanciero(inicio, fin, opciones) {
   const neto = entradas - gastado;
   const fiado = Math.round(ventasR.reduce((s2,v) => s2 + saldoReal(v), 0));
 
+  // ---- 830. Por dónde entró la plata: efectivo o transferencia ----
+  // Este desglose vivía suelto en el Dashboard (383-384). Se trae al motor
+  // porque es la MISMA plata que ya se contó arriba: si lo calcula cada
+  // pantalla por su lado, tarde o temprano una suma distinto de la otra y
+  // nadie sabe cuál creer — que es exactamente lo que pasó con "utilidad
+  // neta" antes del 818.
+  //
+  // Una venta mixta trae el reparto guardado (mixtoEfectivo / mixtoTransferencia);
+  // si no, todo va al método de la venta. Lo que no diga nada cae en "otro",
+  // y se muestra: un peso sin clasificar no se esconde.
+  let efectivo = 0, transferencia = 0, otroMedio = 0;
+  const repartirPago = (v, monto) => {
+    if(monto <= 0) return;
+    if(v.metodoPago === 'mixto') {
+      const ef = Number(v.mixtoEfectivo||0), tr = Number(v.mixtoTransferencia||0);
+      const sum = ef + tr;
+      // El desglose mixto se guardó sobre el total de la venta; aquí puede
+      // llegar solo una parte (un abono), así que se reparte en proporción.
+      if(sum > 0) { efectivo += monto * (ef/sum); transferencia += monto * (tr/sum); }
+      else otroMedio += monto;
+    }
+    else if(v.metodoPago === 'efectivo') efectivo += monto;
+    else if(v.metodoPago === 'transferencia') transferencia += monto;
+    else otroMedio += monto;
+  };
+  DATA.ventas.forEach(v => {
+    if(v.fecha >= inicio && v.fecha <= fin) repartirPago(v, Math.max(0, pagoInicial(v)));
+    (v.abonos||[]).forEach(a => {
+      if(a.fecha >= inicio && a.fecha <= fin) repartirPago({ metodoPago: a.metodoPago || v.metodoPago,
+        mixtoEfectivo: v.mixtoEfectivo, mixtoTransferencia: v.mixtoTransferencia }, Number(a.valor||0));
+    });
+  });
+  cobrosR.forEach(c => repartirPago(c, ingresoVenta(c)));
+
+  // ---- 830. Ventas por canal, con lo que deja cada uno ----
+  // No basta con cuánto vendió cada canal: el que más vende puede ser el que
+  // menos deja. Por eso va el margen al lado, y las ventas sin costo se
+  // cuentan aparte en vez de inflar el margen con un cero.
+  const CANALES = { directo:'Venta directa', web:'Página web', distribuidor:'Distribuidores' };
+  const porCanal = Object.entries(CANALES).map(([k, label]) => {
+    const suyas = ventasR.filter(v => (v.canal || 'directo') === k);
+    let margen = 0, sinCosto = 0;
+    suyas.forEach(v => { const m = calcularMargenVenta(v); if(m !== null) margen += m; else sinCosto++; });
+    const ingreso = suyas.reduce((s2,v) => s2 + ingresoVenta(v), 0);
+    return { k, label, ingreso, margen: Math.round(margen), sinCosto, n: suyas.length,
+             margenPct: ingreso > 0 ? Math.round((margen/ingreso)*100) : 0 };
+  }).filter(c => c.n > 0).sort((a,b) => b.ingreso - a.ingreso);
+
   // ---- Indicadores ----
   // La cartera del periodo en curso es TODA la viva; la de un periodo
   // cerrado, solo lo que ese periodo dejó debiendo (misma regla que 694).
@@ -8791,7 +8265,9 @@ function estadoFinanciero(inicio, fin, opciones) {
     porCategoria, gastosOperacion, gastosFinancieros, compras, gastado,
     utilidadOperacional, utilidadNeta,
     margenNetoPct: vendido > 0 ? Math.round((utilidadNeta / vendido) * 100) : 0,
-    caja: { contado, abonos, cobrosViejos, entradas, compras, gastosOperacion, gastosFinancieros, salidas: gastado, neto, fiado },
+    caja: { contado, abonos, cobrosViejos, entradas, compras, gastosOperacion, gastosFinancieros, salidas: gastado, neto, fiado,
+            efectivo: Math.round(efectivo), transferencia: Math.round(transferencia), otroMedio: Math.round(otroMedio) },
+    porCanal,
     cartera, valorInventario, nCobros: cobrosR.length
   };
 }
@@ -9058,26 +8534,129 @@ function renderInicio() {
   // del mes. Mide PLATA, igual que la del Resumen (824), y lleva las unidades
   // en el renglón de cada producto. Los productos salen de `productosDelRango`,
   // la misma cuenta que usa el Resumen del mes — no hay dos sumas distintas.
+  // 830. La dona absorbió al "Top 5 productos" que vivía en el Dashboard.
+  //      Eran dos bloques contestando casi lo mismo, pero el Top traía algo
+  //      que la dona no: el MARGEN de cada producto. Y "cuál me deja más
+  //      plata" no es "cuál vendí más" — a veces el que más sale es el que
+  //      menos deja. En vez de dejar los dos, la dona ahora lleva el margen
+  //      en cada renglón y un botón para ordenar por margen.
+  //
+  //      Los productos sin costo registrado NO cuentan como margen cero: se
+  //      marcan "sin costo". Un cero inventado hunde a un producto en el
+  //      ranking por una razón que no tiene que ver con el producto.
   const prodsCiclo = productosDelRango(ciclo.inicio, ciclo.fin);
+  const porMargen = inicioProductosPor === 'margen';
+  const prodsOrdenados = porMargen
+    ? [...prodsCiclo].sort((a,b) => b.margen - a.margen || b.dinero - a.dinero)
+    : prodsCiclo;
+  const totalMargenProd = prodsCiclo.reduce((s,p) => s + p.margen, 0);
+  const btnOrden = (id, texto) => '<button onclick="verProductosInicioPor(\'' + id + '\')" '
+    + 'style="padding:3px 10px;border-radius:14px;cursor:pointer;font-size:10.5px;font-weight:600;'
+    + 'border:1px solid ' + (inicioProductosPor===id ? 'var(--ink)' : 'var(--border)') + ';'
+    + 'background:' + (inicioProductosPor===id ? 'var(--ink)' : 'transparent') + ';'
+    + 'color:' + (inicioProductosPor===id ? 'var(--on-ink)' : 'var(--ink-3)') + '">' + texto + '</button>';
+
   const donaProductosHtml = prodsCiclo.length
     ? '<div class="card" style="padding:16px;margin-bottom:16px">'
-      + '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'
         + '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2)">'
           + '🍩 Qué se vendió</div>'
-        + '<button onclick="showPage(\'resumen\')" style="background:none;border:none;cursor:pointer;'
-          + 'font-size:11.5px;color:var(--blue);font-weight:600;padding:0">Ver el resumen del mes →</button>'
+        + '<div style="display:flex;gap:4px">' + btnOrden('plata','Por venta') + btnOrden('margen','Por margen') + '</div>'
       + '</div>'
       + '<div style="font-size:11.5px;color:var(--ink-3);margin:3px 0 13px;line-height:1.4">'
         + prodsCiclo.length + ' producto' + (prodsCiclo.length !== 1 ? 's' : '') + ' en este ciclo, '
-        + 'por la plata que dejó cada uno.</div>'
-      + donaHtml(repartoParaDona(prodsCiclo.map(p => ({
-          nombre: p.nombre, valor: p.dinero,
-          sub: p.unidades + ' unidad' + (p.unidades !== 1 ? 'es' : '')
-        }))), {
-          centro: fmtCorto(prodsCiclo.reduce((s,p) => s + p.dinero, 0)),
-          centroSub: prodsCiclo.reduce((s,p) => s + p.unidades, 0) + ' unidades',
+        + (porMargen ? 'por lo que dejó cada uno.' : 'por la plata que entró con cada uno.') + '</div>'
+      + donaHtml(repartoParaDona(prodsOrdenados.map(p => ({
+          nombre: p.nombre,
+          valor: porMargen ? Math.max(0, p.margen) : p.dinero,
+          sub: p.unidades + ' u · ' + (p.sinCosto
+                ? 'sin costo'
+                : (porMargen ? 'vendió ' + fmt(p.dinero) : 'deja ' + fmt(p.margen)))
+        })), DONA_MAX_PEDAZOS), {
+          centro: fmtCorto(porMargen ? totalMargenProd : prodsCiclo.reduce((s,p) => s + p.dinero, 0)),
+          centroSub: porMargen ? 'de margen' : prodsCiclo.reduce((s,p) => s + p.unidades, 0) + ' unidades',
           fmtValor: v => fmt(v)
         })
+    + '</div>'
+    : '';
+
+  // ---- 830. Ventas por canal y flujo de caja, traídos del Dashboard ----
+  const canalHtml = F.porCanal.length
+    ? '<div class="card" style="padding:16px">'
+      + '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2)">'
+        + '🛒 Ventas por canal</div>'
+      + '<div style="font-size:11.5px;color:var(--ink-3);margin:3px 0 11px">'
+        + 'Cuánto entró por cada lado y cuánto dejó.</div>'
+      + (() => {
+        // 830. Los porcentajes se reparten para que sumen 100 EXACTO. Redondeando
+        //      cada uno por su lado salía "63% + 38% = 101%", y un total que no
+        //      da cien hace dudar de los pesos que están al lado — que sí son
+        //      exactos. Se redondea hacia abajo y los puntos que sobran se le dan
+        //      a quien tenga el residuo más grande (el método de restos mayores,
+        //      el mismo con el que se reparten escaños).
+        const total = F.vendido || 1;
+        const crudos = F.porCanal.map(c => (c.ingreso / total) * 100);
+        const pcts = crudos.map(Math.floor);
+        let faltan = Math.round(crudos.reduce((a,b) => a+b, 0)) - pcts.reduce((a,b) => a+b, 0);
+        crudos.map((v,i) => ({ i, resto: v - Math.floor(v) }))
+          .sort((a,b) => b.resto - a.resto)
+          .forEach(x => { if(faltan > 0) { pcts[x.i]++; faltan--; } });
+        return F.porCanal.map((c, i) => {
+          const pct = pcts[i];
+          return '<div style="padding:9px 0' + (i ? ';border-top:1px solid var(--border)' : '') + '">'
+            + '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:9px">'
+              + '<span style="font-size:12.5px;font-weight:600;color:var(--ink)">' + escTxt(c.label) + '</span>'
+              + '<span style="font-size:12.5px;font-weight:700;font-variant-numeric:tabular-nums">' + fmt(c.ingreso) + '</span>'
+            + '</div>'
+            + '<div style="height:7px;background:var(--surface-3);border-radius:20px;overflow:hidden;margin:5px 0 4px">'
+              + '<div style="height:100%;width:' + Math.max(2, pct) + '%;background:var(--lime-accent);border-radius:20px"></div>'
+            + '</div>'
+            + '<div style="font-size:11px;color:var(--ink-3)">'
+              + c.n + ' venta' + (c.n !== 1 ? 's' : '') + ' · ' + pct + '% de lo vendido · '
+              + (c.sinCosto === c.n
+                  ? 'margen sin calcular'
+                  : 'deja ' + fmt(c.margen) + ' (' + c.margenPct + '%)'
+                    + (c.sinCosto ? ' · ' + c.sinCosto + ' sin costo' : ''))
+            + '</div>'
+          + '</div>';
+        }).join('');
+      })()
+    + '</div>'
+    : '';
+
+  // 830. El flujo de caja del Dashboard mostraba por dónde ENTRÓ la plata
+  //      (efectivo / transferencia). Inicio ya tenía el neto del banco en el
+  //      resultado del ciclo; esto es el detalle que faltaba, no un repetido.
+  const C = F.caja;
+  const entradaMedios = [
+    { label: '💵 Efectivo', v: C.efectivo },
+    { label: '📲 Transferencia', v: C.transferencia },
+    { label: '· Sin medio anotado', v: C.otroMedio }
+  ].filter(x => x.v > 0);
+  const cajaMediosHtml = C.entradas > 0
+    ? '<div class="card" style="padding:16px">'
+      + '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2)">'
+        + '💰 Por dónde entró la plata</div>'
+      + '<div style="font-size:11.5px;color:var(--ink-3);margin:3px 0 11px">'
+        + 'De los ' + fmt(C.entradas) + ' que entraron en el ciclo.</div>'
+      + entradaMedios.map((x, i) => {
+          const pct = Math.round((x.v / C.entradas) * 100);
+          return '<div style="padding:8px 0' + (i ? ';border-top:1px solid var(--border)' : '') + '">'
+            + '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:9px">'
+              + '<span style="font-size:12.5px;color:var(--ink)">' + x.label + '</span>'
+              + '<span style="font-size:12.5px;font-weight:700;font-variant-numeric:tabular-nums">'
+                + fmt(x.v) + ' <span style="font-size:11px;font-weight:600;color:var(--ink-3)">' + pct + '%</span></span>'
+            + '</div>'
+            + '<div style="height:7px;background:var(--surface-3);border-radius:20px;overflow:hidden;margin-top:5px">'
+              + '<div style="height:100%;width:' + Math.max(2, pct) + '%;background:var(--blue);border-radius:20px"></div>'
+            + '</div>'
+          + '</div>';
+        }).join('')
+      + (C.fiado > 0
+          ? '<div style="font-size:11.5px;color:var(--amber-ink);margin-top:11px;padding-top:10px;'
+            + 'border-top:1px solid var(--border);line-height:1.45">'
+            + 'Y ' + fmt(C.fiado) + ' quedaron fiados: se vendieron, pero todavía no entraron.</div>'
+          : '')
     + '</div>'
     : '';
 
@@ -9087,7 +8666,11 @@ function renderInicio() {
         <div class="page-title">${esCicloActual ? saludo : 'Ciclo cerrado'}</div>
         <div class="page-sub">Ciclo ${fFmt(ciclo.inicio)} – ${fFmt(ciclo.fin)}${esCicloActual && totalHoy ? ' · hoy llevas ' + fmt(totalHoy) : ''}</div>
       </div>
-      <button class="btn btn-sm" onclick="showPage('dashboard')">Ver dashboard completo →</button>
+      ${/* 830. Aquí estaba "Ver dashboard completo →". El Dashboard se borró:
+            seis de sus nueve bloques ya estaban en esta misma pantalla, y los
+            tres que no (ventas por canal, por dónde entró la plata, y el top de
+            productos) se bajaron aquí. Ángel: "tiene toda la información del
+            inicio pero más desordenada". */''}
     </div>
 
     ${selectorCiclosHtml}
@@ -9112,7 +8695,12 @@ function renderInicio() {
     </div>`}
 
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:9px;margin-bottom:16px">
-      ${stat('Vendido', fmt(vendido), varTxt, varColor, 'vendido')}
+      ${/* 830. El número de ventas venía del Dashboard. Va de subtítulo del
+            vendido y no de tarjeta propia: es contexto de esa cifra, no una
+            cifra que se mire sola. */''}
+      ${stat('Vendido', fmt(vendido),
+          F.nVentas + ' venta' + (F.nVentas !== 1 ? 's' : '') + (varTxt ? ' · ' + varTxt : ''),
+          varColor, 'vendido')}
       ${stat('Margen bruto', fmt(margenCiclo), margenPctCiclo + '% del vendido', 'var(--ink-3)', 'margen')}
       ${/* 769. Antes decía "Salió del banco" y mostraba TODO lo que salió,
               mercancía incluida — que contradice la regla de que la mercancía
@@ -9143,6 +8731,13 @@ function renderInicio() {
           primero cuánto, después si vamos mejor o peor, y enseguida de qué
           salió esa plata. */''}
     ${donaProductosHtml}
+
+    ${/* 830. Los dos bloques que bajaron del Dashboard. En pantalla ancha van
+          lado a lado; en celular, uno debajo del otro. */''}
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:14px;margin-bottom:16px">
+      ${canalHtml}
+      ${cajaMediosHtml}
+    </div>
 
     <div style="display:flex;flex-direction:column;gap:12px">
       ${equilibrioHtml}
@@ -14735,12 +14330,19 @@ window.verMesResumen = (o) => { resumenOffset = Number(o); renderResumenMes(); }
 function acumularProductos(mapa, v) {
   const lineas = lineasDeVenta(v);
   const ing = ingresoVenta(v);
+  // 830. El margen se reparte entre las líneas igual que el dinero, con la
+  //      misma fuente de verdad de siempre (calcularMargenVenta). Si la venta
+  //      no tiene costo conocido, el producto queda marcado `sinCosto` en vez
+  //      de sumarle cero: un cero inventado lo hunde en el ranking por margen
+  //      por una razón que no tiene nada que ver con el producto.
+  const m = calcularMargenVenta(v);
   lineas.forEach(l => {
     const k = String(l.nombre || '(sin nombre)').trim();
-    mapa[k] = mapa[k] || { nombre:k, unidades:0, dinero:0, ventas:0 };
+    mapa[k] = mapa[k] || { nombre:k, unidades:0, dinero:0, ventas:0, margen:0, sinCosto:false };
     mapa[k].unidades += Number(l.cant || 0);
     mapa[k].dinero   += ing / lineas.length;
     mapa[k].ventas   += 1;
+    if(m === null) mapa[k].sinCosto = true; else mapa[k].margen += m / lineas.length;
   });
 }
 
@@ -14748,9 +14350,16 @@ function productosDelRango(inicio, fin) {
   const mapa = {};
   DATA.ventas.filter(v => v.fecha >= inicio && v.fecha <= fin)
     .forEach(v => acumularProductos(mapa, v));
-  return Object.values(mapa).map(p => ({ ...p, dinero: Math.round(p.dinero) }))
+  return Object.values(mapa)
+    .map(p => ({ ...p, dinero: Math.round(p.dinero), margen: Math.round(p.margen) }))
     .sort((a,b) => b.dinero - a.dinero || b.unidades - a.unidades);
 }
+
+// 830. Qué está mirando Inicio en la dona de productos: la plata que entró o
+//      el margen que dejó. Vive aquí arriba, no dentro de renderInicio, para
+//      que no se reinicie en cada repintado.
+let inicioProductosPor = 'plata';
+window.verProductosInicioPor = (modo) => { inicioProductosPor = modo; renderInicio(); };
 
 function resumenDelMes(offset) {
   const c = getCicloActual(offset);
@@ -15189,20 +14798,11 @@ window.explicarConcepto = (clave) => {
   openModal('modal-detalle');
 };
 
-// 819. Tarjeta de métrica que se puede tocar. Sustituye a las `.metric-card`
-//      sueltas: misma pinta, pero el concepto deja de ser una palabra muerta.
-function tarjetaConcepto(clave, valor, sub, color) {
-  const g = GLOSARIO[clave] || { titulo: clave };
-  return '<div class="metric-card" role="button" tabindex="0" onclick="explicarConcepto(\'' + escAttr(clave) + '\')"'
-    + ' onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();explicarConcepto(\'' + escAttr(clave) + '\')}"'
-    + ' style="cursor:pointer;position:relative" title="Toca para ver qué es ' + escAttr(g.titulo) + '">'
-    + '<div class="metric-label">' + escTxt(g.titulo) + '</div>'
-    + '<div class="metric-value" style="font-size:19px;color:' + (color||'var(--ink)') + '">' + valor + '</div>'
-    + '<div class="metric-sub">' + (sub || '') + '</div>'
-    + '<span style="position:absolute;top:10px;right:12px;color:var(--ink-3);font-size:11px;opacity:.5">?</span>'
-  + '</div>';
-}
-
+// 819/830. `tarjetaConcepto` se borró con el Dashboard, que era quien la usaba:
+//      pintaba una métrica que al tocarla explicaba el concepto. En Inicio las
+//      tarjetas abren el DETALLE, y desde el 820 ese detalle ya trae la
+//      definición arriba del listado. Las dos puertas llevaban al mismo sitio,
+//      y la que quedó da además los registros.
 // 819. Y para los textos: una palabra que explica el concepto al tocarla.
 function palabraConcepto(clave, texto) {
   const g = GLOSARIO[clave];

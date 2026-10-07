@@ -1203,5 +1203,20 @@ El subtítulo de la pantalla pasó a decir "**Clientes** a quienes escribirles":
 *Lo que queda pendiente, y es otra cosa:* al distribuidor sí le sirve un aviso de reposición, pero calculado sobre su **ritmo de compra**, no sobre el consumo de una persona. Es otra pantalla y otro mensaje.
 
 
+### 14.36 Se borró el Dashboard (comentario 830)
+
+Ángel: *"tiene toda la información del Inicio pero más desordenada, mejor lo quitamos y en el Inicio colocamos el flujo de caja, las ventas por canal y el top"*.
+
+**Primero el inventario, después el borrado.** El Dashboard tenía nueve bloques y seis ya estaban en Inicio (vendido, gastos, margen, por cobrar, utilidad neta, y las dos alertas). Los otros tres bajaron. Lo que se perdió, con el visto bueno de Ángel: los botones ↓CSV y ↓PDF del Dashboard (Informes ya exporta PDF y Excel, y Ventas tiene su propio CSV), la barra de la meta (vive en la página Metas) y el poder mirar "Hoy" o "Esta semana" — Inicio va por ciclos del día 4 al 3, que es la verdad contable del negocio. *Borrar una pantalla empieza por listar qué se va con ella, no por borrarla.*
+
+**Lo que bajó NO se copió: se movió al motor.** `estadoFinanciero` gana `porCanal` (ingreso, margen, % y ventas sin costo por canal) y `caja.efectivo / transferencia / otroMedio`. El Dashboard calculaba las dos cosas por su cuenta (383-384, 414); dejarlo así en Inicio habría sido fundar el mismo problema del 818 en otra pantalla. Una venta mixta reparte su pago en proporción al desglose guardado, y lo que no declara medio cae en "sin medio anotado" **y se muestra**: un peso sin clasificar no se esconde.
+
+**La dona absorbió al Top 5, en vez de convivir con él.** Eran dos bloques contestando casi lo mismo, pero el Top traía el **margen por producto**, que la dona no tenía. Ahora la dona lleva el margen en cada renglón y un botón "Por margen" que reordena el anillo entero — porque "cuál me deja más plata" no es "cuál vendí más", y a veces el que más sale es el que menos deja. Los productos sin costo quedan marcados `sinCosto` en vez de sumar cero: un cero inventado los hunde en el ranking por una razón que no tiene que ver con el producto.
+
+**Los porcentajes ahora suman 100 exacto.** En la primera versión el canal mostraba "63% + 38% = 101%". Es redondeo, y es inofensivo, pero un total que no da cien hace dudar de los pesos que están al lado — que sí son exactos. Se reparte por **restos mayores**: se redondea hacia abajo y los puntos sobrantes van a quien tenga el residuo más grande. Probado con los casos borde (uno solo, tres iguales, uno enorme contra uno diminuto) y 300 mezclas al azar.
+
+**Huérfanos que se fueron con él:** `getPeriodoFechas`, `dashPeriodo`/`dashFechaInicio`/`dashFechaFin`, `setDashPeriodo`, `aplicarFechasPersonalizadas`, `exportarReporte`, `exportarReportePDF`, `setDashRankingPor`, `tarjetaConcepto` y el CSS `.metrics-grid`/`.dash-grid` — unos 29.000 caracteres. **`generarTopProductosHtml` se quedó**: la página Combos todavía la usa. Lo dijo el linter, no el ojo.
+
+
 ---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*
