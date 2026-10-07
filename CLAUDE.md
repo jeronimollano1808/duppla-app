@@ -1238,5 +1238,24 @@ El subtítulo de la pantalla pasó a decir "**Clientes** a quienes escribirles":
 **El color de la pastilla dice qué clase de pendiente es:** rojo para plata que se debe (deudores en mora, pedidos con saldo) y azul para tarea por hacer (recompras). Antes el rojo estaba atado al id `deudores`; ahora lo decide el significado, no el nombre de la pantalla.
 
 
+### 14.39 Fuera Informes y Metas — y lo que NO se podía ir con ellas (comentario 833)
+
+Ángel preguntó, no ordenó: *"todo esto de estado de resultados está en el Inicio, ¿cierto? Porque si está en el Inicio, quiero que quites ese informe, que sería más de lo mismo"*. Y sobre Metas: *"también quiero que la depures, quita eso"*.
+
+**La respuesta a la pregunta era "casi".** Informes y el Inicio salen del mismo `estadoFinanciero`, así que los números son idénticos — tenía razón. Lo único que Informes tenía y el Inicio no eran los botones **↓PDF y ↓Excel**. Al plantearle eso, Ángel zanjó: *"yo no necesito nunca descargar nada"*. Fuera los dos, y con ellos `exportarInformePDF`, `exportarInformeExcel`, `cargarSheetJs` y `filasInforme`.
+
+**Pero dentro de Metas había algo que no era una meta.** La pantalla guardaba el **cierre de mes** —el botón que congela los costos de un ciclo y lo vuelve inmutable (787-788)— y el archivo de los ciclos ya cerrados. Borrar la pestaña tal cual habría enterrado la operación **menos reversible de toda la app**, y Ángel no pidió eso: pidió quitar las metas y las descargas.
+
+Así que el cierre bajó a **Inicio**, que ya es la pantalla del ciclo: el mismo sitio donde se mira un mes es donde se cierra. Va al final, porque se usa una vez al mes y no tiene por qué estorbar los otros veintinueve días.
+
+*Regla:* cuando lo que mandan a borrar contiene algo que no mencionaron, se mueve y se avisa — no se borra en silencio ni se para la tarea a preguntar por todo.
+
+**Lo que se fue del todo:** las metas de venta mensuales (el `modal-meta`, `guardarMeta` y sus tarjetas de progreso). El punto de equilibrio de Inicio responde mejor la misma pregunta — cuánto hay que vender para cubrir los gastos — y sale del dato real en vez de un número puesto a mano. También se fue `cerrarMesDesdeInformes`, el segundo camino al cierre que existía solo para esa pantalla: **dos puertas a la operación más delicada era una de más.**
+
+Y en Clientes se quitó el aviso de "a 38 clientes se les está acabando": desde el 831 la pestaña Recompras está al lado con su número, así que era el mismo dato dos veces en la misma pantalla.
+
+**El menú quedó en 9 entradas** (empezó esta sesión en 14): Inicio · Ventas · Gastos · Clientes *(4 adentro)* · Consignación · Resumen del mes · Proveedores *(2 adentro)* · Actividad · Usuarios.
+
+
 ---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*

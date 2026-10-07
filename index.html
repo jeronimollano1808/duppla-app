@@ -623,7 +623,6 @@ body.solo-lectura [onclick*="aplicar"],
 body.solo-lectura [onclick*="toggleActivo"],
 body.solo-lectura [onclick*="cambiarEstadoPedido"],
 body.solo-lectura [onclick*="cambiarRol"],
-body.solo-lectura [onclick="openModal('modal-meta')"],
 body.solo-lectura .modal-footer .btn-lime,
 body.solo-lectura .modal-footer .btn-primary{ display:none !important; }
 
@@ -1157,9 +1156,7 @@ body.solo-lectura .barra-sesion{background:var(--blue-bg);border-bottom-color:va
     <div class="page" id="page-gastos"></div>
     <div class="page" id="page-proveedores"></div>
     <div class="page" id="page-pedidos"></div>
-    <div class="page" id="page-metas"></div>
     <!-- 782. Informes: estado de resultados y flujo de caja, exportables. -->
-    <div class="page" id="page-informes"></div>
     <!-- 805. Resumen del mes y 806. Usuarios -->
     <div class="page" id="page-resumen"></div>
     <div class="page" id="page-usuarios"></div>
@@ -2394,32 +2391,6 @@ body.solo-lectura .barra-sesion{background:var(--blue-bg);border-bottom-color:va
 </div>
 
 <!-- Modal: Nueva meta -->
-<div class="modal-bg" id="modal-meta">
-  <div class="modal">
-    <div class="modal-header">
-      <span class="modal-title">Nueva meta mensual</span>
-      <button class="modal-close" onclick="closeModal('modal-meta')">✕</button>
-    </div>
-    <div class="f-row">
-      <div class="f-group"><label class="f-label">Mes *</label><input type="month" id="me-mes" class="f-input"></div>
-      <!-- 526. Día de inicio del ciclo — DUPPLA no inicia el mes el día 1 -->
-      <div class="f-group">
-        <label class="f-label">¿Qué día cierra el ciclo? *</label>
-        <input type="number" id="me-dia-inicio" class="f-input" value="3" min="1" max="28">
-        <div style="font-size:11px;color:var(--ink-3);margin-top:3px">Ej: 3 = el ciclo cierra el 3 (incluido) y el siguiente arranca el 4</div>
-      </div>
-    </div>
-    <div class="f-row">
-      <div class="f-group"><label class="f-label">Meta de ventas ($) *</label><input type="number" id="me-ventas" class="f-input"></div>
-      <div class="f-group"><label class="f-label">Presupuesto máx. gastos ($)</label><input type="number" id="me-gastos" class="f-input" value="0"></div>
-    </div>
-    <div class="f-group"><label class="f-label">Notas</label><input type="text" id="me-notas" class="f-input" placeholder="Objetivos, compromisos..."></div>
-    <div class="modal-footer">
-      <button class="btn" onclick="closeModal('modal-meta')">Cancelar</button>
-      <button class="btn btn-lime" onclick="guardarMeta()">Guardar meta</button>
-    </div>
-  </div>
-</div>
 
 <!-- ============================================================
      180. MODAL: NUEVO COMBO FIJO
@@ -3594,9 +3565,6 @@ const MENU = [
   { id:'consignacion', label:'Consignación', ico:'🏪', group:'Quién compra' },
 
   // --- Cómo vamos: para mirar, no para registrar ---
-  // 782. Informes — lo que se le pasa a un contador, a un banco o a un socio.
-  { id:'informes', label:'Informes', ico:'📄', group:'Cómo vamos' },
-  { id:'metas', label:'Metas', ico:'🎯', group:'Cómo vamos' },
   // 805. Resumen del mes — qué se vendió, cuánto y de qué. Lo ven los tres.
   { id:'resumen', label:'Resumen del mes', ico:'📅', group:'Cómo vamos' },
 
@@ -4096,8 +4064,7 @@ function renderPage(id) {
     ventas:renderVentas,
     inventario:renderInventario, clientes:renderClientes,
     gastos:renderGastos, proveedores:renderProveedores,
-    pedidos:renderPedidos, metas:renderMetas, combos:renderCombos,
-    informes:renderInformes,
+    pedidos:renderPedidos, combos:renderCombos,
     resumen:renderResumenMes, usuarios:renderUsuarios,
     recompras:renderRecompras,
     deudores:renderDeudores,
@@ -6726,24 +6693,12 @@ function renderClientes() {
   });
   const clientes = Object.values(cm).sort((a,b)=>b.total-a.total);
 
-  // 643/827. Aquí vivía una tarjeta con las recompras próximas y un botón de
-  //      recordatorio por cliente. Se fue a su propia pantalla (Recompras, en
-  //      Día a día), donde cabe lo que de verdad hace falta: el mensaje ya
-  //      escrito, el WhatsApp con el número guardado y el "ya le escribí".
-  //      Aquí queda solo el aviso de cuántos hay, para no partir la misma
-  //      información en dos sitios que después se contradicen.
-  const nRecompras = calcularRecompras().length;
-  const recomprasHtml = nRecompras
-    ? '<div class="card" style="margin-bottom:16px;padding:13px 16px;display:flex;align-items:center;'
-      + 'gap:10px;flex-wrap:wrap;border-left:3px solid var(--blue)">'
-      + '<span style="font-size:17px">🔄</span>'
-      + '<span style="flex:1;min-width:190px;font-size:12.5px;color:var(--ink-2);line-height:1.4">'
-        + 'Hay <strong style="color:var(--ink)">' + nRecompras + '</strong> cliente'
-        + (nRecompras !== 1 ? 's' : '') + ' a ' + (nRecompras !== 1 ? 'quienes' : 'quien')
-        + ' se le está acabando lo que compró.</span>'
-      + '<button class="btn btn-sm btn-lime" onclick="showPage(\'recompras\')">Ver a quién escribirle</button>'
-    + '</div>'
-    : '';
+  // 643/827/833. Aquí hubo primero una tarjeta con las recompras próximas, y
+  //      después un aviso que decía "hay 38 clientes a los que se les está
+  //      acabando". Ángel: "eso va para la recompra". Y tiene razón: desde el
+  //      831 la pestaña Recompras está al lado con su número puesto, así que
+  //      el aviso era el mismo dato dos veces en la misma pantalla.
+  const recomprasHtml = '';
 
   // 778. Tocar un cliente abre su ficha: cuántas veces compró, qué se
   //      lleva, mes a mes y qué debe. La fila entera es el botón — pedir
@@ -8756,6 +8711,59 @@ function renderInicio() {
     + '</div>'
     : '';
 
+  const hoy = new Date();
+  // 416. CIERRE DE MES — historial de snapshots ya generados, más reciente primero
+  // 555. mesActualStr = el ciclo YA TERMINADO, igual que abrirCierreMes(), para
+  //      saber si ya se cerró y deshabilitar el botón.
+  const mesContieneHoyStr = hoy.getDate() <= DUPPLA_DIA_INICIO_MES
+    ? new Date(hoy.getFullYear(), hoy.getMonth()-1, 1)
+    : new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+  const mesACerrarStr = new Date(mesContieneHoyStr.getFullYear(), mesContieneHoyStr.getMonth()-1, 1);
+  const mesActualStr = mesACerrarStr.getFullYear() + '-' + String(mesACerrarStr.getMonth()+1).padStart(2,'0');
+  const cierresOrd = [...DATA.cierres].sort((a,b) => b.mes > a.mes ? 1 : -1);
+  // 784. Un mes reabierto NO cuenta como cerrado: si contara, el botón
+  //      quedaría deshabilitado y no habría forma de volver a cerrarlo.
+  const yaExisteCierreMesActual = cierresOrd.some(c => c.mes === mesActualStr && c.reabierto !== true);
+
+  let cierresHtml = '';
+  if(cierresOrd.length === 0) {
+    cierresHtml = '<div class="empty-state" style="padding:20px"><div class="empty-state-text">Sin cierres generados aún</div></div>';
+  } else {
+    cierresOrd.forEach(c => {
+      const [ca,cm] = (c.mes||'').split('-');
+      const utilidadC = Number(c.ingresos||0) - Number(c.gastos||0);
+      cierresHtml += '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">'
+        + '<div>'
+          + '<div style="font-size:13px;font-weight:600;color:var(--ink)">' + (MESES[parseInt(cm)]||c.mes) + ' ' + ca + '</div>'
+          + '<div style="font-size:11px;color:' + (c.reabierto ? 'var(--amber)' : 'var(--ink-3)') + '">'
+            + (c.reabierto
+                ? '🔓 Reabierto el ' + (c.reabiertoEn||'') + (c.reabiertoPor ? ' por ' + escTxt(c.reabiertoPor) : '') + ' — sin cerrar'
+                : '🔒 Cerrado el ' + (c.fechaCierre||'') + (c.cerradoPor ? ' por ' + escTxt(c.cerradoPor) : '') + ' · ' + (c.numVentas||0) + ' ventas')
+          + '</div>'
+        + '</div>'
+        + '<div style="text-align:right">'
+          + '<div style="font-size:13px;font-weight:700;color:' + (utilidadC>=0?'var(--green)':'var(--red)') + '">' + fmt(utilidadC) + '</div>'
+          + '<div style="font-size:10px;color:var(--ink-3)">utilidad neta</div>'
+        + '</div>'
+      + '</div>';
+    });
+  }
+
+
+  const cierreMesHtml = '<div class="card" style="padding:16px;margin-top:16px">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px">'
+      + '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2)">'
+        + '🔒 Cierre de mes</div>'
+      + '<button class="btn btn-sm' + (yaExisteCierreMesActual ? '' : ' btn-lime') + '"'
+        + ' onclick="abrirCierreMes()"' + (yaExisteCierreMesActual ? ' disabled style="opacity:.5;cursor:not-allowed"' : '') + '>'
+        + (yaExisteCierreMesActual ? '✅ Último ciclo ya cerrado' : 'Cerrar ciclo terminado') + '</button>'
+    + '</div>'
+    + '<div style="font-size:11.5px;color:var(--ink-3);margin-bottom:11px;line-height:1.45">'
+      + 'Cerrar un ciclo congela sus costos: el margen de ese mes queda fijo aunque después cambien los precios. '
+      + 'Un ciclo cerrado se puede reabrir, y ninguno se borra nunca.</div>'
+    + cierresHtml
+  + '</div>';
+
   document.getElementById('page-inicio').innerHTML = `
     <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px">
       <div>
@@ -8838,7 +8846,8 @@ function renderInicio() {
     <div style="display:flex;flex-direction:column;gap:12px">
       ${equilibrioHtml}
       ${resultadoHtml}
-    </div>`;
+    </div>
+    ${cierreMesHtml}`;
 }
 
 // ============================================================
@@ -9019,211 +9028,6 @@ window.abrirDetalleInicio = (tipo) => {
   //      bloque sale vacío y la pantalla queda como antes (no se rompe nada).
   document.getElementById('det-contenido').innerHTML = bloqueConcepto(MAPA_TIPO_CONCEPTO[tipo]) + html;
   openModal('modal-detalle');
-};
-
-function renderMetas() {
-  const hoy = new Date();
-
-  // 412. PUNTO DE EQUILIBRIO — cuánto hay que vender para cubrir los gastos fijos
-  //      Fórmula: Punto de equilibrio ($) = Gastos fijos / % margen promedio
-  //      El % margen promedio se calcula con las ventas de los últimos 90 días
-  //      que sí tienen costo histórico conocido (calcularMargenVenta != null)
-  const fechaCorte90 = fechaLocal(new Date(hoy.getTime() - 90*86400000));
-  let ingresosConCosto = 0, margenConCosto = 0;
-  DATA.ventas.forEach(v => {
-    if(!v.fecha || v.fecha < fechaCorte90) return;
-    const m = calcularMargenVenta(v);
-    if(m !== null) { margenConCosto += m; ingresosConCosto += Number(v.total||0); }
-  });
-  const margenPctPromedio = ingresosConCosto > 0 ? (margenConCosto/ingresosConCosto) : null;
-
-  const cards = DATA.metas.map(m => {
-    const [anio,mes] = (m.mes||'').split('-');
-    // 523. Usamos el rango de fechas real del ciclo (puede no coincidir con
-    //      el mes calendario si diaInicio != 1). Retrocompatible: metas viejas
-    //      sin diaInicio guardado asumen día 1 (mes calendario normal).
-    // 534. FIX: las metas viejas sin diaInicio guardado ahora usan por defecto
-    //      el ciclo de DUPPLA (día 3), no el día 1 — ya que pediste que TODA
-    //      la app respete el ciclo de Duppla (ver calcularRangoMeta), incluyendo metas ya creadas.
-    const diaInicio = m.diaInicio || DUPPLA_DIA_INICIO_MES;
-    const { inicio: rangoInicio, fin: rangoFin } = calcularRangoMeta(m.mes, diaInicio);
-    const tv = DATA.ventas.filter(v=>v.fecha >= rangoInicio && v.fecha <= rangoFin).reduce((s,v)=>s+ingresoVenta(v),0);
-    const tg = DATA.gastos.filter(g=>g.fecha >= rangoInicio && g.fecha <= rangoFin).reduce((s,g)=>s+Number(g.valor||0),0);
-    const pv = m.ventasMeta>0 ? Math.min(100,Math.round((tv/m.ventasMeta)*100)) : 0;
-    const pg = m.gastoMax>0 ? Math.min(100,Math.round((tg/m.gastoMax)*100)) : 0;
-
-
-    // 413. Punto de equilibrio de este ciclo.
-    // 675. FIX — antes usaba `gastoMax` (el TECHO de gasto presupuestado, que
-    //      incluye la mercancía) como si fueran gastos fijos. Con compras de
-    //      proveedor de varios millones eso inflaba el punto de equilibrio
-    //      hasta volverlo inútil. Ahora usa los gastos realmente marcados como
-    //      fijos en el ciclo (ver esGastoFijo, comentario 665), que es lo que
-    //      la fórmula pide. Si no hay ninguno marcado, cae de vuelta a gastoMax
-    //      para no dejar la tarjeta en blanco en metas viejas.
-    const fijosCiclo = calcularGastosFijosRango(rangoInicio, rangoFin);
-    const baseFija = fijosCiclo > 0 ? fijosCiclo : Number(m.gastoMax||0);
-    let equilibrioHtml = '';
-    if(margenPctPromedio !== null && margenPctPromedio > 0 && baseFija > 0) {
-      const puntoEquilibrio = baseFija / margenPctPromedio;
-      const yaSuperoEquilibrio = tv >= puntoEquilibrio;
-      equilibrioHtml = `
-        <div style="background:${yaSuperoEquilibrio?'var(--green-bg)':'var(--surface-2)'};border:1px solid ${yaSuperoEquilibrio?'var(--green-bd)':'var(--border)'};border-radius:10px;padding:10px 12px;margin-bottom:12px">
-          <div style="font-size:11px;font-weight:700;color:${yaSuperoEquilibrio?'var(--green)':'var(--ink-2)'};text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px">
-            ${yaSuperoEquilibrio?'✅ Punto de equilibrio superado':'⚖️ Punto de equilibrio'}
-          </div>
-          <div style="font-size:12px;color:var(--ink-2)">
-            Necesitas vender <strong>${fmt(puntoEquilibrio)}</strong> para cubrir tus gastos fijos
-            (con margen promedio del ${Math.round(margenPctPromedio*100)}%)
-          </div>
-        </div>`;
-    }
-
-    // 353. Calculamos cuánto falta para cumplir la meta de ventas
-    const faltante = Math.max(0, Number(m.ventasMeta||0) - tv);
-    const metaCumplida = faltante === 0 && Number(m.ventasMeta||0) > 0;
-
-    // 354. Si es el mes actual, calculamos días restantes y ritmo diario necesario
-    //      524. esMesActual ahora se basa en si HOY cae dentro del rango real
-    //      del ciclo (no en si el string de mes coincide con el mes calendario)
-    const hoyStr = fechaLocal(hoy);
-    const esMesActual = hoyStr >= rangoInicio && hoyStr <= rangoFin;
-    let faltanteHtml = '';
-    if(Number(m.ventasMeta||0) > 0) {
-      if(metaCumplida) {
-        faltanteHtml = `
-        <div style="background:var(--lime-bg);border:1px solid var(--lime-accent);border-radius:10px;padding:10px 12px;margin-bottom:12px;display:flex;align-items:center;gap:8px">
-          <span style="font-size:16px">🎉</span>
-          <span style="font-size:12px;font-weight:700;color:var(--ink)">¡Meta cumplida! Superaste por ${fmt(tv-m.ventasMeta)}</span>
-        </div>`;
-      } else if(esMesActual) {
-        // 525. Días restantes = desde hoy hasta el fin REAL del ciclo (rangoFin)
-        const diasRestantes = Math.max(1, Math.floor((new Date(rangoFin) - hoy) / 86400000) + 1);
-        const ritmoDiario = faltante / diasRestantes;
-        faltanteHtml = `
-        <div style="background:var(--amber-bg);border:1px solid var(--amber-bd);border-radius:10px;padding:10px 12px;margin-bottom:12px">
-          <div style="font-size:12px;font-weight:700;color:var(--amber-ink);margin-bottom:2px">
-            Faltan ${fmt(faltante)} para cumplir la meta
-          </div>
-          <div style="font-size:11px;color:var(--amber-ink)">
-            ${diasRestantes} día${diasRestantes>1?'s':''} restantes · necesitas vender ${fmt(ritmoDiario)}/día
-          </div>
-        </div>`;
-      } else {
-        // Mes pasado o futuro sin cumplir — solo mostramos el faltante simple
-        faltanteHtml = `
-        <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:12px">
-          <div style="font-size:12px;font-weight:600;color:var(--ink-2)">Faltaron ${fmt(faltante)} para cumplir la meta</div>
-        </div>`;
-      }
-    }
-
-    return `<div class="list-card">
-      <div class="list-card-header">
-        <div>
-          <div class="list-card-title">${MESES[parseInt(mes)]||m.mes} ${anio}</div>
-          ${diaInicio !== 1 ? `<div style="font-size:11px;color:var(--ink-3);margin-top:2px">📅 Del ${rangoInicio.split('-').reverse().join('/')} al ${rangoFin.split('-').reverse().join('/')}</div>` : ''}
-          ${m.notas?`<div class="list-card-sub">${m.notas}</div>`:''}
-        </div>
-        <button class="btn btn-sm btn-danger" onclick="eliminarDoc('metas','${m.id}')">✕</button>
-      </div>
-      <div class="list-card-body">
-        <div style="margin-bottom:12px">
-          <div style="display:flex;justify-content:space-between;margin-bottom:5px">
-            <span style="font-size:12px;color:var(--ink-2)">Ventas: ${fmt(tv)} / ${fmt(m.ventasMeta)}</span>
-            <span style="font-size:12px;font-weight:600;color:${pv>=100?'var(--green)':pv>=70?'var(--amber)':'var(--blue)'}">${pv}%</span>
-          </div>
-          <div class="prog"><div class="prog-fill ${pv>=100?'prog-lime':pv>=70?'prog-amber':'prog-blue'}" style="width:${pv}%"></div></div>
-        </div>
-        ${equilibrioHtml}
-        ${faltanteHtml}
-        ${m.gastoMax>0?`
-          <div style="margin-bottom:12px">
-            <div style="display:flex;justify-content:space-between;margin-bottom:5px">
-              <span style="font-size:12px;color:var(--ink-2)">Gastos: ${fmt(tg)} / ${fmt(m.gastoMax)}</span>
-              <span style="font-size:12px;font-weight:600;color:${pg>=90?'var(--red)':pg>=70?'var(--amber)':'var(--green)'}">${pg}%</span>
-            </div>
-            <div class="prog"><div class="prog-fill ${pg>=90?'prog-red':pg>=70?'prog-amber':'prog-lime'}" style="width:${pg}%"></div></div>
-          </div>`:''}
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
-          ${[['Ingresos',fmt(tv),'var(--lime)'],['Gastos',fmt(tg),'var(--red)'],['Utilidad',fmt(tv-tg),tv-tg>=0?'var(--green)':'var(--red)']].map(([l,v,c])=>`
-            <div style="background:var(--surface-2);border-radius:8px;padding:10px;text-align:center">
-              <div style="font-size:10px;color:var(--ink-3);margin-bottom:3px;text-transform:uppercase;letter-spacing:.04em">${l}</div>
-              <div style="font-size:13px;font-weight:700;color:${c}">${v}</div>
-            </div>`).join('')}
-        </div>
-      </div>
-    </div>`;
-  }).join('');
-
-  // 416. CIERRE DE MES — historial de snapshots ya generados, más reciente primero
-  // 555. mesActualStr = el ciclo YA TERMINADO, igual que abrirCierreMes(), para
-  //      saber si ya se cerró y deshabilitar el botón.
-  const mesContieneHoyStr = hoy.getDate() <= DUPPLA_DIA_INICIO_MES
-    ? new Date(hoy.getFullYear(), hoy.getMonth()-1, 1)
-    : new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-  const mesACerrarStr = new Date(mesContieneHoyStr.getFullYear(), mesContieneHoyStr.getMonth()-1, 1);
-  const mesActualStr = mesACerrarStr.getFullYear() + '-' + String(mesACerrarStr.getMonth()+1).padStart(2,'0');
-  const cierresOrd = [...DATA.cierres].sort((a,b) => b.mes > a.mes ? 1 : -1);
-  // 784. Un mes reabierto NO cuenta como cerrado: si contara, el botón
-  //      quedaría deshabilitado y no habría forma de volver a cerrarlo.
-  const yaExisteCierreMesActual = cierresOrd.some(c => c.mes === mesActualStr && c.reabierto !== true);
-
-  let cierresHtml = '';
-  if(cierresOrd.length === 0) {
-    cierresHtml = '<div class="empty-state" style="padding:20px"><div class="empty-state-text">Sin cierres generados aún</div></div>';
-  } else {
-    cierresOrd.forEach(c => {
-      const [ca,cm] = (c.mes||'').split('-');
-      const utilidadC = Number(c.ingresos||0) - Number(c.gastos||0);
-      cierresHtml += '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">'
-        + '<div>'
-          + '<div style="font-size:13px;font-weight:600;color:var(--ink)">' + (MESES[parseInt(cm)]||c.mes) + ' ' + ca + '</div>'
-          + '<div style="font-size:11px;color:' + (c.reabierto ? 'var(--amber)' : 'var(--ink-3)') + '">'
-            + (c.reabierto
-                ? '🔓 Reabierto el ' + (c.reabiertoEn||'') + (c.reabiertoPor ? ' por ' + escTxt(c.reabiertoPor) : '') + ' — sin cerrar'
-                : '🔒 Cerrado el ' + (c.fechaCierre||'') + (c.cerradoPor ? ' por ' + escTxt(c.cerradoPor) : '') + ' · ' + (c.numVentas||0) + ' ventas')
-          + '</div>'
-        + '</div>'
-        + '<div style="text-align:right">'
-          + '<div style="font-size:13px;font-weight:700;color:' + (utilidadC>=0?'var(--green)':'var(--red)') + '">' + fmt(utilidadC) + '</div>'
-          + '<div style="font-size:10px;color:var(--ink-3)">utilidad neta</div>'
-        + '</div>'
-      + '</div>';
-    });
-  }
-
-  document.getElementById('page-metas').innerHTML = `
-    <div class="page-header">
-      <div><div class="page-title">Metas y presupuesto</div></div>
-      <button class="btn btn-lime btn-sm" onclick="openModal('modal-meta')">+ Nueva meta</button>
-    </div>
-    ${DATA.metas.length ?
-      `<div class="list-cards" style="margin-bottom:24px">${cards}</div>`
-      : `<div class="card" style="margin-bottom:24px"><div class="empty-state"><div class="empty-state-icon">🎯</div><div class="empty-state-text">Sin metas configuradas</div><div class="empty-state-sub">Crea tu primera meta mensual</div></div></div>`}
-    <!-- 417. Sección de cierre de mes / corte contable -->
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-      <div style="font-size:13px;font-weight:700;color:var(--ink);text-transform:uppercase;letter-spacing:.04em">📁 Cierre de mes</div>
-      <button class="btn btn-sm ${yaExisteCierreMesActual?'':'btn-lime'}" onclick="abrirCierreMes()" ${yaExisteCierreMesActual?'disabled style="opacity:.5;cursor:not-allowed"':''}>
-        ${yaExisteCierreMesActual ? '✅ Último ciclo ya cerrado' : '🔒 Cerrar ciclo terminado'}
-      </button>
-    </div>
-    <div class="card">${cierresHtml}</div>`;
-}
-
-window.guardarMeta = async () => {
-  if(!exigirAdmin()) return;   // 803
-  const mes = document.getElementById('me-mes').value;
-  const ventasMeta = Number(document.getElementById('me-ventas').value);
-  if(!mes||!ventasMeta) { alert('Mes y meta de ventas son requeridos'); return; }
-  await addDoc(collection(db,'metas'), { ...firmaRegistro(),
-    mes, ventasMeta,
-    diaInicio: Number(document.getElementById('me-dia-inicio').value)||1, // 527. Día de inicio del ciclo
-    gastoMax:Number(document.getElementById('me-gastos').value)||0,
-    notas:document.getElementById('me-notas').value,
-    createdAt:serverTimestamp()
-  });
-  closeModal('modal-meta');
 };
 
 // ============================================================
@@ -13692,40 +13496,7 @@ window.abrirFichaSinVincular = () => {
 // cuenta. Si un número de aquí no cuadra con Inicio, el error está en el
 // motor y se arregla una vez.
 // ============================================================
-let informesOffset = 0;
-window.verCicloInformes = (o) => { informesOffset = Number(o); renderInformes(); };
-
-function rangoInformes() {
-  if(informesOffset === -1) {
-    const fechas = [...DATA.ventas.map(v => v.fecha), ...DATA.gastos.map(g => g.fecha)].filter(Boolean).sort();
-    return { inicio: fechas[0] || today(), fin: today(), etiqueta: 'Todo el historial', esCiclo: false, actual: false };
-  }
-  const c = getCicloActual(informesOffset);
-  return {
-    inicio: c.inicio, fin: c.fin, esCiclo: true, actual: informesOffset === 0,
-    etiqueta: c.label.charAt(0).toUpperCase() + c.label.slice(1).replace(' de ', ' ')
-  };
-}
-
 // Un renglón del estado. nivel: 'normal' | 'total' | 'final'
-function renglonInforme(etiqueta, valor, signo, nivel, nota, color) {
-  const esTotal = nivel === 'total' || nivel === 'final';
-  const fin = nivel === 'final';
-  return '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:14px;'
-    + 'padding:' + (esTotal ? '10px 0 4px' : '5px 0') + ';'
-    + (esTotal ? 'border-top:' + (fin ? '2px' : '1.5px') + ' solid var(--border);margin-top:4px' : '') + '">'
-    + '<span style="min-width:0">'
-      + '<span style="font-size:' + (fin ? '14' : esTotal ? '13' : '12.5') + 'px;'
-        + (esTotal ? 'font-weight:' + (fin ? '800' : '700') + ';color:var(--ink);text-transform:uppercase;letter-spacing:.03em'
-                   : 'color:var(--ink-2)') + '">' + etiqueta + '</span>'
-      + (nota ? '<span style="display:block;font-size:10.5px;color:var(--ink-3);line-height:1.35">' + nota + '</span>' : '')
-    + '</span>'
-    + '<span style="font-size:' + (fin ? '19' : esTotal ? '16' : '13.5') + 'px;font-weight:' + (esTotal ? '800' : '600') + ';'
-      + 'white-space:nowrap;font-variant-numeric:tabular-nums;color:' + (color || (esTotal ? 'var(--ink)' : 'var(--ink-2)')) + '">'
-      + (signo || '') + fmt(Math.abs(valor)) + '</span>'
-  + '</div>';
-}
-
 // ============================================================
 // 784. MESES CERRADOS: SE CONGELAN
 //
@@ -13932,68 +13703,6 @@ window.reabrirMes = async (mesStr) => {
     titulo: 'Mes ' + nombre, cambios: [] });
   toast('🔓 ' + nombre + ' reabierto — acuérdate de volver a cerrarlo');
 };
-
-window.cerrarMesDesdeInformes = async (mesStr) => {
-  if(!exigirAdmin('cerrar meses')) return;   // 803
-  const r = rangoInformes();
-  const F = estadoFinanciero(r.inicio, r.fin, {});
-  const [a, m] = String(mesStr).split('-');
-  const nombre = (MESES[parseInt(m)] || mesStr) + ' ' + a;
-  if(!confirm('Vas a cerrar ' + nombre + '.\n\n'
-    + 'Vendido ' + fmt(F.vendido) + ' · Utilidad neta ' + fmt(F.utilidadNeta)
-    + resumenCongelacion(r.inicio, r.fin)
-    + '\n\nSus ventas, gastos y abonos quedan bloqueados. Siempre puedes reabrirlo.\n\n¿Cerramos?')) return;
-
-  const { cong } = await ejecutarCierreDeMes(mesStr, r.inicio, r.fin);
-  toast('🔒 ' + nombre + ' cerrado' + (cong.congeladas ? ' · ' + cong.congeladas + ' costo(s) congelado(s)' : ''));
-};
-
-function bloqueoInformeHtml(r) {
-  if(!r.esCiclo) return '';
-  const mesStr = getCicloActual(informesOffset).mesStr;
-  const c = cierreVigente(mesStr);
-  const reabierto = DATA.cierres.find(x => x.mes === mesStr && x.reabierto === true);
-
-  if(c) {
-    return '<div style="display:flex;align-items:center;gap:10px;background:var(--surface-2);border:1px solid var(--border-2);'
-      + 'border-left:3px solid var(--ink);border-radius:var(--radius);padding:11px 13px;margin-bottom:16px">'
-      + '<span style="font-size:15px">🔒</span>'
-      + '<span style="flex:1;min-width:0;font-size:12.5px;color:var(--ink-2);line-height:1.4">'
-        + '<strong style="color:var(--ink)">Mes cerrado.</strong> Sus ventas, gastos y abonos no se pueden tocar.'
-        + (c.fechaCierre ? ' Se cerró el ' + c.fechaCierre : '')
-        + (c.cerradoPor ? ' por ' + escTxt(c.cerradoPor) : '') + '.'
-        // 787. Que se vea que el margen de este mes ya no se puede mover por
-        //      la espalda: es la garantía que da el congelado.
-        + (c.costosCongelados > 0
-            ? ' <span style="color:var(--ink-3)">Costo clavado en ' + c.costosCongelados + ' venta'
-              + (c.costosCongelados !== 1 ? 's' : '') + ': cambiar un precio ya no mueve este margen.</span>'
-            : '')
-        + (c.ventasSinCosto > 0
-            ? ' <span style="color:var(--amber)">' + c.ventasSinCosto + ' quedaron sin costo.</span>'
-            : '')
-      + '</span>'
-      + '<button class="btn btn-sm" style="white-space:nowrap" onclick="reabrirMes(\'' + escAttr(mesStr) + '\')">🔓 Reabrir</button>'
-    + '</div>';
-  }
-  if(r.actual) {
-    return '<div style="display:flex;align-items:center;gap:10px;background:var(--surface-2);border:1px solid var(--border);'
-      + 'border-radius:var(--radius);padding:11px 13px;margin-bottom:16px">'
-      + '<span style="font-size:15px">⏳</span>'
-      + '<span style="font-size:12.5px;color:var(--ink-3);line-height:1.4">Este ciclo todavía está corriendo. '
-        + 'Se puede cerrar cuando termine, el ' + fCorta(r.fin) + '.</span>'
-    + '</div>';
-  }
-  return '<div style="display:flex;align-items:center;gap:10px;background:var(--amber-bg);border:1px solid var(--amber-bd);'
-    + 'border-radius:var(--radius);padding:11px 13px;margin-bottom:16px">'
-    + '<span style="font-size:15px">' + (reabierto ? '🔓' : '📂') + '</span>'
-    + '<span style="flex:1;min-width:0;font-size:12.5px;color:var(--amber-ink);line-height:1.4">'
-      + (reabierto
-          ? '<strong>Reabierto</strong> el ' + (reabierto.reabiertoEn||'') + (reabierto.reabiertoPor ? ' por ' + escTxt(reabierto.reabiertoPor) : '') + '. Acuérdate de volver a cerrarlo.'
-          : '<strong>Sin cerrar.</strong> Mientras no lo cierres, cualquiera puede editar sus ventas y gastos y este informe puede cambiar.')
-    + '</span>'
-    + '<button class="btn btn-sm btn-lime" style="white-space:nowrap" onclick="cerrarMesDesdeInformes(\'' + escAttr(mesStr) + '\')">🔒 Cerrar mes</button>'
-  + '</div>';
-}
 
 // ============================================================
 // 793. INTERRUPTOR DE TEMA
@@ -14909,123 +14618,6 @@ function palabraConcepto(clave, texto) {
     + ' title="¿Qué es ' + escAttr(g.titulo) + '?">' + escTxt(texto || g.titulo) + '</span>';
 }
 
-function renderInformes() {
-  const r = rangoInformes();
-  const F = estadoFinanciero(r.inicio, r.fin, { carteraViva: r.actual });
-  window._informeActual = { ...F, etiqueta: r.etiqueta };
-
-  // ---- Selector de periodo ----
-  const n = ciclosDisponibles();
-  let chips = '';
-  for(let i = 0; i <= n; i++) {
-    const c = getCicloActual(i);
-    const act = informesOffset === i;
-    const mes = c.label.charAt(0).toUpperCase() + c.label.slice(1).replace(' de ', ' ');
-    chips += '<button onclick="verCicloInformes(' + i + ')" style="padding:6px 13px;border-radius:20px;white-space:nowrap;'
-      + 'cursor:pointer;font-size:12.5px;border:1.5px solid ' + (act?'var(--ink)':'var(--border)') + ';'
-      + 'background:' + (act?'var(--ink)':'var(--surface)') + ';color:' + (act?'var(--on-ink)':'var(--ink-2)') + ';'
-      + 'font-weight:' + (act?'600':'400') + '">' + (i===0?'Este ciclo':mes) + '</button>';
-  }
-  const todo = informesOffset === -1;
-  chips += '<button onclick="verCicloInformes(-1)" style="padding:6px 13px;border-radius:20px;white-space:nowrap;'
-    + 'cursor:pointer;font-size:12.5px;border:1.5px solid ' + (todo?'var(--ink)':'var(--border)') + ';'
-    + 'background:' + (todo?'var(--ink)':'var(--surface)') + ';color:' + (todo?'var(--on-ink)':'var(--ink-2)') + ';'
-    + 'font-weight:' + (todo?'600':'400') + '">Todo</button>';
-
-  // ---- Aviso honesto: un informe que calla lo que no sabe no sirve ----
-  const aviso = F.ventasSinCosto > 0
-    ? '<div style="display:flex;gap:9px;align-items:flex-start;background:var(--amber-bg);border:1px solid var(--amber-bd);'
-      + 'border-radius:var(--radius);padding:11px 13px;margin-bottom:16px">'
-      + '<span style="font-size:14px">⚠️</span>'
-      + '<span style="font-size:12px;color:var(--amber-ink);line-height:1.45">'
-        + '<strong>' + F.ventasSinCosto + ' venta' + (F.ventasSinCosto!==1?'s':'') + ' sin costo registrado.</strong> '
-        + 'Esas ventas entran completas como utilidad bruta, así que el margen de este informe está por encima del real. '
-        + 'Se corrige poniéndoles el costo en Ventas.</span>'
-    + '</div>'
-    : '';
-
-  // ---- Estado de resultados ----
-  const maxCat = Math.max(...F.porCategoria.map(c => c.total), 1);
-  const categorias = F.porCategoria.map(c =>
-    '<div style="display:flex;align-items:center;gap:10px;padding:4px 0 4px 14px">'
-    + '<span style="flex:1;min-width:0;font-size:12px;color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + c.label + '</span>'
-    + '<span style="width:70px;height:5px;background:var(--surface-3);border-radius:20px;overflow:hidden;flex-shrink:0">'
-      + '<span style="display:block;height:100%;width:' + Math.max(4, Math.round((c.total/maxCat)*100)) + '%;background:var(--ink-3);border-radius:20px"></span>'
-    + '</span>'
-    + '<span style="font-size:12px;color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap;min-width:84px;text-align:right">' + fmt(c.total) + '</span>'
-  + '</div>').join('');
-
-  const colorNeta = F.utilidadNeta >= 0 ? 'var(--green)' : 'var(--red)';
-  const resultados = '<div class="card" style="padding:18px">'
-    + '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2)">📐 Estado de resultados</div>'
-    + '<div style="font-size:11.5px;color:var(--ink-3);margin:3px 0 12px">' + r.etiqueta + ' · ' + fCorta(r.inicio) + ' al ' + fCorta(r.fin) + '</div>'
-    + renglonInforme(palabraConcepto('vendido','Ventas del periodo'), F.vendido, '', 'normal', F.nVentas + ' venta' + (F.nVentas!==1?'s':'') + ' · ticket promedio ' + fmt(F.ticket))
-    + renglonInforme('Costo de la mercancía vendida', F.costoVendido, '−', 'normal', 'solo el costo de lo que SÍ se vendió')
-    + renglonInforme(palabraConcepto('margenBruto','Utilidad bruta'), F.utilidadBruta, '', 'total', F.margenPct + '% sobre ventas')
-    + '<div style="margin:10px 0 2px;font-size:11px;font-weight:700;color:var(--ink-2);text-transform:uppercase;letter-spacing:.04em">Gastos de operación</div>'
-    + categorias
-    + renglonInforme(palabraConcepto('gastos','Total gastos de operación'), F.gastosOperacion, '−', 'normal')
-    + renglonInforme('Utilidad operacional', F.utilidadOperacional, F.utilidadOperacional < 0 ? '−' : '', 'total',
-        'lo que deja el negocio antes de los intereses', F.utilidadOperacional >= 0 ? 'var(--ink)' : 'var(--red)')
-    + renglonInforme('Gastos financieros', F.gastosFinancieros, '−', 'normal', 'intereses, comisiones bancarias, 4×1000')
-    + renglonInforme(palabraConcepto('utilidadNeta','Utilidad neta'), F.utilidadNeta, F.utilidadNeta < 0 ? '−' : '', 'final',
-        F.margenNetoPct + '% sobre ventas', colorNeta)
-    + '<div style="font-size:11px;color:var(--ink-3);margin-top:12px;line-height:1.45;padding-top:10px;border-top:1px solid var(--border)">'
-      + 'La compra de mercancía (' + fmt(F.compras) + ' en este periodo) no es un gasto: es inventario. '
-      + 'Su costo entra aquí solo cuando el producto se vende, dentro del costo de la mercancía vendida.</div>'
-  + '</div>';
-
-  // ---- Flujo de caja ----
-  const C = F.caja;
-  const flujo = '<div class="card" style="padding:18px">'
-    + '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2)">🏦 Flujo de caja</div>'
-    + '<div style="font-size:11.5px;color:var(--ink-3);margin:3px 0 12px">Plata que de verdad entró y salió en el periodo</div>'
-    + renglonInforme('Te pagaron de contado', C.contado, '', 'normal', 'el pago del día de cada venta')
-    + renglonInforme('Abonos que entraron', C.abonos, '', 'normal', 'fechados en este periodo, sea de cuando sea la venta')
-    + renglonInforme(palabraConcepto('cobrosViejos','Cobros de cuentas viejas'), C.cobrosViejos, '', 'normal', F.nCobros + ' movimiento' + (F.nCobros!==1?'s':'') + ' · no son venta nueva')
-    + renglonInforme('Total que entró', C.entradas, '', 'total', null, 'var(--green)')
-    + renglonInforme(palabraConcepto('mercancia','Compra de mercancía'), C.compras, '−', 'normal', 'no es gasto, pero del banco salió')
-    + renglonInforme('Gastos de operación', C.gastosOperacion, '−', 'normal')
-    + renglonInforme('Gastos financieros', C.gastosFinancieros, '−', 'normal')
-    + renglonInforme('Total que salió', C.salidas, '−', 'total', null, 'var(--red)')
-    + renglonInforme(palabraConcepto('flujoCaja','Movimiento del banco'), C.neto, C.neto < 0 ? '−' : '', 'final', null, C.neto >= 0 ? 'var(--ink)' : 'var(--red)')
-    + (C.fiado > 0
-        ? '<div style="font-size:11.5px;color:var(--ink-3);margin-top:12px;line-height:1.45;padding-top:10px;border-top:1px solid var(--border)">'
-          + 'De las ventas de este periodo quedaron <strong style="color:var(--ink-2)">' + fmt(C.fiado) + '</strong> sin cobrar. '
-          + 'Esa plata ya cuenta como venta arriba, pero todavía no llegó al banco.</div>'
-        : '')
-  + '</div>';
-
-  // ---- Posición al cierre ----
-  const dato = (etiqueta, valor, sub, color) =>
-    '<div class="metric-card"><div class="metric-label">' + etiqueta + '</div>'
-    + '<div class="metric-value" style="font-size:19px;color:' + (color||'var(--ink)') + '">' + valor + '</div>'
-    + '<div class="metric-sub">' + sub + '</div></div>';
-  const posicion = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-top:16px">'
-    + dato(palabraConcepto('porCobrar','Cartera por cobrar'), fmt(F.cartera), r.actual ? 'toda la que está viva hoy' : 'lo que dejó debiendo este periodo', F.cartera > 0 ? 'var(--amber)' : 'var(--green)')
-    // 815. Fuera "Inventario a costo": salía de un stock que no existe, y en
-    //      un informe que se le pasa a un contador eso es peor que un hueco.
-    + ''
-    + dato('Margen bruto', F.margenPct + '%', 'sobre las ventas del periodo')
-    + dato('Margen neto', F.margenNetoPct + '%', 'después de todos los gastos', F.utilidadNeta >= 0 ? 'var(--green)' : 'var(--red)')
-  + '</div>';
-
-  document.getElementById('page-informes').innerHTML =
-    '<div class="page-header">'
-      + '<div><div class="page-title">Informes</div>'
-        + '<div class="page-sub">Lo que se le pasa a un contador, a un banco o a un socio</div></div>'
-      + '<div style="display:flex;gap:8px">'
-        + '<button class="btn btn-sm" onclick="exportarInformePDF()">↓ PDF</button>'
-        + '<button class="btn btn-sm" onclick="exportarInformeExcel()">↓ Excel</button>'
-      + '</div>'
-    + '</div>'
-    + '<div style="display:flex;gap:7px;overflow-x:auto;padding-bottom:4px;margin-bottom:14px">' + chips + '</div>'
-    + bloqueoInformeHtml(r)
-    + aviso
-    + '<div style="display:flex;flex-direction:column;gap:14px">' + resultados + flujo + '</div>'
-    + posicion;
-}
-
 // ============================================================
 // 783. EXPORTAR EL INFORME — PDF para mandar, Excel para trabajar
 //
@@ -15037,173 +14629,8 @@ function renderInformes() {
 // en la carga de la app para una exportación ocasional castigaría cada
 // apertura desde el celular, que es como se usa esto el 90% del tiempo.
 // ============================================================
-let _sheetJsCargando = null;
-function cargarSheetJs() {
-  if(window.XLSX) return Promise.resolve(window.XLSX);
-  if(_sheetJsCargando) return _sheetJsCargando;
-  _sheetJsCargando = new Promise((resolver, rechazar) => {
-    const sc = document.createElement('script');
-    sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
-    sc.onload = () => resolver(window.XLSX);
-    sc.onerror = () => { _sheetJsCargando = null; rechazar(new Error('No se pudo cargar el generador de Excel')); };
-    document.head.appendChild(sc);
-  });
-  return _sheetJsCargando;
-}
-
 // Las filas del informe, en un solo sitio. PDF y Excel las pintan distinto
 // pero dicen exactamente lo mismo: si divergen, es que hay dos informes.
-function filasInforme(F) {
-  const filas = [
-    ['ESTADO DE RESULTADOS', ''],
-    ['Ventas del periodo', F.vendido],
-    ['Costo de la mercancía vendida', -F.costoVendido],
-    ['UTILIDAD BRUTA', F.utilidadBruta],
-    ['Margen bruto (%)', F.margenPct + '%'],
-    ['', ''],
-    ['GASTOS DE OPERACIÓN', ''],
-  ];
-  F.porCategoria.forEach(c => filas.push(['   ' + c.label, -c.total]));
-  filas.push(['Total gastos de operación', -F.gastosOperacion]);
-  filas.push(['UTILIDAD OPERACIONAL', F.utilidadOperacional]);
-  filas.push(['Gastos financieros', -F.gastosFinancieros]);
-  filas.push(['UTILIDAD NETA', F.utilidadNeta]);
-  filas.push(['Margen neto (%)', F.margenNetoPct + '%']);
-  filas.push(['', '']);
-  filas.push(['FLUJO DE CAJA', '']);
-  filas.push(['Te pagaron de contado', F.caja.contado]);
-  filas.push(['Abonos que entraron', F.caja.abonos]);
-  filas.push(['Cobros de cuentas viejas', F.caja.cobrosViejos]);
-  filas.push(['TOTAL QUE ENTRÓ', F.caja.entradas]);
-  filas.push(['Compra de mercancía', -F.caja.compras]);
-  filas.push(['Gastos de operación', -F.caja.gastosOperacion]);
-  filas.push(['Gastos financieros', -F.caja.gastosFinancieros]);
-  filas.push(['TOTAL QUE SALIÓ', -F.caja.salidas]);
-  filas.push(['MOVIMIENTO DEL BANCO', F.caja.neto]);
-  filas.push(['', '']);
-  filas.push(['POSICIÓN AL CIERRE', '']);
-  filas.push(['Cartera por cobrar', F.cartera]);
-  filas.push(['Quedó fiado del periodo', F.caja.fiado]);
-  filas.push(['Inventario a costo', F.valorInventario]);
-  filas.push(['Número de ventas', F.nVentas]);
-  filas.push(['Ticket promedio', F.ticket]);
-  filas.push(['Compra de mercancía del periodo', F.compras]);
-  return filas;
-}
-
-const esTituloInforme = (t) => t === t.toUpperCase() && t.trim() !== '' && !t.startsWith('   ');
-
-window.exportarInformePDF = () => {
-  const F = window._informeActual;
-  if(!F) { alert('Abre primero un periodo en Informes.'); return; }
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ unit:'mm', format:'letter' });
-  const M = 18;
-  let y = 22;
-
-  doc.setFillColor(17,24,39); doc.rect(0,0,216,15,'F');
-  doc.setTextColor(200,224,90); doc.setFont('helvetica','bold'); doc.setFontSize(13);
-  doc.text('DUPPLA', M, 10);
-  doc.setTextColor(255,255,255); doc.setFont('helvetica','normal'); doc.setFontSize(8);
-  doc.text('Informe financiero', M + 24, 10);
-
-  y = 26;
-  doc.setTextColor(17,24,39); doc.setFont('helvetica','bold'); doc.setFontSize(15);
-  doc.text(F.etiqueta, M, y);
-  y += 6;
-  doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(110,115,125);
-  doc.text('Periodo del ' + F.inicio + ' al ' + F.fin + '   ·   Generado el ' + today(), M, y);
-  y += 9;
-
-  filasInforme(F).forEach(([etiqueta, valor]) => {
-    if(y > 250) { doc.addPage(); y = 22; }
-    if(etiqueta === '') { y += 3; return; }
-    const titulo = esTituloInforme(etiqueta);
-    const resaltar = titulo && valor !== '';
-    if(titulo && valor === '') {
-      y += 3;
-      doc.setDrawColor(225,228,232); doc.line(M, y - 3.5, 216 - M, y - 3.5);
-      doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(17,24,39);
-      doc.text(etiqueta, M, y);
-      y += 6;
-      return;
-    }
-    doc.setFont('helvetica', resaltar ? 'bold' : 'normal');
-    doc.setFontSize(resaltar ? 10.5 : 9.5);
-    doc.setTextColor(resaltar ? 17 : 90, resaltar ? 24 : 95, resaltar ? 39 : 105);
-    doc.text(etiqueta, M, y);
-    const txt = typeof valor === 'number' ? fmt(valor) : String(valor);
-    doc.text(txt, 216 - M, y, { align:'right' });
-    if(resaltar) { doc.setDrawColor(225,228,232); doc.line(M, y + 1.8, 216 - M, y + 1.8); }
-    y += resaltar ? 8 : 6;
-  });
-
-  if(F.ventasSinCosto > 0) {
-    y += 4;
-    doc.setFont('helvetica','italic'); doc.setFontSize(8); doc.setTextColor(146,64,14);
-    doc.text(F.ventasSinCosto + ' venta(s) de este periodo no tienen costo registrado: el margen real puede ser menor.', M, y);
-  }
-
-  doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(150,155,165);
-  doc.text('La compra de mercancía no se considera gasto: es inventario. Su costo entra al venderse.', M, 265);
-
-  doc.save('duppla-informe-' + F.etiqueta.toLowerCase().replace(/\s+/g,'-') + '.pdf');
-  toast('📄 Informe en PDF descargado');
-};
-
-window.exportarInformeExcel = async () => {
-  const F = window._informeActual;
-  if(!F) { alert('Abre primero un periodo en Informes.'); return; }
-  toast('Preparando el Excel…');
-  let XLSX;
-  try { XLSX = await cargarSheetJs(); }
-  catch(e) { alert('No se pudo cargar el generador de Excel. Revisa la conexión e intenta de nuevo.'); return; }
-
-  const wb = XLSX.utils.book_new();
-
-  // Hoja 1 — el informe
-  const hoja = [
-    ['DUPPLA — Informe financiero'],
-    [F.etiqueta],
-    ['Periodo', F.inicio, 'al', F.fin],
-    ['Generado', today()],
-    [],
-    ...filasInforme(F)
-  ];
-  const ws = XLSX.utils.aoa_to_sheet(hoja);
-  ws['!cols'] = [{ wch: 38 }, { wch: 18 }];
-  XLSX.utils.book_append_sheet(wb, ws, 'Informe');
-
-  // Hoja 2 — las ventas que lo sustentan. Un informe sin su detalle es un
-  // número que hay que creer; con el detalle, se puede auditar.
-  const ventas = DATA.ventas.filter(v => v.fecha >= F.inicio && v.fecha <= F.fin)
-    .sort((a,b) => a.fecha > b.fecha ? 1 : -1);
-  const wsV = XLSX.utils.aoa_to_sheet([
-    ['Fecha','Cliente','Canal','Producto','Cantidad','Total','Pagado','Saldo','Margen'],
-    ...ventas.map(v => {
-      const m = calcularMargenVenta(v);
-      return [v.fecha, v.cliente||'', v.canal||'', lineasDeVenta(v).map(l => l.cant+'x '+l.nombre).join(' · '),
-        lineasDeVenta(v).reduce((a,l)=>a+l.cant,0), ingresoVenta(v), Number(v.pagado||0), saldoReal(v), m === null ? 'sin costo' : m];
-    })
-  ]);
-  wsV['!cols'] = [{wch:12},{wch:26},{wch:13},{wch:40},{wch:9},{wch:13},{wch:13},{wch:12},{wch:13}];
-  XLSX.utils.book_append_sheet(wb, wsV, 'Ventas');
-
-  // Hoja 3 — los gastos, con la mercancía marcada aparte
-  const gastos = DATA.gastos.filter(g => g.fecha >= F.inicio && g.fecha <= F.fin)
-    .sort((a,b) => a.fecha > b.fecha ? 1 : -1);
-  const wsG = XLSX.utils.aoa_to_sheet([
-    ['Fecha','Categoría','Descripción','Valor','Naturaleza','Fijo o variable'],
-    ...gastos.map(g => [g.fecha, CATS[g.cat]||g.cat||'', g.desc||'', Number(g.valor||0),
-      esCompraMercancia(g) ? 'Mercancía (inventario)' : esGastoFinanciero(g) ? 'Financiero' : 'Operación',
-      esGastoFijo(g) ? 'Fijo' : 'Variable'])
-  ]);
-  wsG['!cols'] = [{wch:12},{wch:16},{wch:40},{wch:14},{wch:24},{wch:15}];
-  XLSX.utils.book_append_sheet(wb, wsG, 'Gastos');
-
-  XLSX.writeFile(wb, 'duppla-informe-' + F.etiqueta.toLowerCase().replace(/\s+/g,'-') + '.xlsx');
-  toast('📊 Informe en Excel descargado');
-};
 
 function renderDistribuidores() {
   const tipoIco   = { gimnasio:'🏋️', persona:'👤', tienda:'🏪' };
