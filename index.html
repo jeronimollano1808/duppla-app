@@ -3601,7 +3601,8 @@ const MENU = [
   { id:'resumen', label:'Resumen del mes', ico:'📅', group:'Cómo vamos' },
 
   // --- Operación: de vez en cuando ---
-  { id:'pedidos', label:'Pedidos', ico:'📦', group:'Operación' },
+  // 832. Una sola entrada: adentro están Proveedores y Pedidos
+  //      (ver FAMILIA_PROVEEDORES).
   { id:'proveedores', label:'Proveedores', ico:'🚚', group:'Operación' },
   // 816. Combos sale del menú. Ángel ya había dicho que los combos de la web
   //      "pueden valer más o menos dependiendo de varias cosas", así que un
@@ -3952,15 +3953,42 @@ const FAMILIA_CLIENTES = [
   { id:'distribuidores', label:'Distribuidores', ico:'🏋️' }
 ];
 
-// La barra que va arriba de las cuatro. El número de cada pestaña se calcula
-// aquí y no en cada pantalla: así no hay dos sitios contando lo mismo.
-function tabsClientesHtml(activa) {
-  const enMora = calcularDeudores().filter(d => d.enMora).length;
-  const recompras = calcularRecompras().length;
-  const cuenta = { deudores: enMora, recompras };
+// 832. Ángel: "Proveedores y Pedidos se puede hacer en la misma pestaña
+//      Proveedores". Misma idea del 831 y misma razón: las dos hablan de a
+//      quién le compramos. Con DOS familias, la barra deja de escribirse dos
+//      veces y pasa a ser una sola pieza con parámetros — copiar la función
+//      habría sido garantizar que dentro de un mes una de las dos tenga un
+//      arreglo que la otra no.
+const FAMILIA_PROVEEDORES = [
+  { id:'proveedores', label:'Proveedores', ico:'🚚' },
+  { id:'pedidos',     label:'Pedidos',     ico:'📦' }
+];
+
+// A qué familia pertenece una pantalla. Si no está en ninguna, no lleva barra.
+function familiaDe(id) {
+  if(FAMILIA_CLIENTES.some(t => t.id === id)) return FAMILIA_CLIENTES;
+  if(FAMILIA_PROVEEDORES.some(t => t.id === id)) return FAMILIA_PROVEEDORES;
+  return null;
+}
+
+// Los números de cada pestaña se calculan AQUÍ, en un solo sitio, y no en
+// cada pantalla: así no hay dos lugares contando lo mismo.
+function cuentasDeFamilia() {
+  return {
+    deudores: calcularDeudores().filter(d => d.enMora).length,
+    recompras: calcularRecompras().length,
+    pedidos: DATA.pedidos.filter(p => Number(p.saldo||0) > 0).length
+  };
+}
+
+// La barra que va arriba de las pantallas de una familia.
+function tabsFamiliaHtml(activa) {
+  const familia = familiaDe(activa);
+  if(!familia) return '';
+  const cuenta = cuentasDeFamilia();
   return '<div style="display:flex;gap:7px;overflow-x:auto;padding-bottom:4px;margin-bottom:16px;'
     + '-webkit-overflow-scrolling:touch">'
-    + FAMILIA_CLIENTES.map(t => {
+    + familia.map(t => {
         const act = t.id === activa;
         const n = cuenta[t.id] || 0;
         return '<button onclick="showPage(\'' + t.id + '\')" style="padding:7px 14px;border-radius:20px;'
@@ -3971,7 +3999,9 @@ function tabsClientesHtml(activa) {
           + 'font-weight:' + (act ? '600' : '400') + '">'
           + '<span>' + t.ico + '</span>' + t.label
           + (n > 0
-              ? '<span style="background:' + (act ? 'var(--on-ink)' : (t.id==='deudores' ? 'var(--red)' : 'var(--blue)'))
+              // Rojo = plata que se debe (deudores, pedidos por pagar).
+              //  Azul = tarea pendiente (recompras).
+              ? '<span style="background:' + (act ? 'var(--on-ink)' : (/deudores|pedidos/.test(t.id) ? 'var(--red)' : 'var(--blue)'))
                 + ';color:' + (act ? 'var(--ink)' : 'var(--on-ink)') + ';border-radius:20px;'
                 + 'padding:0 6px;font-size:10px;font-weight:700;min-width:16px;text-align:center">' + n + '</span>'
               : '')
@@ -3987,6 +4017,8 @@ function buildNav() {
   const enMoraNav = calcularDeudores().filter(d => d.enMora).length;
   // 642. Badge de recompras próximas en "Clientes" — mismo patrón que el de Deudores.
   const recomprasNav = calcularRecompras().length;
+  // 832. Pedidos con saldo: lo que le debemos a los proveedores.
+  const porPagarNav = DATA.pedidos.filter(p => Number(p.saldo||0) > 0).length;
   let html = '';
   // 796. Se recorren los GRUPOS y dentro de cada uno sus ítems. Con el bucle
   //      viejo —recorrer ítems y sacar título cuando cambiaba el grupo— un
@@ -4005,11 +4037,15 @@ function buildNav() {
       : '';
     const badge = m.id === 'clientes'
       ? `<span style="margin-left:auto;display:flex;gap:4px">${pastilla(enMoraNav,'var(--red)')}${pastilla(recomprasNav,'var(--blue)')}</span>`
+      : m.id === 'proveedores'
+      ? `<span style="margin-left:auto">${pastilla(porPagarNav,'var(--red)')}</span>`   // 832
       : '';
-    // El botón se queda encendido con cualquiera de las cuatro pantallas de
-    // la familia: si no, al entrar a Deudores el menú no marcaba nada.
+    // 831/832. El botón se queda encendido con cualquier pantalla de SU
+    //      familia: si no, al entrar a Deudores o a Pedidos el menú no
+    //      marcaba nada y uno perdía de vista dónde estaba.
+    const familiaDelBoton = familiaDe(m.id);
     const activo = m.id === currentPage
-      || (m.id === 'clientes' && FAMILIA_CLIENTES.some(t => t.id === currentPage));
+      || (!!familiaDelBoton && familiaDelBoton === familiaDe(currentPage));
     html += `<button class="nav-btn${activo?' active':''}" onclick="showPage('${m.id}')" style="display:flex;align-items:center">
       <span class="ico">${m.ico}</span>${m.label}${badge}
     </button>`;
@@ -6580,7 +6616,7 @@ function renderRecompras() {
   // dice exactamente qué falta y abre la pantalla para llenarlo.
   if(sinDuracion === total && total > 0) {
     document.getElementById('page-recompras').innerHTML =
-      tabsClientesHtml('recompras')   // 831
+      tabsFamiliaHtml('recompras')   // 831
       + '<div class="page-header"><div><div class="page-title">Recompras</div>'
       + '<div class="page-sub">A quién escribirle porque se le está acabando</div></div></div>'
       + '<div class="card" style="padding:26px;text-align:center">'
@@ -6652,7 +6688,7 @@ function renderRecompras() {
     : '';
 
   document.getElementById('page-recompras').innerHTML =
-    tabsClientesHtml('recompras')   // 831
+    tabsFamiliaHtml('recompras')   // 831
     + '<div class="page-header">'
       + '<div><div class="page-title">Recompras</div>'
       // 829. El subtítulo dice "clientes" a propósito: los distribuidores no
@@ -6730,7 +6766,7 @@ function renderClientes() {
     </tr>`;
   }).join('');
 
-  document.getElementById('page-clientes').innerHTML = tabsClientesHtml('clientes') + `
+  document.getElementById('page-clientes').innerHTML = tabsFamiliaHtml('clientes') + `
     <div class="page-header">
       <div><div class="page-title">Clientes</div><div class="page-sub">${clientes.length} clientes · toca uno para ver su historial</div></div>
       ${gruposNombresRepetidos().length
@@ -7324,7 +7360,7 @@ function renderProveedores() {
     </div>`;
   }).join('');
 
-  document.getElementById('page-proveedores').innerHTML = `
+  document.getElementById('page-proveedores').innerHTML = tabsFamiliaHtml('proveedores') + `
     <div class="page-header">
       <div><div class="page-title">Proveedores</div><div class="page-sub">${DATA.proveedores.length} proveedores</div></div>
       <button class="btn btn-lime btn-sm" onclick="openModal('modal-proveedor')">+ Agregar proveedor</button>
@@ -7426,7 +7462,7 @@ function renderPedidos() {
     </div>`;
   }).join('');
 
-  document.getElementById('page-pedidos').innerHTML = `
+  document.getElementById('page-pedidos').innerHTML = tabsFamiliaHtml('pedidos') + `
     <div class="page-header">
       <div><div class="page-title">Pedidos a proveedores</div><div class="page-sub">${DATA.pedidos.length} pedidos</div></div>
       <button class="btn btn-lime btn-sm" onclick="abrirModalPedido()">+ Nuevo pedido</button>
@@ -10378,7 +10414,7 @@ function renderDeudores() {
     : '<div class="empty-state"><div class="empty-state-icon">📦</div><div class="empty-state-text">Sin consumos registrados</div><div class="empty-state-sub">Registra lo que Ángel o Jero retiran del inventario</div></div>';
 
   document.getElementById('page-deudores').innerHTML =
-    tabsClientesHtml('deudores')   // 831
+    tabsFamiliaHtml('deudores')   // 831
     + '<div class="page-header"><div><div class="page-title">Deudores</div>'
       + '<div class="page-sub">Para cerrar una venta con saldo usa <strong>+ Abono</strong>. '
       + 'Si te pagan algo de un mes viejo que no está en la app, va por <strong>Cobro de cuenta</strong>.</div></div>'
@@ -15430,7 +15466,7 @@ function renderDistribuidores() {
   }
 
   document.getElementById('page-distribuidores').innerHTML =
-    tabsClientesHtml('distribuidores')   // 831
+    tabsFamiliaHtml('distribuidores')   // 831
     + '<div class="page-header">'
       + '<div><div class="page-title">Distribuidores</div><div class="page-sub">Cuánto compra cada gimnasio, mes a mes</div></div>'
       + '<div style="display:flex;gap:8px">'

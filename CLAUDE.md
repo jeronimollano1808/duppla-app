@@ -1229,5 +1229,14 @@ El subtítulo de la pantalla pasó a decir "**Clientes** a quienes escribirles":
 **El menú se queda encendido con cualquiera de las cuatro.** Sin eso, al entrar a Deudores la barra lateral no marcaba nada y uno perdía de vista dónde estaba.
 
 
+### 14.38 Proveedores se traga a Pedidos, y la barra se vuelve una sola pieza (comentario 832)
+
+Ángel: *"Proveedores y Pedidos se puede hacer en la misma pestaña Proveedores"*. Mismo movimiento del 831 y por la misma razón: las dos hablan de a quién le compramos.
+
+**Lo que cambió de fondo no fue el menú, fue la barra.** Con UNA familia, `tabsClientesHtml` podía quedarse como estaba. Con DOS, copiarla habría sido garantizar que dentro de un mes una tenga un arreglo que la otra no. Así que pasó a ser una sola pieza con parámetros: `FAMILIA_CLIENTES` y `FAMILIA_PROVEEDORES` son datos, `familiaDe(id)` dice a cuál pertenece cada pantalla (y devuelve `null` para las que no llevan barra), y `tabsFamiliaHtml` las pinta. El botón del menú se enciende comparando familias, no listas escritas a mano. *La segunda vez que se copia algo es cuando toca extraerlo; la tercera ya es tarde.*
+
+**El color de la pastilla dice qué clase de pendiente es:** rojo para plata que se debe (deudores en mora, pedidos con saldo) y azul para tarea por hacer (recompras). Antes el rojo estaba atado al id `deudores`; ahora lo decide el significado, no el nombre de la pantalla.
+
+
 ---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*
