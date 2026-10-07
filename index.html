@@ -85,11 +85,33 @@
   --on-lime:#101114;  /* texto sobre el lima fuerte: siempre oscuro */
   --on-ink:#FFFFFF;   /* texto sobre un fondo oscuro fuerte */
   /* ---- Paleta de las gráficas -------------------------------
-     Validada para daltonismo sobre fondo claro (ΔE adyacente ≥ 9.1).
-     El JS las lee de aquí (ver 794). */
-  --serie-1:#2a78d6; --serie-2:#eb6834; --serie-3:#1baf7a;
-  --serie-4:#eda100; --serie-5:#e87ba4; --serie-6:#008300;
+     835. Pasó de SEIS matices a DIEZ. Ángel: "en las de la dona la gran
+     mayoría son colores grises, quiero que haya muchos colores que se
+     diferencien". Con seis, una dona de catorce productos salía con ocho
+     pedazos en gris.
+     El orden NO es decorativo: es el mecanismo de seguridad. Los pedazos
+     de la dona van ordenados de mayor a menor, así que el vecino de cada
+     color es el siguiente de esta lista. Se probaron órdenes al azar con
+     el validador y se escogió uno que pasa todas las puertas sobre fondo
+     blanco: peor par vecino ΔE 15.0 para daltonismo (la meta es 8) y
+     24.1 para visión normal (el piso es 15). Cambiar el orden rompe eso:
+     si se toca, hay que volver a validar.
+     Tres de los diez quedan por debajo de 3:1 de contraste contra el
+     blanco (aqua, rosa y amarillo). Eso es legal aquí porque cada pedazo
+     lleva su nombre escrito al lado en la leyenda: el color nunca es la
+     única forma de saber quién es quién. */
+  --serie-1:#2a78d6;  /* azul      */  --serie-2:#eb6834;  /* naranja   */
+  --serie-3:#9b59b6;  /* morado    */  --serie-4:#1baf7a;  /* aqua      */
+  --serie-5:#4a3aa7;  /* violeta   */  --serie-6:#e87ba4;  /* rosa      */
+  --serie-7:#008300;  /* verde     */  --serie-8:#eda100;  /* amarillo  */
+  --serie-9:#0f8fa8;  /* petróleo  */  --serie-10:#e34948; /* rojo      */
   --serie-otros:#9CA3AF;
+  /* 835. El gris de TODAS las barras de progreso y comparación.
+     Antes cada barra traía su propio color (lima aquí, azul allá) sin que
+     ese color significara nada. Ahora el color de una barra solo aparece
+     cuando dice algo —el mes en curso, el punto de equilibrio cubierto— y
+     el resto del tiempo es este grafito. */
+  --barra-neutra:#6E7681;
   /* 826. Escala de grises para la cola de las donas: del 7º en adelante,
      cada uno sigue teniendo su nombre y su pedazo, pero en gris. */
   --gris-cola-1:#AEB4BB; --gris-cola-2:#99A0A8; --gris-cola-3:#848C95;
@@ -648,14 +670,18 @@ body.solo-lectura .barra-sesion{background:var(--blue-bg)}
   border-radius:999px;font-size:12.5px;font-weight:600;
   letter-spacing:-.01em;white-space:nowrap;
 }
-.b-web{background:var(--blue-bg);color:var(--blue-ink)}
-.b-directo{background:var(--lime-bg);color:var(--lime)}
-.b-distribuidor{background:var(--amber-bg-2);color:var(--amber-ink)}
+/* 835. REGLA DEL COLOR EN LAS ETIQUETAS.
+   Una etiqueta que solo DESCRIBE —el canal de la venta, el tipo de
+   precio, que ya está pagada— va en gris. Una etiqueta que pide algo
+   —en mora, pendiente, revisar— va en color.
+   Antes el canal era lima, el tipo de precio azul y "pagado" verde, así
+   que una tabla de veinte ventas normales salía pintada de tres colores
+   sin que ninguno quisiera decir nada. Cuando todo está en rojo, nada
+   está en rojo. Ángel: "que no haya mucha gama de colores por mucho
+   lado... solo en la dona y si tenemos una alerta". */
+.b-web,.b-directo,.b-distribuidor,.b-info,.b-success,.b-gray{background:var(--surface-3);color:var(--ink-2)}
 .b-danger{background:var(--red-bg);color:var(--red)}
-.b-warning{background:var(--amber-bg);color:var(--amber)}
-.b-success{background:var(--green-bg);color:var(--green)}
-.b-info{background:var(--blue-bg);color:var(--blue)}
-.b-gray{background:var(--surface-3);color:var(--ink-2)}
+.b-warning{background:var(--amber-bg);color:var(--amber-ink)}
 
 /* ============================================================
    17. BOTONES
@@ -864,6 +890,15 @@ button.lista-fila{cursor:pointer}
 }
 /* Sin ícono, el separador arranca donde arranca el texto. */
 .lista-fila.sin-ico + .lista-fila.sin-ico::before{left:16px}
+/* 836. Cuando una fila lleva su detalle plegado debajo, la fila y su
+   detalle van envueltos en un .lista-item: el separador tiene que
+   dibujarse entre ITEMS, no entre filas, o se pierde en cuanto uno
+   se abre. */
+.lista-item{position:relative}
+.lista-item + .lista-item::before{content:'';position:absolute;left:56px;right:0;top:0;height:1px;background:var(--border)}
+.lista-detalle{padding:2px 16px 15px 56px}
+.lista-chev.abierto{transform:rotate(90deg)}
+.lista-chev{transition:transform .18s cubic-bezier(.34,1.56,.64,1);display:inline-block}
 @media (hover:hover){ button.lista-fila:hover{background:var(--surface-3)} }
 button.lista-fila:active{background:var(--border)}
 .lista-ico{
@@ -872,14 +907,14 @@ button.lista-fila:active{background:var(--border)}
   background:var(--surface-3);
 }
 .lista-txt{flex:1;min-width:0}
-.lista-tit{font-size:15px;color:var(--ink);letter-spacing:-.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.lista-sub{font-size:13px;color:var(--ink-3);margin-top:1px}
+.lista-tit{display:block;font-size:15px;color:var(--ink);letter-spacing:-.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lista-sub{display:block;font-size:13px;color:var(--ink-3);margin-top:1px;line-height:1.3}
 .lista-val{font-size:15px;color:var(--ink-3);font-variant-numeric:tabular-nums;white-space:nowrap}
 .lista-chev{color:var(--ink-3);opacity:.45;font-size:17px;flex-shrink:0;margin-left:2px}
 
 /* 834. Barra de progreso del estilo: alta, muy redonda, sin borde. */
 .barra{height:8px;background:var(--surface-3);border-radius:999px;overflow:hidden}
-.barra > i{display:block;height:100%;border-radius:999px;background:var(--lime-accent);transition:width .35s cubic-bezier(.22,1,.36,1)}
+.barra > i{display:block;height:100%;border-radius:999px;background:var(--barra-neutra);transition:width .35s cubic-bezier(.22,1,.36,1)}
 
 /* ============================================================
    22. ESTADO VACÍO
@@ -1168,7 +1203,6 @@ button.lista-fila:active{background:var(--border)}
     <div class="page" id="page-pedidos"></div>
     <!-- 782. Informes: estado de resultados y flujo de caja, exportables. -->
     <!-- 805. Resumen del mes y 806. Usuarios -->
-    <div class="page" id="page-resumen"></div>
     <div class="page" id="page-usuarios"></div>
     <!-- 178. Página de combos -->
     <div class="page" id="page-combos"></div>
@@ -3574,9 +3608,10 @@ const MENU = [
   // 489. Consignación — tiendas con producto que todavía no han comprado
   { id:'consignacion', label:'Consignación', ico:'🏪', group:'Quién compra' },
 
-  // --- Cómo vamos: para mirar, no para registrar ---
-  // 805. Resumen del mes — qué se vendió, cuánto y de qué. Lo ven los tres.
-  { id:'resumen', label:'Resumen del mes', ico:'📅', group:'Cómo vamos' },
+  // 836. Aquí estaba "Resumen del mes", y con ella se fue el grupo entero
+  //       "Cómo vamos": de sus siete bloques, tres eran la misma dona de
+  //       Inicio y uno la misma tabla. Los cuatro que sí eran suyos bajaron
+  //       a Inicio, plegados (ver `detalleMesHtml`).
 
   // --- Operación: de vez en cuando ---
   // 832. Una sola entrada: adentro están Proveedores y Pedidos
@@ -4074,7 +4109,7 @@ function renderPage(id) {
     inventario:renderInventario, clientes:renderClientes,
     gastos:renderGastos, proveedores:renderProveedores,
     pedidos:renderPedidos, combos:renderCombos,
-    resumen:renderResumenMes, usuarios:renderUsuarios,
+    usuarios:renderUsuarios,
     recompras:renderRecompras,
     deudores:renderDeudores,
     distribuidores:renderDistribuidores,
@@ -4457,22 +4492,22 @@ function renderVentas() {
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:16px">
       <div class="metric-card">
         <div class="metric-label">Total ingresos</div>
-        <div class="metric-value" style="font-size:18px;color:var(--lime)">${fmt(totalIngresos)}</div>
+        <div class="metric-value" style="font-size:18px;color:var(--ink)">${fmt(totalIngresos)}</div>
         <div class="metric-sub">${totalVentas} ventas registradas</div>
       </div>
       <div class="metric-card">
         <div class="metric-label">Cobrado efectivo</div>
-        <div class="metric-value" style="font-size:18px;color:var(--green)">${fmt(totalCobrado)}</div>
+        <div class="metric-value" style="font-size:18px;color:var(--ink)">${fmt(totalCobrado)}</div>
         <div class="metric-sub">Dinero en mano</div>
       </div>
       <div class="metric-card">
         <div class="metric-label">Cartera pendiente</div>
-        <div class="metric-value" style="font-size:18px;color:${carteraPendiente>0?'var(--red)':'var(--green)'}">${fmt(carteraPendiente)}</div>
+        <div class="metric-value" style="font-size:18px;color:${carteraPendiente>0?'var(--red)':'var(--ink)'}">${fmt(carteraPendiente)}</div>
         <div class="metric-sub">${ventasPeriodoActual.filter(v=>saldoReal(v)>0).length} ventas por cobrar</div>
       </div>
       <div class="metric-card" title="Ingresos menos el costo SOLO de lo que ya se vendió (FIFO) — no incluye gastos operativos ni pedidos a proveedor sin vender. Para la utilidad real de caja ve al Dashboard.">
         <div class="metric-label">Ganancia bruta <span style="font-size:9px;color:var(--ink-3);cursor:help">ⓘ</span></div>
-        <div class="metric-value" style="font-size:18px;color:${gananciaBruta>=0?'var(--blue)':'var(--red)'}">${fmt(gananciaBruta)}</div>
+        <div class="metric-value" style="font-size:18px;color:${gananciaBruta>=0?'var(--ink)':'var(--red)'}">${fmt(gananciaBruta)}</div>
         <div class="metric-sub">Margen: ${margenPct}%</div>
       </div>
       <div class="metric-card">
@@ -4611,9 +4646,9 @@ function renderVentas() {
       ).join('');
       productoCell = '<td style="min-width:200px">'
         + '<div style="display:flex;align-items:center;gap:5px;margin-bottom:4px">'
-          + '<span style="font-size:10px;font-weight:700;color:var(--lime);background:var(--lime-bg);padding:1px 7px;border-radius:10px">📦 ' + v.productosVenta.length + ' productos</span>'
+          + '<span style="font-size:11.5px;font-weight:600;color:var(--ink-2);background:var(--surface-3);padding:2px 9px;border-radius:999px">📦 ' + v.productosVenta.length + ' productos</span>'
         + '</div>'
-        + '<div style="border-left:2px solid var(--lime-accent);padding-left:8px">' + filasProductos + '</div>'
+        + '<div style="border-left:2px solid var(--border-2);padding-left:8px">' + filasProductos + '</div>'
       + '</td>';
     } else {
       productoCell = '<td>' + (v.producto||'') + manualBadge + '</td>';
@@ -4623,7 +4658,9 @@ function renderVentas() {
     const margenVenta = calcularMargenVenta(v);
     const margenCell = margenVenta === null
       ? '<td style="color:var(--ink-3);font-size:11px">N/D</td>'
-      : `<td style="font-weight:600;color:${margenVenta>=0?'var(--green)':'var(--red)'}">${fmt(margenVenta)}</td>`;
+      // 835. Un margen positivo es lo normal, no una buena noticia: va en tinta.
+      //      El rojo se queda para el margen negativo, que sí hay que mirar.
+      : `<td style="font-weight:600;color:${margenVenta>=0?'var(--ink-2)':'var(--red)'}">${fmt(margenVenta)}</td>`;
 
     // 519. data-* attributes para filtrar sin re-renderizar — mismo patrón usado en Inventario
     return `<tr data-cliente="${(v.cliente||'').toLowerCase()}" data-producto="${(v.producto||'').toLowerCase()}" data-canal="${(v.canal||'').toLowerCase()}" data-fecha="${v.fecha||''}" data-total="${v.total||''}">
@@ -4632,7 +4669,10 @@ function renderVentas() {
       ${productoCell}
       <td><span class="badge b-${v.canal||'web'}">${v.canal||''}</span></td>
       <td><span class="badge ${tpClass[tp]}">${tpLabel[tp]||tp}</span></td>
-      <td style="font-weight:600;color:var(--lime)">${fmt(ingresoVenta(v))}</td>
+      ${/* 835. El total iba en lima en TODAS las filas. Un color que sale en
+            las veintitrés filas no distingue ninguna; solo cansa. Tinta normal
+            y en negrita: es la columna importante, no una alerta. */''}
+      <td style="font-weight:700;color:var(--ink)">${fmt(ingresoVenta(v))}</td>
       ${margenCell}
       <td>${mpBadge}</td>
       ${saldoCell}
@@ -6724,7 +6764,7 @@ function renderClientes() {
         </div>
       </td>
       <td>${c.compras}</td>
-      <td style="font-weight:600;color:var(--lime)">${fmt(c.total)}</td>
+      <td style="font-weight:700;color:var(--ink)">${fmt(c.total)}</td>
       <td style="color:var(--ink-3)">${fav?fav[0].split(' ').slice(0,3).join(' '):'—'}</td>
       <td style="color:var(--ink-3)">${c.ultima}</td>
     </tr>`;
@@ -6947,13 +6987,14 @@ function renderGastos() {
     </div>`;
 
   const resumenTiposHtml = `
-    <div class="card" style="padding:16px;margin-bottom:16px">
-      <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2);margin-bottom:8px">
-        🧾 La cuenta del ciclo
-      </div>
-      ${renglonG(palabraConcepto('gastos','Gastos fijos'), fijos, 'se pagan igual vendas o no', 'var(--blue)')}
-      ${renglonG('Gastos variables', variables, 'suben con el movimiento', 'var(--amber)')}
-      ${renglonG('Total de gastos', fijos + variables, '', 'var(--red)', true)}
+    <div class="card">
+      <div class="sec-title">🧾 La cuenta del ciclo</div>
+      ${renglonG(palabraConcepto('gastos','Gastos fijos'), fijos, 'se pagan igual vendas o no')}
+      ${/* 835. Iban en ámbar y rojo. Pero un gasto normal no es una alerta
+            —el negocio gasta todos los meses— y pintarlos de rojo gasta el
+            rojo, que es lo que hace falta cuando algo SÍ está mal. */''}
+      ${renglonG('Gastos variables', variables, 'suben con el movimiento')}
+      ${renglonG('Total de gastos', fijos + variables, '', 'var(--ink)', true)}
       ${renglonG(palabraConcepto('mercancia','Compra de mercancía'), compras, 'no es gasto: es plata que se vuelve inventario y vuelve al vender', 'var(--ink-2)')}
       ${renglonG('En total salió del banco', total, '', 'var(--ink)', true)}
     </div>`;
@@ -6987,10 +7028,12 @@ function renderGastos() {
     <div style="display:flex;align-items:center;gap:9px;padding:9px 14px 9px 30px;border-top:1px solid var(--border)">
       <div style="flex:1;min-width:0">
         <div style="font-size:13px;font-weight:600;color:var(--ink);overflow-wrap:anywhere">${g.desc||'(sin descripción)'}</div>
-        <div style="font-size:11px;color:var(--ink-3)">${fCorta(g.fecha)}
-          · <span style="color:${esCompraMercancia(g)?'var(--ink-3)':esGastoFijo(g)?'var(--blue)':'var(--amber)'}">${esCompraMercancia(g)?'Mercancía':esGastoFijo(g)?'Fijo':'Variable'}</span></div>
+        <div style="font-size:12.5px;color:var(--ink-3)">${fCorta(g.fecha)}
+          · ${esCompraMercancia(g)?'Mercancía':esGastoFijo(g)?'Fijo':'Variable'}</div>
       </div>
-      <div style="font-size:13.5px;font-weight:700;color:var(--red);white-space:nowrap;font-variant-numeric:tabular-nums">${fmt(g.valor)}</div>
+      ${/* 835. El valor iba en rojo en todos los gastos. Un gasto registrado
+            es trabajo bien hecho, no una alarma. */''}
+      <div style="font-size:15px;font-weight:600;color:var(--ink);white-space:nowrap;font-variant-numeric:tabular-nums">${fmt(g.valor)}</div>
       <button class="btn btn-xs" onclick="editarGasto('${g.id}')">✏️</button>
       <button class="btn btn-xs btn-danger" onclick="eliminarDoc('gastos','${g.id}')">✕</button>
     </div>`;
@@ -7008,7 +7051,7 @@ function renderGastos() {
             <span style="display:block;font-size:11px;color:var(--ink-3)">${gr.gastos.length} registro${gr.gastos.length!==1?'s':''}${gr.nota ? ' · ' + gr.nota : ''}</span>
           </span>
           <span style="font-size:14.5px;font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums;
-            color:${gr.k==='__mercancia'?'var(--ink-2)':'var(--red)'}">${fmt(gr.total)}</span>
+            color:var(--ink)">${fmt(gr.total)}</span>
         </button>
         ${abierto ? gr.gastos.map(filaGasto).join('') : ''}
       </div>`;
@@ -7266,8 +7309,8 @@ function renderProveedores() {
   const resumenHtml = `
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px">
       <div class="metric-card"><div class="metric-label">Proveedores</div><div class="metric-value" style="font-size:18px">${DATA.proveedores.length}</div><div class="metric-sub">registrados</div></div>
-      <div class="metric-card"><div class="metric-label">Total comprado</div><div class="metric-value" style="font-size:18px;color:var(--blue)">${fmt(totalCompradoGeneral)}</div><div class="metric-sub">histórico</div></div>
-      <div class="metric-card"><div class="metric-label">Por pagar</div><div class="metric-value" style="font-size:18px;color:${totalPorPagarGeneral>0?'var(--red)':'var(--green)'}">${fmt(totalPorPagarGeneral)}</div><div class="metric-sub">cuentas por pagar</div></div>
+      <div class="metric-card"><div class="metric-label">Total comprado</div><div class="metric-value" style="font-size:18px;color:var(--ink)">${fmt(totalCompradoGeneral)}</div><div class="metric-sub">histórico</div></div>
+      <div class="metric-card"><div class="metric-label">Por pagar</div><div class="metric-value" style="font-size:18px;color:${totalPorPagarGeneral>0?'var(--red)':'var(--ink)'}">${fmt(totalPorPagarGeneral)}</div><div class="metric-sub">cuentas por pagar</div></div>
     </div>`;
 
   const cards = provData.map(p => {
@@ -8154,8 +8197,15 @@ function crecimientoHtml() {
     const alt = Math.max(4, Math.round((m.vendido / max) * 100));
     // El mes en curso va rayado: aún no terminó, su barra no es definitiva.
     const relleno = m.enCurso
+      // 835. Los meses cerrados pasaron de lima a grafito. Ángel: "lo de las
+      //      barras de cómo vamos mes a mes sí podría ser un color diferente".
+      //      Y el motivo es más fuerte que el gusto: el lima era el mismo del
+      //      botón de "Registrar venta", o sea que el color más fuerte de la
+      //      pantalla estaba puesto dos veces diciendo cosas distintas. Ahora
+      //      el lima solo aparece en el mes EN CURSO —donde sí significa algo,
+      //      "este es el que va corriendo"— y el resto es historia en gris.
       ? 'background:repeating-linear-gradient(135deg,var(--lime-accent) 0 7px,var(--lime-soft) 7px 14px);border:1.5px solid var(--lime)'
-      : 'background:linear-gradient(180deg,var(--lime-accent) 0%,#A8C63A 100%)';
+      : 'background:var(--barra-neutra)';
     return '<div onclick="verCicloInicio(' + m.offset + ')" title="' + m.completo + ': ' + fmt(m.vendido) + '"'
       + ' style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:flex-end;cursor:pointer">'
       + '<div style="font-size:11.5px;font-weight:600;color:var(--ink-2);text-align:center;margin-bottom:4px;'
@@ -8448,8 +8498,10 @@ function renderInicio() {
           </span>
           <span style="font-size:14px;color:var(--ink-3);font-variant-numeric:tabular-nums">${pct}%</span>
         </div>
+        ${/* 835. Verde solo cuando de verdad se cubrió. Mientras falta, la
+              barra es gris como todas: el color es la noticia, no el adorno. */''}
         <div class="barra" style="margin-bottom:11px">
-          <i style="width:${pct}%;background:${cubierto?'var(--green)':'var(--lime-accent)'}"></i>
+          <i style="width:${pct}%${cubierto?';background:var(--green)':''}"></i>
         </div>
         <div style="font-size:14px;color:var(--ink-2);line-height:1.45">
           ${cubierto
@@ -8705,7 +8757,7 @@ function renderInicio() {
               + '<span style="font-size:15px;font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums">'
                 + fmt(x.v) + ' <span style="font-size:13px;font-weight:500;color:var(--ink-3)">' + pct + '%</span></span>'
             + '</div>'
-            + '<div class="barra" style="margin-top:7px"><i style="width:' + Math.max(2, pct) + '%;background:var(--blue)"></i></div>'
+            + '<div class="barra" style="margin-top:7px"><i style="width:' + Math.max(2, pct) + '%"></i></div>'
           + '</div>';
         }).join('')
       + (C.fiado > 0
@@ -8825,8 +8877,8 @@ function renderInicio() {
             ? (mora.length ? mora.length + ' en mora' : 'nada en mora')
             : (porCobrar > 0 ? 'quedó sin pagar de este ciclo' : 'todo cobrado'),
           esCicloActual
-            ? (mora.length ? 'var(--red)' : 'var(--green)')
-            : (porCobrar > 0 ? 'var(--red)' : 'var(--green)'), 'cobrar')}
+            ? (mora.length ? 'var(--red)' : 'var(--ink-3)')
+            : (porCobrar > 0 ? 'var(--red)' : 'var(--ink-3)'), 'cobrar')}
     </div>
 
     ${/* 777. El crecimiento va justo debajo de los números del ciclo: primero
@@ -8847,10 +8899,16 @@ function renderInicio() {
       ${cajaMediosHtml}
     </div>
 
-    <div style="display:flex;flex-direction:column;gap:12px">
+    <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:16px">
       ${equilibrioHtml}
       ${resultadoHtml}
     </div>
+
+    ${/* 836. Lo que quedaba de "Resumen del mes", plegado: cuatro renglones
+          que se abren uno a la vez. Va casi al final porque son datos de
+          repaso mensual, no de todos los días. */''}
+    ${detalleMesHtml(inicioCicloOffset)}
+
     ${cierreMesHtml}`;
 }
 
@@ -10207,7 +10265,7 @@ function renderDeudores() {
     const esJero = c.quien === 'jero';
     filasConsumo += '<tr>'
       + '<td style="color:var(--ink-3)">' + (c.fecha||'') + '</td>'
-      + '<td><span style="display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;background:' + (esJero?'var(--blue-bg)':'var(--green-bg)') + ';color:' + (esJero?'var(--blue-ink)':'var(--green)') + '">'
+      + '<td><span class="badge b-gray">'
         + (esJero?'👤 Jero':'👤 Ángel') + '</span></td>'
       + '<td style="font-weight:500">' + (c.nombre||'') + '</td>'
       + '<td style="text-align:center">' + (c.cant||0) + '</td>'
@@ -10237,9 +10295,9 @@ function renderDeudores() {
       + '<button class="btn btn-sm btn-lime" onclick="abrirModalConsumo()">+ Registrar consumo</button>'
     + '</div>'
     + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">'
-      + '<div class="metric-card"><div class="metric-label">Jero debe</div><div class="metric-value" style="font-size:18px;color:var(--blue-ink)">' + fmt(totalJero) + '</div><div class="metric-sub">a precio de costo</div></div>'
-      + '<div class="metric-card"><div class="metric-label">Ángel debe</div><div class="metric-value" style="font-size:18px;color:var(--green)">' + fmt(totalAngel) + '</div><div class="metric-sub">a precio de costo</div></div>'
-      + '<div class="metric-card"><div class="metric-label">Total consumo</div><div class="metric-value" style="font-size:18px;color:var(--blue)">' + fmt(totalConsumos) + '</div><div class="metric-sub">' + DATA.consumos.length + ' registros</div></div>'
+      + '<div class="metric-card"><div class="metric-label">Jero debe</div><div class="metric-value" style="font-size:18px;color:var(--ink)">' + fmt(totalJero) + '</div><div class="metric-sub">a precio de costo</div></div>'
+      + '<div class="metric-card"><div class="metric-label">Ángel debe</div><div class="metric-value" style="font-size:18px;color:var(--ink)">' + fmt(totalAngel) + '</div><div class="metric-sub">a precio de costo</div></div>'
+      + '<div class="metric-card"><div class="metric-label">Total consumo</div><div class="metric-value" style="font-size:18px;color:var(--ink)">' + fmt(totalConsumos) + '</div><div class="metric-sub">' + DATA.consumos.length + ' registros</div></div>'
     + '</div>'
     + '<div class="card">' + tablaConsumo + '</div>';
 }
@@ -11458,9 +11516,9 @@ function renderConsignacion() {
 
   const resumenHtml = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px">'
     + '<div class="metric-card"><div class="metric-label">Tiendas</div><div class="metric-value" style="font-size:18px">' + DATA.tiendasConsignacion.length + '</div><div class="metric-sub">registradas</div></div>'
-    + '<div class="metric-card"><div class="metric-label">Productos afuera</div><div class="metric-value" style="font-size:18px;color:var(--amber)">' + activosTotal.reduce((s,c)=>s+Number(c.cantidadActual||0),0) + '</div><div class="metric-sub">unidades en consignación</div></div>'
-    + '<div class="metric-card"><div class="metric-label">Valor en consignación</div><div class="metric-value" style="font-size:18px;color:var(--blue)">' + fmt(valorTotalConsignado) + '</div><div class="metric-sub">a precio de costo</div></div>'
-    + '<div class="metric-card"><div class="metric-label">Vendido vía consignación</div><div class="metric-value" style="font-size:18px;color:var(--lime)">' + fmt(totalVendidoConsignacion) + '</div><div class="metric-sub">ingresos confirmados</div></div>'
+    + '<div class="metric-card"><div class="metric-label">Productos afuera</div><div class="metric-value" style="font-size:18px;color:var(--ink)">' + activosTotal.reduce((s,c)=>s+Number(c.cantidadActual||0),0) + '</div><div class="metric-sub">unidades en consignación</div></div>'
+    + '<div class="metric-card"><div class="metric-label">Valor en consignación</div><div class="metric-value" style="font-size:18px;color:var(--ink)">' + fmt(valorTotalConsignado) + '</div><div class="metric-sub">a precio de costo</div></div>'
+    + '<div class="metric-card"><div class="metric-label">Vendido vía consignación</div><div class="metric-value" style="font-size:18px;color:var(--ink)">' + fmt(totalVendidoConsignacion) + '</div><div class="metric-sub">ingresos confirmados</div></div>'
   + '</div>';
 
   let cardsHtml = '';
@@ -12817,7 +12875,10 @@ function historialPorCicloDist(ventasDelDist, nCiclos) {
 // 794. Los colores salen del tema activo (ver coloresDeSerie), no de una
 //      lista fija: así la gráfica se oscurece con la app.
 
-const MAX_SERIES_DIST = 6;   // del 7º en adelante se doblan en "Otros"
+// 835. Igual que la dona: diez con color propio. Y la cola ya no es un gris
+//      plano repetido —que era el mismo problema del 800— sino la escala
+//      ordinal de `grisDeCola`, donde dos vecinos sí se distinguen.
+const MAX_SERIES_DIST = 10;
 const MESES_COMPARATIVO = 6; // columnas visibles por defecto
 
 let distComparativoTodo = false;
@@ -12877,7 +12938,12 @@ function comparativoDistribuidores() {
 
   // Color por entidad: los MAX_SERIES_DIST primeros por total; el resto gris.
   const paleta = coloresDeSerie();
-  conDatos.forEach((f, i) => { f.color = (!f.suelta && i < MAX_SERIES_DIST) ? paleta.series[i] : paleta.otros; });
+  const enCola = Math.max(0, conDatos.length - MAX_SERIES_DIST);
+  conDatos.forEach((f, i) => {
+    f.color = (!f.suelta && i < MAX_SERIES_DIST)
+      ? paleta.series[i]
+      : grisDeCola(Math.max(0, i - MAX_SERIES_DIST), enCola, paleta.cola);
+  });
   comparativoDistribuidores.paleta = paleta;
 
   const totalesMes = ciclos.map((c, i) => conDatos.reduce((s,f) => s + f.meses[i], 0));
@@ -13295,7 +13361,7 @@ function filasBuscador() {
       + (dist && x.sueltas > 0
           ? '<span class="badge" style="background:var(--amber-bg);color:var(--amber)" title="Ventas con este nombre que no están vinculadas a su registro">⚠️ ' + x.sueltas + ' sin vincular</span>'
           : '')
-      + '<span class="badge" style="background:' + (dist ? 'var(--blue-bg)' : 'var(--lime-bg)') + ';color:' + (dist ? 'var(--blue)' : 'var(--lime)') + '">'
+      + '<span class="badge b-gray">'
         + (dist ? '🏋️ Distribuidor' : '👤 Cliente') + '</span>'
     + '</div>';
   }).join('');
@@ -13372,7 +13438,7 @@ function fichaCompradorHtml(ventas) {
 
   const resumen = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:9px;margin-bottom:18px">'
     + dato('Veces que compró', ventas.length, dias.length !== ventas.length ? 'en ' + dias.length + ' días distintos' : (cadaCuanto !== null ? 'vuelve cada ' + cadaCuanto + ' días' : 'primera compra'))
-    + dato('Total comprado', fmt(total), 'ticket promedio ' + fmt(ticket), 'var(--lime)')
+    + dato('Total comprado', fmt(total), 'ticket promedio ' + fmt(ticket))
     + dato('Margen que deja', margenConocido ? fmt(margen) : 'N/D', margenConocido && total > 0 ? Math.round((margen/total)*100) + '% de lo que compra' : 'sin costo registrado', margenConocido ? (margen >= 0 ? 'var(--green)' : 'var(--red)') : 'var(--ink-3)')
     + dato('Última compra', fCorta(ultima), diasSinComprar === 0 ? 'hoy' : 'hace ' + diasSinComprar + ' día' + (diasSinComprar !== 1 ? 's' : ''), diasSinComprar > 45 ? 'var(--amber)' : 'var(--ink)')
     // 823. `primera` ya se calculaba y no se mostraba en ninguna parte. En vez
@@ -13721,7 +13787,11 @@ function coloresDeSerie() {
   const cs = getComputedStyle(document.documentElement);
   const leer = (n, porDefecto) => (cs.getPropertyValue(n) || '').trim() || porDefecto;
   return {
-    series: [1,2,3,4,5,6].map((i, k) => leer('--serie-' + i, ['#2a78d6','#eb6834','#1baf7a','#eda100','#e87ba4','#008300'][k])),
+    // 835. Diez matices, no seis. El orden viene de los tokens y está
+    //      validado como lista de vecinos (ver la nota en :root).
+    series: [1,2,3,4,5,6,7,8,9,10].map((i, k) => leer('--serie-' + i,
+      ['#2a78d6','#eb6834','#9b59b6','#1baf7a','#4a3aa7',
+       '#e87ba4','#008300','#eda100','#0f8fa8','#e34948'][k])),
     otros: leer('--serie-otros', '#9CA3AF'),
     // 826. La rampa de grises de la cola de las donas, también del tema: en
     //      claro va de claro a oscuro y en oscuro al revés, porque una rampa
@@ -13759,7 +13829,9 @@ function coloresDeSerie() {
 // dona se oscurece con la app sola. Son los mismos seis de las columnas de
 // distribuidores, validados para daltonismo (ΔE adyacente ≥ 9,1).
 // ============================================================
-const DONA_MAX_PEDAZOS = 6;
+// 835. De 6 a 10. Ver la nota de la paleta en :root. Con los productos de
+//      un ciclo real (catorce), la cola gris pasa de ocho pedazos a cuatro.
+const DONA_MAX_PEDAZOS = 10;
 
 // 826. Ángel: "no quiero que digas en las gráficas Otros cuatro".
 //
@@ -13771,11 +13843,12 @@ const DONA_MAX_PEDAZOS = 6;
 //      lista de nombres.
 //
 //      Ahora TODOS llevan su nombre. Lo que no se puede es darles a todos un
-//      color propio: la paleta tiene seis matices que de verdad se distinguen
-//      entre sí y para un daltónico, y el séptimo inventado es indistinguible
-//      del tercero. Así que:
-//        · los 6 más grandes llevan los seis colores de la paleta;
-//        · del 7º en adelante, una ESCALA DE GRISES de claro a oscuro.
+//      color propio: un matiz inventado de más acaba siendo indistinguible de
+//      otro que ya está en la gráfica. Lo que sí se pudo (835) fue subir el
+//      techo de seis a DIEZ matices, validando el orden en vez de escogerlo
+//      a ojo. Así que:
+//        · los 10 más grandes llevan los diez colores de la paleta;
+//        · del 11º en adelante, una ESCALA DE GRISES de claro a oscuro.
 //      El gris dice "esto es la cola" sin esconder a nadie: cada uno sigue
 //      teniendo su renglón, su nombre, su porcentaje y su plata, y dos grises
 //      vecinos se distinguen porque son escalones distintos, no el mismo gris
@@ -14100,8 +14173,9 @@ function renderUsuarios() {
 // histórico y ponerles cero. Es la información más útil de la pantalla y
 // la única que no aparece sola.
 // ============================================================
-let resumenOffset = 0;
-window.verMesResumen = (o) => { resumenOffset = Number(o); renderResumenMes(); };
+// 836. `resumenOffset` y `verMesResumen` se fueron con la pantalla: el
+//      detalle plegado de Inicio usa `inicioCicloOffset`, o sea los mismos
+//      chips de ciclo que ya están arriba. Un selector de mes menos.
 
 // Las unidades salen de las LÍNEAS, no de las ventas: una venta de
 // "3 creatinas + 1 whey" son 4 unidades, no 1. Y el dinero de una venta de
@@ -14219,214 +14293,132 @@ function resumenDelMes(offset) {
   };
 }
 
-function renderResumenMes() {
-  const R = resumenDelMes(resumenOffset);
-  const n = ciclosDisponibles();
 
-  let chips = '';
-  for(let i = 0; i <= n; i++) {
-    const c = getCicloActual(i);
-    const act = resumenOffset === i;
-    const mes = c.label.charAt(0).toUpperCase() + c.label.slice(1).replace(' de ', ' ');
-    chips += '<button onclick="verMesResumen(' + i + ')" style="padding:6px 13px;border-radius:20px;white-space:nowrap;'
-      + 'cursor:pointer;font-size:12.5px;border:1.5px solid ' + (act?'var(--ink)':'var(--border)') + ';'
-      + 'background:' + (act?'var(--ink)':'var(--surface)') + ';color:' + (act?'var(--on-ink)':'var(--ink-2)') + ';'
-      + 'font-weight:' + (act?'600':'400') + '">' + (i===0?'Este mes':mes) + '</button>';
+// ============================================================
+// 836. EL DETALLE DEL MES, PLEGADO
+//
+// Ángel preguntó qué tenía "Resumen del mes" que no estuviera ya en Inicio.
+// La respuesta, revisada bloque por bloque: de siete, tres eran LA MISMA
+// dona de Inicio (que además trae el margen, que allá no estaba), uno la
+// misma tabla con menos columnas, y las unidades y el dinero ya estaban en
+// el centro de la dona y en la tarjeta "Vendido".
+//
+// Solo cuatro cosas eran suyas de verdad: los productos que se durmieron,
+// quién registró cada venta, lo que menos salió, y el promedio por unidad.
+// Así que la pestaña se borró y esos cuatro bajaron aquí.
+//
+// Pero NO sueltos. Ángel: "que no te queden todas esas, toda esa información
+// regada, sino que haya un mini widget al cual yo le hundo y ahí sí se
+// despliega". Y tiene razón: son datos que se miran una vez al mes, no
+// todos los días. Si se pegan al final de Inicio, lo único que cambia es
+// dónde está el desorden.
+//
+// Entonces: cuatro renglones. Cada uno dice su número de un vistazo y se
+// abre solo si uno quiere el detalle. Uno a la vez — abrir el segundo
+// cierra el primero, que es lo que hace que siga siendo un renglón y no
+// vuelva a ser una pantalla.
+// ============================================================
+let detalleMesAbierto = null;
+window.verDetalleMes = (k) => {
+  detalleMesAbierto = (detalleMesAbierto === k ? null : k);
+  renderInicio();
+};
+
+function detalleMesHtml(offset) {
+  const R = resumenDelMes(offset);
+  const items = [];
+
+  // Un renglón de la lista. `detalle` vacío = renglón que solo muestra un
+  // número y no se abre (y entonces tampoco lleva flechita que prometa algo).
+  const fila = (clave, ico, titulo, sub, valor, detalle) => {
+    const abierto = detalleMesAbierto === clave;
+    const clicable = !!detalle;
+    return '<div class="lista-item">'
+      + '<' + (clicable ? 'button' : 'div') + ' class="lista-fila"'
+        + (clicable ? ' onclick="verDetalleMes(\'' + clave + '\')" aria-expanded="' + abierto + '"' : '') + '>'
+        + '<span class="lista-ico">' + ico + '</span>'
+        + '<span class="lista-txt">'
+          + '<span class="lista-tit">' + titulo + '</span>'
+          + (sub ? '<span class="lista-sub">' + sub + '</span>' : '')
+        + '</span>'
+        + (valor ? '<span class="lista-val">' + valor + '</span>' : '')
+        + (clicable ? '<span class="lista-chev' + (abierto ? ' abierto' : '') + '" aria-hidden="true">›</span>' : '')
+      + '</' + (clicable ? 'button' : 'div') + '>'
+      + (abierto ? '<div class="lista-detalle">' + detalle + '</div>' : '')
+    + '</div>';
+  };
+
+  // Un renglón de detalle: nombre a la izquierda, dato a la derecha.
+  const linea = (izq, der, nota) =>
+    '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:6px 0">'
+      + '<span style="font-size:14px;color:var(--ink);min-width:0">' + izq
+        + (nota ? '<span style="display:block;font-size:12.5px;color:var(--ink-3)">' + nota + '</span>' : '')
+      + '</span>'
+      + '<span style="font-size:14px;color:var(--ink-2);white-space:nowrap;font-variant-numeric:tabular-nums">' + der + '</span>'
+    + '</div>';
+
+  // ---- 1. Los que se durmieron ----
+  if(R.dormidos.length || R.dormidosViejos.length) {
+    // 810. Solo se listan los que se cayeron HACE POCO. Los que llevan
+    //      tiempo quietos van contados en una línea: 86 filas no son
+    //      información, son ruido.
+    const lista = R.dormidos.slice(0, 10)
+      .map(d => linea(escTxt(d.nombre), d.ultima ? 'última: ' + fCorta(d.ultima) : '—')).join('');
+    const mas = R.dormidos.length > 10
+      ? '<div style="font-size:12.5px;color:var(--ink-3);margin-top:7px">Y ' + (R.dormidos.length - 10)
+        + ' más. Se muestran los que se cayeron más recientemente.</div>'
+      : '';
+    const viejos = R.dormidosViejos.length
+      ? '<div style="font-size:12.5px;color:var(--ink-3);margin-top:9px;padding-top:9px;border-top:1px solid var(--border);line-height:1.45">'
+        + 'Aparte hay <strong style="color:var(--ink-2)">' + R.dormidosViejos.length + '</strong> productos sin ventas desde hace más de '
+        + R.mesesReciente + ' meses. No se listan porque no es novedad de este mes: llevan tiempo quietos.</div>'
+      : '';
+    items.push(fila('dormidos', '😴', 'Se durmieron',
+      R.dormidos.length ? 'se vendían hace poco y este mes no' : 'nada se cayó este mes',
+      String(R.dormidos.length),
+      (lista + mas + viejos) || null));
   }
 
-  if(!R.productos.length) {
-    document.getElementById('page-resumen').innerHTML =
-      '<div class="page-header"><div><div class="page-title">Resumen del mes</div>'
-      + '<div class="page-sub">' + R.etiqueta + ' · ' + fCorta(R.ciclo.inicio) + ' al ' + fCorta(R.ciclo.fin) + '</div></div></div>'
-      + '<div style="display:flex;gap:7px;overflow-x:auto;padding-bottom:4px;margin-bottom:14px">' + chips + '</div>'
-      + '<div class="card"><div class="empty-state" style="padding:34px"><div class="empty-state-icon">📅</div>'
-      + '<div class="empty-state-text">Sin ventas en este mes</div></div></div>';
-    return;
+  // ---- 2. Lo que menos salió ----
+  // Solo tiene sentido si hay con qué comparar: con tres productos, los tres
+  // de abajo son los tres de arriba.
+  if(R.productos.length > 4) {
+    const flop = R.productos.slice(-3).reverse();
+    items.push(fila('menos', '🐢', 'Lo que menos salió', 'los 3 que menos movieron', '',
+      flop.map(pr => linea(escTxt(pr.nombre), fmt(pr.dinero),
+        pr.unidades + ' unidad' + (pr.unidades === 1 ? '' : 'es'))).join('')));
   }
 
-  // ---- Totales ----
-  const tot = (etiqueta, valor, sub, color) =>
-    '<div class="metric-card"><div class="metric-label">' + etiqueta + '</div>'
-    + '<div class="metric-value" style="color:' + (color||'var(--ink)') + '">' + valor + '</div>'
-    + '<div class="metric-sub">' + sub + '</div></div>';
-  const totales = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:18px">'
-    + tot('Unidades vendidas', R.unidades, R.productos.length + ' producto' + (R.productos.length!==1?'s':'') + ' distinto' + (R.productos.length!==1?'s':''), 'var(--lime)')
-    + tot('Dinero vendido', fmt(R.dinero), R.nVentas + ' venta' + (R.nVentas!==1?'s':''))
-    + tot('Promedio por unidad', fmt(R.unidades ? Math.round(R.dinero / R.unidades) : 0), 'lo que deja cada unidad vendida', 'var(--ink-2)')
-  + '</div>';
-
-  // ---- Podio: los más y los menos ----
-  const top = R.productos.slice(0, 3);
-  const flop = R.productos.length > 3 ? R.productos.slice(-3).reverse() : [];
-  const medalla = ['🥇','🥈','🥉'];
-  const fichaPodio = (p, i, arriba) =>
-    '<div style="display:flex;align-items:center;gap:10px;padding:9px 0' + (i ? ';border-top:1px solid var(--border)' : '') + '">'
-    + '<span style="font-size:15px;width:22px;text-align:center">' + (arriba ? medalla[i] : '·') + '</span>'
-    + '<span style="flex:1;min-width:0;font-size:13px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
-      + escTxt(p.nombre) + '</span>'
-    + '<span style="font-size:13px;font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums;color:'
-      + (arriba ? 'var(--lime)' : 'var(--ink-3)') + '">' + p.unidades + ' u</span>'
-    + '<span style="font-size:11.5px;color:var(--ink-3);white-space:nowrap;min-width:78px;text-align:right">' + fmt(p.dinero) + '</span>'
-  + '</div>';
-
-  const podio = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-bottom:18px">'
-    + '<div class="card" style="padding:15px;border-left:3px solid var(--lime)">'
-      + '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2);margin-bottom:4px">🔥 Lo que más salió</div>'
-      + top.map((p,i) => fichaPodio(p,i,true)).join('')
-    + '</div>'
-    + (flop.length
-        ? '<div class="card" style="padding:15px;border-left:3px solid var(--amber)">'
-          + '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2);margin-bottom:4px">🐢 Lo que menos salió</div>'
-          + flop.map((p,i) => fichaPodio(p,i,false)).join('')
-        + '</div>'
-        : '')
-  + '</div>';
-
-  // ---- Gráfica: la dona del reparto del mes ----
-  // 824. Antes aquí había barras horizontales de unidades. La dona responde
-  //      otra pregunta, que es la que se hace uno al abrir el mes: "de toda la
-  //      plata que entró, ¿cuánto se llevó cada producto". El tamaño del
-  //      pedazo es DINERO, no unidades, a propósito: un producto barato que
-  //      sale mucho llenaba la barra y no es el que sostiene el mes. Las
-  //      unidades siguen estando, en el renglón de cada uno de la leyenda.
-  const pedazosProd = repartoParaDona(
-    R.productos.map(p => ({
-      nombre: p.nombre,
-      valor: p.dinero,
-      sub: p.unidades + ' unidad' + (p.unidades !== 1 ? 'es' : '')
-    }))
-  );
-  const donaProd = donaHtml(pedazosProd, {
-    centro: fmtCorto(R.dinero),
-    centroSub: R.unidades + ' unidades',
-    fmtValor: v => fmt(v)
-  });
-  const grafica = donaProd ? '<div class="card" style="padding:16px;margin-bottom:16px">'
-    + '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2)">🍩 Quién sostuvo el mes</div>'
-    + '<div style="font-size:11.5px;color:var(--ink-3);margin:3px 0 13px">'
-      + (R.productos.length > DONA_MAX_PEDAZOS
-          ? 'Los ' + DONA_MAX_PEDAZOS + ' que más plata dejaron; el resto va junto en "Otros". La tabla de abajo los trae todos.'
-          : 'Reparto de la plata del mes, producto por producto.') + '</div>'
-    + donaProd
-  + '</div>' : '';
-
-  // ---- Tabla completa ----
-  const filas = R.productos.map((p, i) =>
-    '<tr><td style="color:var(--ink-3);width:28px">' + (i+1) + '</td>'
-    + '<td style="font-weight:500">' + escTxt(p.nombre) + '</td>'
-    + '<td style="text-align:right;font-weight:700;font-variant-numeric:tabular-nums">' + p.unidades + '</td>'
-    + '<td style="text-align:right;font-variant-numeric:tabular-nums">' + fmt(p.dinero) + '</td>'
-    + '<td style="text-align:right;color:var(--ink-3);font-variant-numeric:tabular-nums">'
-      + (R.dinero ? Math.round((p.dinero / R.dinero) * 100) : 0) + '%</td></tr>').join('');
-
-  const tabla = '<div class="card" style="padding:16px">'
-    + '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2);margin-bottom:10px">'
-      + '📦 Todo lo vendido, producto por producto</div>'
-    + '<div class="table-wrap"><table class="tbl">'
-      + '<thead><tr><th>#</th><th>Producto</th><th style="text-align:right">Unidades</th>'
-        + '<th style="text-align:right">Dinero</th><th style="text-align:right">% del mes</th></tr></thead>'
-      + '<tbody>' + filas
-        + '<tr style="border-top:2px solid var(--border)"><td></td>'
-        + '<td style="font-weight:800">Total</td>'
-        + '<td style="text-align:right;font-weight:800;font-variant-numeric:tabular-nums">' + R.unidades + '</td>'
-        + '<td style="text-align:right;font-weight:800;font-variant-numeric:tabular-nums">' + fmt(R.dinero) + '</td>'
-        + '<td></td></tr>'
-      + '</tbody></table></div>'
-  + '</div>';
-
-  // ---- 822. Quién registró ----
-  //      "Sin protagonismo": sin medallas, sin podio, sin pintar de verde al
-  //      que va arriba y de rojo al que va abajo. Es un reparto, no una
-  //      competencia. Va al pie del resumen y no en el Dashboard justo por
-  //      eso: quien quiera verlo lo busca, pero no se lo encuentra de frente
-  //      cada vez que abre la app.
+  // ---- 3. Quién registró ----
+  // 822. Lo que se cuenta es quién REGISTRÓ la venta, no quién la cerró con
+  //      el cliente. La frase lo dice con esas palabras a propósito.
   const conAutor = R.registradores.filter(r => !r.sinAsignar);
-  const quien = conAutor.length
-    ? '<div class="card" style="padding:16px;margin-top:16px">'
-      + '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2)">👥 Quién registró</div>'
-      + '<div style="font-size:11.5px;color:var(--ink-3);margin:3px 0 11px;line-height:1.45">'
-        + 'Quién metió cada venta en la app este mes. No es necesariamente quién la vendió: '
-        + 'si uno vende y el otro la registra, queda a nombre de quien la registró.</div>'
-      + R.registradores.map((r, i) =>
-          '<div style="display:flex;align-items:center;gap:10px;padding:8px 0'
-            + (i ? ';border-top:1px solid var(--border)' : '') + '">'
-          + '<span style="flex:1;min-width:0;font-size:13px;font-weight:' + (r.sinAsignar?'400':'600') + ';'
-            + 'color:var(--' + (r.sinAsignar?'ink-3':'ink') + ');overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
-            + escTxt(r.nombre) + '</span>'
-          + '<span style="font-size:11.5px;color:var(--ink-3);white-space:nowrap">'
-            + r.ventas + ' venta' + (r.ventas !== 1 ? 's' : '') + '</span>'
-          + '<span style="font-size:13px;font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums;'
-            + 'min-width:92px;text-align:right;color:var(--' + (r.sinAsignar?'ink-3':'ink') + ')">'
-            + fmt(r.dinero) + '</span>'
-          + '<span style="font-size:11.5px;color:var(--ink-3);white-space:nowrap;min-width:38px;text-align:right;'
-            + 'font-variant-numeric:tabular-nums">'
-            + (R.dinero ? Math.round((r.dinero / R.dinero) * 100) : 0) + '%</span>'
-        + '</div>').join('')
-      + (R.registradores.some(r => r.sinAsignar)
-          ? '<div style="font-size:11.5px;color:var(--ink-3);margin-top:11px;padding-top:10px;'
-            + 'border-top:1px solid var(--border);line-height:1.45">'
-            + '"Sin asignar" son las ventas que se registraron antes de que la app empezara a '
-            + 'guardar quién las metía. No se le adjudican a nadie.</div>'
+  if(conAutor.length) {
+    const resumenCorto = conAutor.slice(0, 2)
+      .map(r => escTxt(r.nombre) + ' ' + r.ventas).join(' · ');
+    const sinAsignar = R.registradores.find(r => r.sinAsignar);
+    items.push(fila('registro', '👥', 'Quién registró', resumenCorto, '',
+      conAutor.map(r => linea(escTxt(r.nombre), fmt(r.dinero),
+        r.ventas + ' venta' + (r.ventas === 1 ? '' : 's'))).join('')
+      + (sinAsignar
+          ? linea('<span style="color:var(--ink-3)">Sin asignar</span>', fmt(sinAsignar.dinero),
+              sinAsignar.ventas + ' venta' + (sinAsignar.ventas === 1 ? '' : 's') + ' de antes de que se guardara el autor')
           : '')
-    + '</div>'
-    // 822. Si NINGUNA venta del mes tiene autor (los meses anteriores al sello),
-    //      la tarjeta entera no aparece: una tabla de una sola fila que dice
-    //      "Sin asignar: todo" no informa nada y ocupa pantalla.
-    : '';
+      + '<div style="font-size:12.5px;color:var(--ink-3);margin-top:9px;line-height:1.45">'
+        + 'Cuenta quién la metió a la app, no quién la cerró con el cliente.</div>'));
+  }
 
-  // ---- Los que se durmieron ----
-  // 810. Los que se cayeron (se vendían hace poco) van en tabla; los que
-  //      llevan mucho quietos, en una sola línea al pie.
-  const colaViejos = R.dormidosViejos.length
-    ? '<div style="font-size:11.5px;color:var(--ink-3);margin-top:12px;padding-top:11px;border-top:1px solid var(--border);line-height:1.45">'
-      + 'Hay otros <strong style="color:var(--ink-2)">' + R.dormidosViejos.length + '</strong> productos sin ventas desde hace más de '
-      + R.mesesReciente + ' meses. No se listan aquí porque no es una novedad de este mes: '
-      + 'llevan tiempo quietos.</div>'
-    : '';
+  // ---- 4. Promedio por unidad ----
+  if(R.unidades > 0) {
+    items.push(fila('promedio', '💵', 'Promedio por unidad',
+      'lo que deja cada unidad vendida', fmt(Math.round(R.dinero / R.unidades)), null));
+  }
 
-  const dormidos = (R.dormidos.length || R.dormidosViejos.length)
-    ? '<div class="card" style="padding:16px;margin-top:16px;border-left:3px solid var(--amber)">'
-      + '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2)">😴 Se vendían y este mes no</div>'
-      + '<div style="font-size:11.5px;color:var(--ink-3);margin:3px 0 11px;line-height:1.45">'
-        + (R.dormidos.length
-            // 811. Las frases se arman enteras, no pegando sufijos a un verbo.
-            //      "quedó" + "aron" daba «quedóaron» en producción. Conjugar
-            //      por concatenación funciona en inglés y casi nunca en español.
-            ? (R.dormidos.length === 1
-                ? '<strong>1 producto</strong> que se vendía en los últimos ' + R.mesesReciente + ' meses y este mes quedó en <strong>cero</strong>. '
-                : '<strong>' + R.dormidos.length + ' productos</strong> que se vendían en los últimos ' + R.mesesReciente + ' meses y este mes quedaron en <strong>cero</strong>. ')
-              + 'No aparecen arriba porque no tienen ninguna venta que contar.'
-            : 'Ninguno de los que se vendían en los últimos ' + R.mesesReciente + ' meses se quedó en cero. Bien.')
-      + '</div>'
-      + (R.dormidos.length
-          ? '<div class="table-wrap"><table class="tbl">'
-            + '<thead><tr><th>Producto</th><th style="text-align:right">Este mes</th>'
-              + '<th style="text-align:right">Vendidas antes</th><th>Última venta</th></tr></thead>'
-            // 811. Tope de 20 filas: van ordenados por el que se cayó MÁS
-            //      RECIENTE, así que las primeras son las que importan. En
-            //      producción salían 55 y nadie lee 55 filas.
-            + '<tbody>' + R.dormidos.slice(0, 20).map(d =>
-                '<tr><td style="font-weight:500">' + escTxt(d.nombre) + '</td>'
-                + '<td style="text-align:right;font-weight:700;color:var(--amber)">0</td>'
-                + '<td style="text-align:right;color:var(--ink-3);font-variant-numeric:tabular-nums">' + d.unidadesAntes + '</td>'
-                + '<td style="color:var(--ink-3);white-space:nowrap">' + (d.ultima ? fCorta(d.ultima) : '—') + '</td></tr>').join('')
-            + '</tbody></table></div>'
-            + (R.dormidos.length > 20
-                ? '<div style="font-size:11.5px;color:var(--ink-3);margin-top:9px">Se muestran los 20 que se cayeron más '
-                  + 'recientemente, de ' + R.dormidos.length + ' en total.</div>'
-                : '')
-          : '')
-      + colaViejos
-    + '</div>'
-    : '';
-
-  document.getElementById('page-resumen').innerHTML =
-    '<div class="page-header"><div>'
-      + '<div class="page-title">Resumen del mes</div>'
-      + '<div class="page-sub">' + R.etiqueta + ' · del ' + fCorta(R.ciclo.inicio) + ' al ' + fCorta(R.ciclo.fin) + '</div>'
-    + '</div></div>'
-    + '<div style="display:flex;gap:7px;overflow-x:auto;padding-bottom:4px;margin-bottom:16px">' + chips + '</div>'
-    + totales + podio + grafica + tabla + quien + dormidos;
+  if(!items.length) return '';
+  return '<div style="margin-bottom:14px">'
+    + '<div class="sec-title" style="padding:0 4px">📅 Más del mes</div>'
+    + '<div class="lista">' + items.join('') + '</div>'
+  + '</div>';
 }
 
 // ============================================================
@@ -14712,7 +14704,7 @@ function renderDistribuidores() {
     //      Gastos. El renglón de la derecha sigue diciendo qué ventana se
     //      está mirando, para que estas tarjetas no queden sin contexto.
     + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px">'
-    + '<div class="metric-card"><div class="metric-label">Margen real</div><div class="metric-value" style="font-size:18px;color:' + (margenTotal>=0?'var(--green)':'var(--red)') + '">' + fmt(margenTotal) + '</div><div class="metric-sub">lo que deja el canal en ' + etiquetaVentana + '</div></div>'
+    + '<div class="metric-card"><div class="metric-label">Margen real</div><div class="metric-value" style="font-size:18px;color:' + (margenTotal>=0?'var(--ink)':'var(--red)') + '">' + fmt(margenTotal) + '</div><div class="metric-sub">lo que deja el canal en ' + etiquetaVentana + '</div></div>'
     + '<div class="metric-card"><div class="metric-label">Distribuidores</div><div class="metric-value" style="font-size:18px">' + DATA.distribuidores.length + '</div><div class="metric-sub">registrados</div></div>'
     + '</div>';
 
