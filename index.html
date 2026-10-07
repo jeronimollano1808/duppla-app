@@ -3582,16 +3582,14 @@ const MENU = [
   // --- Día a día: lo que se toca con el negocio abierto ---
   { id:'inicio', label:'Inicio', ico:'⚡', group:'Día a día' },
   { id:'ventas', label:'Ventas', ico:'🛒', group:'Día a día' },
-  { id:'deudores', label:'Deudores', ico:'💳', group:'Día a día' },
-  // 827. Recompras — a quién escribirle hoy porque se le está acabando lo
-  //      que compró. Va en Día a día: es una tarea diaria, no un informe.
-  { id:'recompras', label:'Recompras', ico:'🔄', group:'Día a día' },
+  // 827/831. Deudores y Recompras salieron de "Día a día" y viven dentro de
+  //      Clientes, con las otras dos pantallas que hablan de quién compra.
   { id:'gastos', label:'Gastos', ico:'💸', group:'Día a día' },
 
   // --- Quién compra ---
+  // 831. Una sola entrada: adentro están Clientes, Deudores, Recompras y
+  //      Distribuidores (ver FAMILIA_CLIENTES).
   { id:'clientes', label:'Clientes', ico:'👥', group:'Quién compra' },
-  // 327. Distribuidores — gimnasios con historial de compras
-  { id:'distribuidores', label:'Distribuidores', ico:'🏋️', group:'Quién compra' },
   // 489. Consignación — tiendas con producto que todavía no han comprado
   { id:'consignacion', label:'Consignación', ico:'🏪', group:'Quién compra' },
 
@@ -3930,6 +3928,58 @@ function startListeners() {
 // showPage activa la página seleccionada y desactiva las demás
 // buildNav construye el menú lateral con grupos
 // ============================================================
+// ============================================================
+// 831. CLIENTES COMO UNA SOLA PESTAÑA CON CUATRO ADENTRO
+//
+// Ángel: "quiero que en la pestaña Clientes esté Deudores, Recompra,
+// Distribuidores".
+//
+// Las cuatro pantallas hablan de lo mismo —quién compra— y tenerlas como
+// cuatro entradas sueltas en el menú obligaba a recordar en cuál estaba cada
+// cosa. Ahora son una entrada y cuatro pestañas adentro.
+//
+// Lo que NO cambia, a propósito: cada una sigue siendo su propia página con su
+// propio `page-x` y su render. Meterlas en una sola función habría sido
+// reescribir cuatro pantallas que ya funcionan para ganar nada. Lo único que
+// cambia es cómo se llega a ellas, y `showPage('deudores')` sigue sirviendo,
+// así que los accesos directos que ya existían (el botón "Cobrar" de Inicio,
+// el "Ver a quién escribirle") no se enteran.
+// ============================================================
+const FAMILIA_CLIENTES = [
+  { id:'clientes',       label:'Clientes',       ico:'👥' },
+  { id:'deudores',       label:'Deudores',       ico:'💳' },
+  { id:'recompras',      label:'Recompras',      ico:'🔄' },
+  { id:'distribuidores', label:'Distribuidores', ico:'🏋️' }
+];
+
+// La barra que va arriba de las cuatro. El número de cada pestaña se calcula
+// aquí y no en cada pantalla: así no hay dos sitios contando lo mismo.
+function tabsClientesHtml(activa) {
+  const enMora = calcularDeudores().filter(d => d.enMora).length;
+  const recompras = calcularRecompras().length;
+  const cuenta = { deudores: enMora, recompras };
+  return '<div style="display:flex;gap:7px;overflow-x:auto;padding-bottom:4px;margin-bottom:16px;'
+    + '-webkit-overflow-scrolling:touch">'
+    + FAMILIA_CLIENTES.map(t => {
+        const act = t.id === activa;
+        const n = cuenta[t.id] || 0;
+        return '<button onclick="showPage(\'' + t.id + '\')" style="padding:7px 14px;border-radius:20px;'
+          + 'white-space:nowrap;cursor:pointer;font-size:12.5px;display:flex;align-items:center;gap:6px;'
+          + 'border:1.5px solid ' + (act ? 'var(--ink)' : 'var(--border)') + ';'
+          + 'background:' + (act ? 'var(--ink)' : 'var(--surface)') + ';'
+          + 'color:' + (act ? 'var(--on-ink)' : 'var(--ink-2)') + ';'
+          + 'font-weight:' + (act ? '600' : '400') + '">'
+          + '<span>' + t.ico + '</span>' + t.label
+          + (n > 0
+              ? '<span style="background:' + (act ? 'var(--on-ink)' : (t.id==='deudores' ? 'var(--red)' : 'var(--blue)'))
+                + ';color:' + (act ? 'var(--ink)' : 'var(--on-ink)') + ';border-radius:20px;'
+                + 'padding:0 6px;font-size:10px;font-weight:700;min-width:16px;text-align:center">' + n + '</span>'
+              : '')
+        + '</button>';
+      }).join('')
+  + '</div>';
+}
+
 function buildNav() {
   const nav = document.getElementById('nav-menu');
   // 578. Badge de deudores en mora en el ítem de menú — así se ve de pasada
@@ -3947,12 +3997,20 @@ function buildNav() {
     if(!items.length) return;
     html += `<div class="nav-section-title">${grupo}</div>`;
     items.forEach(m => {
-    const badge = (m.id === 'deudores' && enMoraNav > 0)
-      ? `<span style="margin-left:auto;background:var(--red);color:var(--on-ink);border-radius:20px;padding:1px 8px;font-size:10px;font-weight:700">${enMoraNav}</span>`
-      : (m.id === 'recompras' && recomprasNav > 0)   // 827. el badge se mudó con la pantalla
-      ? `<span style="margin-left:auto;background:var(--blue);color:var(--on-ink);border-radius:20px;padding:1px 8px;font-size:10px;font-weight:700">${recomprasNav}</span>`
+    // 831. Clientes lleva DOS insignias, no una suma. "3 en mora" y "19 por
+    //      escribir" son cosas distintas: sumarlas a 22 no significa nada y
+    //      esconde cuál de las dos es la urgente.
+    const pastilla = (n, color) => n > 0
+      ? `<span style="background:${color};color:var(--on-ink);border-radius:20px;padding:1px 7px;font-size:10px;font-weight:700">${n}</span>`
       : '';
-    html += `<button class="nav-btn${m.id===currentPage?' active':''}" onclick="showPage('${m.id}')" style="display:flex;align-items:center">
+    const badge = m.id === 'clientes'
+      ? `<span style="margin-left:auto;display:flex;gap:4px">${pastilla(enMoraNav,'var(--red)')}${pastilla(recomprasNav,'var(--blue)')}</span>`
+      : '';
+    // El botón se queda encendido con cualquiera de las cuatro pantallas de
+    // la familia: si no, al entrar a Deudores el menú no marcaba nada.
+    const activo = m.id === currentPage
+      || (m.id === 'clientes' && FAMILIA_CLIENTES.some(t => t.id === currentPage));
+    html += `<button class="nav-btn${activo?' active':''}" onclick="showPage('${m.id}')" style="display:flex;align-items:center">
       <span class="ico">${m.ico}</span>${m.label}${badge}
     </button>`;
     });
@@ -6522,7 +6580,8 @@ function renderRecompras() {
   // dice exactamente qué falta y abre la pantalla para llenarlo.
   if(sinDuracion === total && total > 0) {
     document.getElementById('page-recompras').innerHTML =
-      '<div class="page-header"><div><div class="page-title">Recompras</div>'
+      tabsClientesHtml('recompras')   // 831
+      + '<div class="page-header"><div><div class="page-title">Recompras</div>'
       + '<div class="page-sub">A quién escribirle porque se le está acabando</div></div></div>'
       + '<div class="card" style="padding:26px;text-align:center">'
         + '<div style="font-size:32px;margin-bottom:10px">⏳</div>'
@@ -6593,7 +6652,8 @@ function renderRecompras() {
     : '';
 
   document.getElementById('page-recompras').innerHTML =
-    '<div class="page-header">'
+    tabsClientesHtml('recompras')   // 831
+    + '<div class="page-header">'
       + '<div><div class="page-title">Recompras</div>'
       // 829. El subtítulo dice "clientes" a propósito: los distribuidores no
       //      entran aquí, y es mejor que la pantalla lo diga a que Ángel se
@@ -6670,7 +6730,7 @@ function renderClientes() {
     </tr>`;
   }).join('');
 
-  document.getElementById('page-clientes').innerHTML = `
+  document.getElementById('page-clientes').innerHTML = tabsClientesHtml('clientes') + `
     <div class="page-header">
       <div><div class="page-title">Clientes</div><div class="page-sub">${clientes.length} clientes · toca uno para ver su historial</div></div>
       ${gruposNombresRepetidos().length
@@ -10318,7 +10378,8 @@ function renderDeudores() {
     : '<div class="empty-state"><div class="empty-state-icon">📦</div><div class="empty-state-text">Sin consumos registrados</div><div class="empty-state-sub">Registra lo que Ángel o Jero retiran del inventario</div></div>';
 
   document.getElementById('page-deudores').innerHTML =
-    '<div class="page-header"><div><div class="page-title">Deudores</div>'
+    tabsClientesHtml('deudores')   // 831
+    + '<div class="page-header"><div><div class="page-title">Deudores</div>'
       + '<div class="page-sub">Para cerrar una venta con saldo usa <strong>+ Abono</strong>. '
       + 'Si te pagan algo de un mes viejo que no está en la app, va por <strong>Cobro de cuenta</strong>.</div></div>'
       + '<button class="btn btn-sm" onclick="abrirModalCobro()">💳 Cobro de cuenta</button></div>'
@@ -15369,7 +15430,8 @@ function renderDistribuidores() {
   }
 
   document.getElementById('page-distribuidores').innerHTML =
-    '<div class="page-header">'
+    tabsClientesHtml('distribuidores')   // 831
+    + '<div class="page-header">'
       + '<div><div class="page-title">Distribuidores</div><div class="page-sub">Cuánto compra cada gimnasio, mes a mes</div></div>'
       + '<div style="display:flex;gap:8px">'
       // 684. Acceso a la limpieza masiva de vínculos (ver comentario 683).

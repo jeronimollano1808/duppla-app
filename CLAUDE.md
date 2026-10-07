@@ -1218,5 +1218,16 @@ El subtítulo de la pantalla pasó a decir "**Clientes** a quienes escribirles":
 **Huérfanos que se fueron con él:** `getPeriodoFechas`, `dashPeriodo`/`dashFechaInicio`/`dashFechaFin`, `setDashPeriodo`, `aplicarFechasPersonalizadas`, `exportarReporte`, `exportarReportePDF`, `setDashRankingPor`, `tarjetaConcepto` y el CSS `.metrics-grid`/`.dash-grid` — unos 29.000 caracteres. **`generarTopProductosHtml` se quedó**: la página Combos todavía la usa. Lo dijo el linter, no el ojo.
 
 
+### 14.37 Clientes es una pestaña con cuatro adentro (comentario 831)
+
+Ángel: *"quiero que en la pestaña Clientes esté Deudores, Recompra, Distribuidores"*. Las cuatro hablan de lo mismo —quién compra— y como entradas sueltas obligaban a recordar en cuál estaba cada cosa.
+
+**Lo que NO se tocó, a propósito.** Cada una sigue siendo su propia página con su `page-x` y su función de render. Fundirlas en una sola habría sido reescribir cuatro pantallas que ya funcionan para no ganar nada. Lo único que cambió es cómo se llega: una entrada en el menú y una barra de cuatro pestañas arriba de cada pantalla. Y como `showPage('deudores')` sigue existiendo, los accesos directos que ya había —el botón "💳 Cobrar" de Inicio, el "Ver a quién escribirle" de Clientes— no se enteraron del cambio. *Se reordena la puerta, no la casa.*
+
+**Dos insignias, no una suma.** En el menú, Clientes lleva la roja de los deudores en mora y la azul de las recompras pendientes, separadas. Sumarlas a un solo número ("22") no significa nada y esconde cuál de las dos es la urgente. Dentro, cada pestaña repite su propio número, calculado en `tabsClientesHtml` y no en cada pantalla, para que no haya dos sitios contando lo mismo.
+
+**El menú se queda encendido con cualquiera de las cuatro.** Sin eso, al entrar a Deudores la barra lateral no marcaba nada y uno perdía de vista dónde estaba.
+
+
 ---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*
