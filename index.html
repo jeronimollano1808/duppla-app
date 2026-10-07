@@ -8163,13 +8163,68 @@ function crecimientoMesAMes(nMeses) {
   return meses;
 }
 
+// 837. Contraste de un color contra el blanco, para decidir si el número
+//      que va DENTRO del cono se escribe en blanco o en negro. Es una
+//      cuenta, no un ojímetro: el amarillo de la paleta aguanta texto
+//      oscuro y el azul no, y eso no se adivina mirando.
+function luminancia(hex) {
+  const h = String(hex || '').trim();
+  if(!/^#[0-9a-fA-F]{6}$/.test(h)) return 0;
+  const c = [1,3,5].map(i => parseInt(h.slice(i, i+2), 16) / 255)
+    .map(v => v <= 0.03928 ? v/12.92 : Math.pow((v + 0.055)/1.055, 2.4));
+  return 0.2126*c[0] + 0.7152*c[1] + 0.0722*c[2];
+}
+function textoSobre(hex) {
+  const l = luminancia(hex);
+  return ((1.05) / (l + 0.05)) >= 3.6 ? '#FFFFFF' : '#101114';
+}
+
+// 837. Una escala con números redondos. Si las rayas de la rejilla caen en
+//      $9.568.000 / 2 nadie las lee; tienen que caer en 2,5M, 5M, 7,5M.
+//      Se busca el paso "bonito" más chico que alcance a tapar el máximo.
+function escalaBonita(max, divisiones) {
+  const bruto = Math.max(1, max) / divisiones;
+  const exp = Math.pow(10, Math.floor(Math.log10(bruto)));
+  const n = bruto / exp;
+  const paso = (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * exp;
+  return { paso, tope: paso * divisiones };
+}
+
+// ============================================================
+// 837. LA GRÁFICA DE CONOS
+//
+// Ángel mandó una foto: picos de colores sobre una rejilla, con los
+// valores en el eje izquierdo. "Quiero que las gráficas de barras sean
+// mejor así". Y después: "cada mes un color distinto y que adentro de
+// cada cono esté el número de millones vendido, por ejemplo 17,5M".
+//
+// Lo que cambia de fondo no es la forma, es que ahora se puede LEER un
+// valor sin tocar nada: antes había seis barras sin eje ni rejilla, así
+// que la única forma de saber cuánto valía una era compararla con la de
+// al lado. Ahora cada cono trae su número encima y hay rayas de
+// referencia detrás.
+//
+// Dónde va el número: DENTRO del cono, cerca de la base, que es donde
+// el triángulo tiene ancho. Si el mes fue flojo y el cono queda muy
+// chato, el número no cabe adentro y se pone encima de la punta, en
+// tinta normal. Un número recortado por el borde es peor que un número
+// afuera.
+//
+// El color lo pidió él y no significa nada —el nombre del mes ya está
+// debajo—, así que se reparte por posición, de izquierda a derecha, con
+// el orden de la paleta validada (835): así dos conos vecinos siempre
+// son dos colores que de verdad se distinguen, también para un daltónico.
+// ============================================================
 function crecimientoHtml() {
   const meses = crecimientoMesAMes(6);
   const conVentas = meses.filter(m => m.vendido > 0);
   if(conVentas.length < 2) return '';
 
-  const max = Math.max(...meses.map(m => m.vendido), 1);
+  const ALTO = 158;             // alto del área de dibujo, en píxeles
+  const DIVISIONES = 4;
+  const { paso, tope } = escalaBonita(Math.max(...meses.map(m => m.vendido), 1), DIVISIONES);
   const actual = meses[meses.length - 1];
+  const paleta = coloresDeSerie().series;
 
   // El titular dice en una frase lo que el gráfico dice en seis columnas.
   let titular;
@@ -8193,24 +8248,54 @@ function crecimientoHtml() {
       + (igual ? '=' : sube ? '▲' : '▼') + (igual ? '' : Math.abs(d) + '%') + '</span>';
   };
 
-  const columnas = meses.map(m => {
-    const alt = Math.max(4, Math.round((m.vendido / max) * 100));
-    // El mes en curso va rayado: aún no terminó, su barra no es definitiva.
-    const relleno = m.enCurso
-      // 835. Los meses cerrados pasaron de lima a grafito. Ángel: "lo de las
-      //      barras de cómo vamos mes a mes sí podría ser un color diferente".
-      //      Y el motivo es más fuerte que el gusto: el lima era el mismo del
-      //      botón de "Registrar venta", o sea que el color más fuerte de la
-      //      pantalla estaba puesto dos veces diciendo cosas distintas. Ahora
-      //      el lima solo aparece en el mes EN CURSO —donde sí significa algo,
-      //      "este es el que va corriendo"— y el resto es historia en gris.
-      ? 'background:repeating-linear-gradient(135deg,var(--lime-accent) 0 7px,var(--lime-soft) 7px 14px);border:1.5px solid var(--lime)'
-      : 'background:var(--barra-neutra)';
+  // Millones con un decimal, como los pidió: $17,5M. Por debajo del millón
+  // se cae a miles, porque "$0,1M" no se lo dice a nadie.
+  const etiquetaPico = v => v >= 1000000
+    ? '$' + (v/1000000).toFixed(1).replace('.', ',') + 'M'
+    : v >= 1000 ? '$' + Math.round(v/1000) + 'k' : '$' + Math.round(v);
+  const etiquetaEje = v => v >= 1000000
+    ? '$' + String((v/1000000).toFixed(1)).replace(/[.,]0$/, '').replace('.', ',') + 'M'
+    : v >= 1000 ? '$' + Math.round(v/1000) + 'k' : '$' + Math.round(v);
+
+  // ---- La rejilla y el eje ----
+  let rejilla = '', eje = '';
+  for(let i = 1; i <= DIVISIONES; i++) {
+    const pct = (i / DIVISIONES) * 100;
+    rejilla += '<div style="position:absolute;left:0;right:0;bottom:' + pct + '%;height:1px;background:var(--border)"></div>';
+    eje += '<div style="position:absolute;right:0;bottom:calc(' + pct + '% - 8px);font-size:11px;color:var(--ink-3);'
+      + 'white-space:nowrap;font-variant-numeric:tabular-nums">' + etiquetaEje(paso * i) + '</div>';
+  }
+
+  // ---- Los conos ----
+  // 837. El cono tiene tope de ancho. Sin él, en pantalla de escritorio
+  //      cuatro conos se reparten 1.100px y quedan tan achatados que
+  //      parecen lomas, no picos: la misma plata se ve más chiquita solo
+  //      porque la ventana es más ancha. Con tope, el dibujo es el mismo
+  //      en el celular y en el computador.
+  const ANCHO_CONO = 96;
+  const TAM_NUM = meses.length >= 6 ? 10 : 11;
+  const conos = meses.map((m, i) => {
+    const px = Math.max(7, Math.round((m.vendido / tope) * ALTO));
+    const color = paleta[i % paleta.length];
+    const cabe = px >= 40;      // ¿hay alto para meter el número adentro?
+    const etiqueta = etiquetaPico(m.vendido);
+    // El mes en curso va rayado: todavía no termina, su cono no es definitivo.
+    const rayas = m.enCurso
+      ? ';background-image:repeating-linear-gradient(135deg,rgba(255,255,255,.48) 0 7px,rgba(255,255,255,0) 7px 14px)'
+      : '';
     return '<div onclick="verCicloInicio(' + m.offset + ')" title="' + m.completo + ': ' + fmt(m.vendido) + '"'
-      + ' style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:flex-end;cursor:pointer">'
-      + '<div style="font-size:11.5px;font-weight:600;color:var(--ink-2);text-align:center;margin-bottom:4px;'
-        + 'white-space:nowrap;font-variant-numeric:tabular-nums">' + fmtCorto(m.vendido) + '</div>'
-      + '<div style="height:' + alt + '%;border-radius:5px 5px 2px 2px;' + relleno + '"></div>'
+      + ' style="flex:1;min-width:0;position:relative;height:100%;display:flex;flex-direction:column;justify-content:flex-end;cursor:pointer">'
+      + (cabe ? '' :
+          '<div style="position:absolute;left:0;right:0;bottom:' + (px + 3) + 'px;text-align:center;font-size:' + TAM_NUM + 'px;'
+          + 'font-weight:700;color:var(--ink-2);white-space:nowrap;font-variant-numeric:tabular-nums">' + etiqueta + '</div>')
+      + '<div style="height:' + px + 'px;position:relative;align-self:center;width:100%;max-width:' + ANCHO_CONO + 'px;'
+        + 'background-color:' + color + rayas + ';'
+        + '-webkit-clip-path:polygon(50% 0,100% 100%,0 100%);clip-path:polygon(50% 0,100% 100%,0 100%)">'
+        + (cabe
+            ? '<span style="position:absolute;left:0;right:0;bottom:6px;text-align:center;font-size:' + TAM_NUM + 'px;font-weight:700;'
+              + 'color:' + textoSobre(color) + ';white-space:nowrap;font-variant-numeric:tabular-nums">' + etiqueta + '</span>'
+            : '')
+      + '</div>'
     + '</div>';
   }).join('');
 
@@ -8220,13 +8305,21 @@ function crecimientoHtml() {
     + '<div style="margin-top:3px">' + chip(m.delta) + '</div>'
   + '</div>').join('');
 
+  const ANCHO_EJE = 42;
   return '<div class="card">'
     + '<div class="sec-title" style="margin-bottom:5px">📈 Cómo vamos mes a mes</div>'
-    + '<div style="font-size:14px;color:var(--ink-2);line-height:1.45;margin-bottom:14px">' + titular + '</div>'
-    + '<div style="display:flex;gap:7px;align-items:stretch;height:118px">' + columnas + '</div>'
-    + '<div style="display:flex;gap:7px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">' + pies + '</div>'
+    + '<div style="font-size:14px;color:var(--ink-2);line-height:1.45;margin-bottom:16px">' + titular + '</div>'
+    + '<div style="display:flex;gap:9px;align-items:flex-end">'
+      + '<div style="width:' + ANCHO_EJE + 'px;flex-shrink:0;position:relative;height:' + ALTO + 'px">' + eje + '</div>'
+      + '<div style="flex:1;min-width:0;position:relative;height:' + ALTO + 'px">'
+        + rejilla
+        + '<div style="position:absolute;inset:0;display:flex;gap:6px;align-items:flex-end">' + conos + '</div>'
+      + '</div>'
+    + '</div>'
+    + '<div style="display:flex;gap:6px;margin-top:9px;padding-top:9px;border-top:1px solid var(--border);'
+      + 'margin-left:' + (ANCHO_EJE + 9) + 'px">' + pies + '</div>'
     + '<div style="font-size:13px;color:var(--ink-3);margin-top:12px;line-height:1.4">'
-      + 'La barra rayada es el mes en curso: todavía no termina, por eso se compara contra '
+      + 'El cono rayado es el mes en curso: todavía no termina, por eso se compara contra '
       + 'los mismos días del mes pasado y no contra el mes entero.</div>'
   + '</div>';
 }
