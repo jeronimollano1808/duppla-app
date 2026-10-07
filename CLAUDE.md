@@ -1257,5 +1257,29 @@ Y en Clientes se quitó el aviso de "a 38 clientes se les está acabando": desde
 **El menú quedó en 9 entradas** (empezó esta sesión en 14): Inicio · Ventas · Gastos · Clientes *(4 adentro)* · Consignación · Resumen del mes · Proveedores *(2 adentro)* · Actividad · Usuarios.
 
 
+### 14.40 La app se viste de iPhone — y pierde el modo oscuro (comentario 834)
+
+Ángel mandó dos capturas de pantalla de una app de celular —una pantalla de ajustes y un tablero de salud— y escribió: *"quiero esta interfaz en toda mi app"*. Al preguntarle cómo aplicarlo contestó tres cosas: **pantalla por pantalla**, **el menú se queda como está pero cambian colores, tipografía y widgets**, y **quitar el modo oscuro, solo claro**.
+
+**Qué hacía que esas capturas se vieran así.** No era un color: eran cuatro decisiones, y en este orden de importancia.
+
+1. **El fondo es gris y las tarjetas son blancas.** En DUPPLA estaba al revés: fondo casi blanco (`#F9FAFB`) y tarjetas blancas separadas por un borde gris. Un borde es la forma de separar dos superficies del mismo color *cuando no hay más remedio*. Con el fondo gris (`#F2F2F7`) la tarjeta se separa sola, y entonces el borde sobra — peor, ensucia. Por eso `.card` perdió el `border` en vez de suavizarlo.
+2. **Nada de mayúsculas diminutas con las letras separadas.** `.card-title`, `.metric-label`, `.tbl th` y los encabezados de sección de Inicio eran todos `font-size:10-11px; text-transform:uppercase; letter-spacing:.08em`. Eso es lenguaje de tablero de control. En las capturas, "General" y "Security" son texto normal, gris, de 13-14px. Se cambió en el token, no caso por caso: `.sec-title` es el nombre nuevo y `.card-title` apunta al mismo sitio porque estaba escrito en media app.
+3. **La letra del sistema.** Se borró el `@import` de Google Fonts (Inter + Archivo) y la pila arranca en `-apple-system`. En el iPhone de Ángel eso es SF Pro, que es literalmente la letra de las capturas. De paso la app deja de pedirle dos archivos a Google antes de pintar nada.
+4. **Radios grandes y sombras casi invisibles.** `--radius-lg` pasó de 14 a 18px y `--radius-xl` de 20 a 24. Las sombras bajaron a opacidades de .05-.06: el relieve lo da el contraste blanco-sobre-gris, no la sombra.
+
+**El menú se quedó donde estaba, pero cambió de bando.** Era negro con letras blancas al 45% de opacidad. Ahora es blanco con una línea de pelo a la derecha, los íconos en cuadraditos grises y la pestaña activa como una pastilla lima entera (antes era una barrita de 3px en el borde — invisible sobre blanco). La estructura, los grupos y las familias del 831-832 no se tocaron: Ángel pidió *"déjalo como está pero cambia los colores, la tipografía y el estilo de los widgets"*.
+
+**Los campos de texto pasaron a 16px por una razón que no es estética.** Safari en iPhone hace zoom automático al tocar un campo de menos de 16px y deja la pantalla torcida. `.f-input` y `.login-input` subieron a 16px; de paso cambiaron a relleno gris sin borde, que es el campo de iOS.
+
+**El modo oscuro se fue entero, no a medias.** Se borraron `:root[data-theme="dark"]`, la media query `prefers-color-scheme`, el botón del sidebar, `aplicarTema`, `temaGuardado`, `TEMAS` y el *script* de arranque del `<head>`. Queda una sola línea nueva: `localStorage.removeItem('duppla-tema')`, para que a quien ya había escogido "oscuro" no le quede basura guardada. *Un tema a medias es peor que ninguno: deja texto blanco sobre blanco (ver 795).*
+
+**Qué sigue siendo verdad.** La paleta de las gráficas (`--serie-1..6`, `--gris-cola-1..6`) no se tocó: está validada para daltonismo y sigue leyéndose de los tokens desde `coloresDeSerie()`. Las cuentas tampoco: este comentario no toca ni una fórmula.
+
+**Pantallas rehechas en esta tanda:** solo **Inicio** (tarjetas de número con la cifra arriba y el nombre gris debajo, alertas sin borde, chips de ciclo rellenos, barras de progreso con la clase `.barra`, encabezados con `.sec-title`). Las demás heredaron el estilo nuevo por los tokens y se verificaron una por una contra regresiones, pero sus encabezados internos siguen en el formato viejo. **Siguiente:** Ventas, Clientes, Gastos, Resumen del mes.
+
+**Componentes nuevos disponibles para esas pantallas:** `.lista` / `.lista-fila` / `.lista-ico` / `.lista-tit` / `.lista-sub` / `.lista-chev` (el patrón de la captura de ajustes: tarjeta con renglones, separadores que arrancan donde arranca el texto, nunca debajo del ícono) y `.barra` / `.barra > i` para progreso.
+
+
 ---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*
