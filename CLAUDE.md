@@ -1281,5 +1281,74 @@ Y en Clientes se quitó el aviso de "a 38 clientes se les está acabando": desde
 **Componentes nuevos disponibles para esas pantallas:** `.lista` / `.lista-fila` / `.lista-ico` / `.lista-tit` / `.lista-sub` / `.lista-chev` (el patrón de la captura de ajustes: tarjeta con renglones, separadores que arrancan donde arranca el texto, nunca debajo del ícono) y `.barra` / `.barra > i` para progreso.
 
 
+### 14.41 El color solo donde significa algo — y diez colores en la dona (comentario 835)
+
+Ángel, en el mismo audio, pidió dos cosas que parecen opuestas y no lo son: *"los colores quiero que sean mucho más neutros"* y *"en las de la dona la gran mayoría son colores grises, quiero que haya muchos colores que se diferencien"*. No se contradicen: **quiere menos color repartido por la interfaz y más color dentro de la gráfica.** Que es exactamente la regla correcta.
+
+**La regla que salió de ahí, escrita para no volver a discutirla:**
+
+| Elemento | Color |
+|---|---|
+| Etiqueta que solo DESCRIBE (canal, tipo de precio, quién consumió, "pagado") | gris |
+| Cifra de una tabla o de una tarjeta de número | tinta |
+| Barra de progreso o de comparación | grafito (`--barra-neutra`) |
+| Lima | **una** acción principal por pantalla, y el mes en curso de la gráfica de barras |
+| Rojo / ámbar | solo lo que pide una acción: mora, saldo pendiente, margen negativo, revisar precios |
+| La paleta de series | solo dentro de una gráfica |
+
+**Por qué, con un ejemplo.** La tabla de Ventas tenía, en cada una de sus veintitrés filas: el canal en lima, el tipo de precio en azul, el total en lima, el margen en verde y "pagado" en verde. Cinco cosas de color por fila. *Cuando todo está en rojo, nada está en rojo* — el color dejó de señalar y pasó a ser textura. Ahora la fila es gris y tinta, y lo único que salta es lo que está mal.
+
+Lo mismo con los gastos: cada renglón iba en rojo. Pero un gasto registrado es trabajo bien hecho, no una alarma; gastar el rojo ahí es quedarse sin rojo para cuando algo sí lo necesita.
+
+**Las barras de "Cómo vamos mes a mes" eran del MISMO lima del botón de "Registrar venta".** O sea que el color más fuerte de la pantalla estaba puesto dos veces diciendo cosas distintas. Ahora los meses cerrados son grafito y el lima queda solo en el mes en curso, donde sí dice algo: *este es el que va corriendo*. Misma lógica en el punto de equilibrio: la barra es gris mientras falta y se pone verde cuando de verdad se cubrió.
+
+**La dona pasó de 6 a 10 matices.** Con seis, un ciclo de catorce productos salía con ocho pedazos en gris — y Ángel vio bien que eso ya no es una gráfica de reparto, es una gráfica de dos productos y una mancha.
+
+Lo que NO se hizo fue inventar cuatro colores a ojo. Los pedazos de la dona van ordenados de mayor a menor, así que **el vecino de cada color es el siguiente de la lista**: el orden de la paleta es el mecanismo de seguridad, no decoración. Se probaron órdenes al azar contra el validador de daltonismo y se escogió uno que pasa todas las puertas sobre fondo blanco:
+
+- peor par vecino **ΔE 15.0** para daltonismo (la meta es 8),
+- peor par vecino **ΔE 24.1** para visión normal (el piso es 15).
+
+Tres de los diez (aqua, rosa y amarillo) quedan por debajo de 3:1 de contraste contra el blanco. Eso es legal **aquí** porque cada pedazo lleva su nombre escrito al lado en la leyenda: el color nunca es la única forma de saber quién es quién. *Si algún día se quita la leyenda, esos tres dejan de ser legales.*
+
+**Si alguien toca el orden de `--serie-1..10`, hay que volver a validarlo.** No es una lista de colores bonitos: es una lista de vecinos que se distinguen.
+
+En Distribuidores se aplicó lo mismo (`MAX_SERIES_DIST` de 6 a 10), y de paso la cola dejó de ser un gris plano repetido —que era el defecto del 800— para usar la escala ordinal de `grisDeCola`, donde dos vecinos sí se diferencian.
+
+
+### 14.42 Fuera "Resumen del mes" — y lo que quedó, plegado (comentario 836)
+
+Ángel preguntó, otra vez sin ordenar nada: *"¿qué hay en la ventana de Resumen del mes que no la encuentro en el Inicio?"*. La pregunta correcta, y la respuesta obligaba a revisar bloque por bloque en vez de suponer.
+
+**De los siete bloques de la pantalla, tres no eran suyos:**
+
+| Bloque | ¿Estaba ya en Inicio? |
+|---|---|
+| 🍩 Quién sostuvo el mes | Sí — es **la misma dona**, mismo motor. La de Inicio trae además el margen por producto |
+| 📦 Todo lo vendido, producto por producto | Sí — la leyenda de la dona ya da nombre, unidades, % y plata, **más** el margen |
+| Unidades y dinero vendido | Sí — el centro de la dona dice "$9,6M · 56 unidades" y la tarjeta "Vendido" da el dinero |
+| 🔥 Lo que más salió | Sí, implícito: la dona va ordenada de mayor a menor |
+| 🐢 Lo que menos salió | **No** |
+| 👥 Quién registró | **No** |
+| 😴 Se vendían y este mes no | **No** — y es lo más valioso de todo |
+| Promedio por unidad | **No** |
+
+**Lo que no se hizo: pegar los cuatro al final de Inicio.** Ángel se adelantó a eso: *"que no te queden todas esas, toda esa información regada, sino que haya un mini widget al cual yo le hundo y ahí sí se despliega"*. Y tenía razón — si los cuatro bloques se pegan abiertos, lo único que cambia es dónde está el desorden. Son datos de repaso mensual, no de todos los días.
+
+Así que quedaron en **cuatro renglones plegados** (`detalleMesHtml`), con el patrón de lista de las capturas del 834: ícono, título, una línea de contexto, el número a la derecha y la flechita. Cada uno dice lo suyo de un vistazo —"Quién registró · Ángel 17 · Jero 4"— y se abre solo si uno quiere el detalle.
+
+**Se abre uno a la vez.** `detalleMesAbierto` guarda una sola clave: abrir el segundo cierra el primero. Sin eso, a los tres clics vuelve a ser una pantalla con todo desplegado, que es justo lo que se estaba quitando.
+
+**"Promedio por unidad" no lleva flechita** porque no se abre: es un número y ya. Una flecha que no hace nada es una promesa rota.
+
+**Detalles de implementación que importan:**
+
+- `resumenDelMes(offset)` **se quedó entero**: era el motor, no la pantalla. Ahora lo llama Inicio con `inicioCicloOffset`, o sea con los mismos chips de ciclo que ya están arriba — un selector de mes menos en la app. `resumenOffset` y `verMesResumen` se fueron con la pantalla.
+- El separador de la lista se dibuja entre **`.lista-item`**, no entre `.lista-fila`. Con el selector viejo (`.lista-fila + .lista-fila`), abrir un renglón metía un `div` en medio y el separador del siguiente desaparecía.
+- `.lista-tit` y `.lista-sub` necesitaron `display:block`. Sin eso el título y su línea de contexto salían pegados en el mismo renglón — se vio en la primera captura, no en el código.
+
+**El menú quedó en 8 entradas** y el grupo "Cómo vamos" desapareció solo: Resumen del mes era su único miembro.
+
+
 ---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*
