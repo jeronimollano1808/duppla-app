@@ -1350,5 +1350,27 @@ Así que quedaron en **cuatro renglones plegados** (`detalleMesHtml`), con el pa
 **El menú quedó en 8 entradas** y el grupo "Cómo vamos" desapareció solo: Resumen del mes era su único miembro.
 
 
+### 14.43 La gráfica de conos (comentario 837)
+
+Ángel mandó una foto —picos de colores sobre una rejilla, con los valores en el eje izquierdo— y dijo: *"quiero que las gráficas de barras sean mejor así"*. Al preguntarle por el color, porque chocaba con lo que acababa de pedir en el 835, fue explícito: *"cada mes un color distinto y que adentro de cada cono esté el número de millones vendido, por ejemplo 17,5M"*.
+
+**Lo que cambió de fondo no es la forma, es que ahora se puede leer un valor.** Antes había seis barras sin eje ni rejilla: la única manera de saber cuánto valía una era compararla con la de al lado. Ahora cada cono trae su número encima y hay rayas de referencia detrás.
+
+**La escala cae en números redondos.** `escalaBonita()` busca el paso más chico de la familia 1 / 2 / 2,5 / 5 × 10ⁿ que alcance a tapar el máximo. Con $9.568.000 de máximo salen rayas en 2,5M / 5M / 7,5M / 10M. Si las rayas cayeran en "$2.392.000" nadie las leería, y una rejilla que no se lee es decoración.
+
+**El número va DENTRO del cono, cerca de la base** — que es donde el triángulo tiene ancho. Dos detalles que no son opcionales:
+
+- **Blanco o negro se decide por cuenta, no a ojo.** `textoSobre()` calcula el contraste del relleno contra el blanco: el amarillo de la paleta aguanta texto oscuro y el azul no, y eso no se adivina mirando una captura.
+- **Si el mes fue flojo, el cono queda chato y el número no cabe.** Por debajo de 40px de alto, la etiqueta se pone encima de la punta en tinta normal. *Un número recortado por el borde es peor que un número afuera.*
+
+**El cono tiene tope de ancho (96px).** Sin él, en pantalla de escritorio cuatro conos se reparten 1.100px y quedan tan achatados que parecen lomas: la misma plata se ve más chica solo porque la ventana es más ancha. Con tope, el dibujo es el mismo en el celular y en el computador.
+
+**Sobre el color.** Lo pidió él y no significa nada: el nombre del mes ya está debajo de cada cono, así que el color no aporta identidad que falte. Por eso se reparte **por posición**, de izquierda a derecha, siguiendo el orden de la paleta validada del 835 — así dos conos vecinos son siempre dos colores que de verdad se distinguen, también para un daltónico. Si algún día se reparte de otra forma, hay que volver a validar la adyacencia.
+
+**El mes en curso sigue rayado**, ahora con rayas blancas translúcidas sobre su propio color en vez del lima. La raya es lo único de ese cono que dice algo: *todavía no termina*.
+
+*Nota honesta para quien lo lea después:* un triángulo es peor que una barra para comparar magnitudes —el ojo lee área, y un triángulo tiene la mitad del área de su rectángulo—. Lo que lo deja pasar aquí es que la punta marca el valor, hay rejilla para leerlo y cada cono trae su cifra escrita. Si alguna vez se quitan la rejilla o las cifras, la forma deja de ser legítima y hay que volver a barras.
+
+
 ---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*
