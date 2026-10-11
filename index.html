@@ -890,6 +890,11 @@ button.lista-fila{cursor:pointer}
 }
 /* Sin ícono, el separador arranca donde arranca el texto. */
 .lista-fila.sin-ico + .lista-fila.sin-ico::before{left:16px}
+/* 839. Los dos nombres del mes en la infografía: en pantalla ancha va el
+   largo, en celular el abreviado (ver la media query del final). */
+.mes-largo{display:inline}
+.mes-corto{display:none}
+
 /* 836. Cuando una fila lleva su detalle plegado debajo, la fila y su
    detalle van envueltos en un .lista-item: el separador tiene que
    dibujarse entre ITEMS, no entre filas, o se pierde en cuanto uno
@@ -1044,6 +1049,9 @@ button.lista-fila:active{background:var(--border)}
   .page-title{font-size:25px}
   /* 838. El conteo de ventas de la infografía solo cabe en pantalla ancha. */
   .info-ventas{display:none}
+  /* 839. Y el nombre del mes se abrevia. */
+  .mes-largo{display:none}
+  .mes-corto{display:inline}
   /* Formularios de una sola columna */
   .f-row,.f-row.trio{grid-template-columns:1fr}
   /* Métricas en 2 columnas */
@@ -8242,7 +8250,7 @@ function bloque3dHtml(ancho, alto, col, texto) {
     + '<polygon points="' + (W-d) + ',' + d + ' ' + W + ',0 ' + W + ',' + (H-d) + ' ' + (W-d) + ',' + H + '" fill="' + col.oscuro + '"/>'
     + '<rect x="0" y="' + d + '" width="' + (W-d) + '" height="' + (H-d) + '" fill="' + col.base + '"/>'
     + '<text x="' + ((W-d)/2) + '" y="' + (d + (H-d)/2) + '" text-anchor="middle" dominant-baseline="central" '
-      + 'font-size="13" font-weight="700" fill="' + tinta + '">' + texto + '</text>'
+      + 'font-size="12.5" font-weight="700" fill="' + tinta + '">' + texto + '</text>'
   + '</svg>';
 }
 
@@ -8292,23 +8300,44 @@ function crecimientoHtml() {
       + signo + '</span>';
   };
 
-  // El bloque más ancho de todos, para reservarle una columna fija: si cada
-  // renglón termina donde termine su bloque, los paneles quedan de largos
-  // distintos y la tarjeta se ve rota. La escalera va en su propia columna.
-  const COL_BLOQUE = 38 + 72 + 9 + 9;
+  // 839. Ángel: "que en la parte de color de la derecha sea el número de
+  //      millones vendidos, por ejemplo 22,1M, y que el porcentaje esté
+  //      donde está el dinero". O sea: la plata al bloque, el porcentaje
+  //      al panel. Tiene razón en el orden — la plata es la cifra que uno
+  //      viene a ver, y el bloque de color es lo primero que salta.
+  const etiquetaPlata = v => v <= 0 ? '—'
+    : v >= 1000000 ? '$' + (v/1000000).toFixed(1).replace('.', ',') + 'M'
+    : v >= 1000 ? '$' + Math.round(v/1000) + 'k'
+    : '$' + Math.round(v);
+
+  // El ancho del bloque sigue siendo la plata, pero ahora adentro va un
+  // texto más largo que un "29%". Así que el bloque más chico no puede ser
+  // más angosto que la etiqueta más larga, o el número sale recortado.
+  // El arranque es el MISMO para todos (no uno por renglón): si cada bloque
+  // empezara en su propio ancho mínimo, dejarían de ser comparables.
+  const anchoTexto = Math.max(...meses.map(m => etiquetaPlata(m.vendido).length)) * 7.4 + 18;
+  const BASE_BLOQUE = Math.max(50, Math.round(anchoTexto));
+  const RANGO_BLOQUE = 72;
+  const COL_BLOQUE = BASE_BLOQUE + RANGO_BLOQUE + 9 + 9;
 
   const renglones = orden.map((m, i) => {
     const col = CINTAS_MES[i % CINTAS_MES.length];
     const nro = String(i + 1).padStart(2, '0');
-    const anchoBloque = 38 + Math.round((m.vendido / max) * 72);
+    const anchoBloque = BASE_BLOQUE + Math.round((m.vendido / max) * RANGO_BLOQUE);
     const nombre = m.enCurso ? 'Este mes' : m.completo;
+    // 839. En celular el panel se angostó —el bloque creció para que le
+    //      cupiera la plata— y "SEPTIEMBRE 2026" se cortaba a la mitad.
+    //      Se escriben los dos nombres y el CSS tapa el que no cabe. Un
+    //      nombre recortado con "..." no se lee; uno abreviado sí.
+    const nombreCorto = m.enCurso ? 'Este mes'
+      : m.completo.split(' ')[0].slice(0, 3) + ' ' + m.anio;
     // Un mes que vendió algo nunca es "0%": es "<1%". Un cero redondo ahí
     // dice "no vendió nada", que es falso.
     const pct = (pcts[i] === 0 && m.vendido > 0) ? '<1%' : pcts[i] + '%';
     // La explicación de contra qué se compara vive en la nota del pie, no
     // repetida en los cinco renglones: en celular se cortaba a la mitad.
     const sub = m.vendido > 0
-      ? fmt(m.vendido) + (m.delta !== null ? ' · ' + (m.delta > 0 ? '+' : '') + m.delta + '%' : '')
+      ? pct + ' del total' + (m.delta !== null ? ' · ' + (m.delta > 0 ? '+' : '') + m.delta + '%' : '')
       : 'sin ventas';
 
     return '<div onclick="verCicloInicio(' + m.offset + ')" title="' + nombre + ': ' + fmt(m.vendido) + '"'
@@ -8331,8 +8360,10 @@ function crecimientoHtml() {
         + 'margin-left:-7px;background:#F7F4ED;border-radius:0 7px 7px 0;box-shadow:0 1px 2px rgba(0,0,0,.05)">'
         + redondel(m.delta)
         + '<div style="min-width:0;flex:1">'
-          + '<div style="font-size:13px;font-weight:600;letter-spacing:.04em;color:#3A3730;'
-            + 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + nombre.toUpperCase() + '</div>'
+          + '<div style="font-size:12.5px;font-weight:600;letter-spacing:.03em;color:#3A3730;'
+            + 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
+            + '<span class="mes-largo">' + nombre.toUpperCase() + '</span>'
+            + '<span class="mes-corto">' + nombreCorto.toUpperCase() + '</span></div>'
           + '<div style="font-size:12px;color:#8A8578;margin-top:1px;white-space:nowrap;overflow:hidden;'
             + 'text-overflow:ellipsis;font-variant-numeric:tabular-nums">' + sub + '</div>'
         + '</div>'
@@ -8344,7 +8375,7 @@ function crecimientoHtml() {
 
       // --- el bloque 3D, de ancho proporcional ---
       + '<div style="flex-shrink:0;width:' + COL_BLOQUE + 'px;display:flex;align-items:center;padding-left:9px">'
-        + bloque3dHtml(anchoBloque, 44, col, pct)
+        + bloque3dHtml(anchoBloque, 44, col, etiquetaPlata(m.vendido))
       + '</div>'
     + '</div>';
   }).join('');
@@ -8355,6 +8386,7 @@ function crecimientoHtml() {
     + renglones
     + '<div style="font-size:13px;color:var(--ink-3);margin-top:12px;line-height:1.4">'
       + 'Los meses van del que más vendió al que menos, y el ancho del bloque es esa misma plata. '
+      + 'El porcentaje es la tajada que se llevó ese mes de los cinco. '
       + 'El mes en curso todavía no termina, por eso se compara contra los mismos días del mes pasado.</div>'
   + '</div>';
 }
