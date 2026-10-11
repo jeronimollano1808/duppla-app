@@ -1372,5 +1372,29 @@ Así que quedaron en **cuatro renglones plegados** (`detalleMesHtml`), con el pa
 *Nota honesta para quien lo lea después:* un triángulo es peor que una barra para comparar magnitudes —el ojo lee área, y un triángulo tiene la mitad del área de su rectángulo—. Lo que lo deja pasar aquí es que la punta marca el valor, hay rejilla para leerlo y cada cono trae su cifra escrita. Si alguna vez se quitan la rejilla o las cifras, la forma deja de ser legítima y hay que volver a barras.
 
 
+### 14.44 La infografía de meses — y el escalón que mentía (comentario 838)
+
+Ángel mandó una plantilla de infografía de stock: cintas numeradas 01-05 a la izquierda, paneles color crema en el medio, y a la derecha una escalera de bloques 3D con porcentajes. *"La quiero exactamente así, con su diseño, colores, detalles"*. Al preguntarle dónde: *"en los meses, ranking y dinero vendido"*.
+
+**Lo que no se copió, y por qué se avisó antes de empezar.** En la plantilla original los bloques no corresponden con sus números: arriba iba 84%, debajo 35%, y debajo de ese 62%. Los escalones suben porque es un dibujo bonito, no porque uno valga más que otro. Metiéndole datos reales, eso es una gráfica que miente — un producto flojo puede quedar por encima de uno bueno. Se le dijo, y escogió que la altura correspondiera.
+
+**Y resultó gratis.** Como los meses van ordenados por plata, los bloques quedan de mayor a menor solos: la escalera se ve igual que en la foto *y* dice la verdad. Cuando la forma honesta y la bonita coinciden, no hay nada que negociar. *La próxima vez que una plantilla de stock pelee con los datos, vale la pena buscar el orden que las hace coincidir antes de proponer sacrificar una de las dos.*
+
+**Reemplazó a los conos del 837, y no es un capricho.** Los conos iban en orden de TIEMPO y respondían *"¿vamos subiendo?"*. Esto va en orden de PLATA y responde *"¿cuál fue el mejor mes?"*. Son dos preguntas distintas, pero la primera no se perdió: cada renglón sigue trayendo su ▲/▼ contra el mes anterior, y el titular de arriba lo dice en una frase. Dos tarjetas de meses apiladas habrían sido justo el desorden que llevamos toda la sesión quitando.
+
+**Decisiones de dibujo:**
+
+- **Cinco meses, no seis.** La plantilla tiene cinco cintas y cinco colores. Un sexto obligaba a inventar un color de tierra que no está en la foto.
+- **`bloque3dHtml()` dibuja en SVG, no en CSS.** Hacen falta tres caras de tres tonos (arriba clara, frente base, costado oscura); con `transform` eso son tres divs rotados que se desalinean medio píxel en cuanto cambia el zoom del navegador.
+- **Los colores de `CINTAS_MES` NO salen de la paleta de gráficas.** Son los de la foto —terracota, mostaza, beige, azul gris, carbón— y aquí no codifican nada: el dato lo lleva el **ancho** del bloque. Por eso no se validaron para daltonismo: no hay nada que distinguir por color.
+- **El blanco o negro del número se decide con `textoSobre()`** (837), no a ojo: sobre el beige hay que escribir oscuro y sobre la terracota claro.
+- **La columna del bloque es de ancho fijo.** Si cada renglón terminara donde termina su bloque, los paneles quedarían de largos distintos y la tarjeta se vería rota.
+- **`<1%` en vez de `0%`.** Un mes que vendió $95.000 redondea a cero, y un cero redondo ahí dice "no vendió nada", que es falso.
+- **El redondel del panel** era un adorno en la plantilla (+, −, =) y aquí dice algo: subió, bajó o quedó igual. Con `·` cuando no hay mes anterior con ventas — porque "no se sabe" no es lo mismo que "quedó igual".
+- **El conteo de ventas se esconde en celular** (`.info-ventas`): en pantalla ancha el panel sobra espacio, en el teléfono no cabe.
+
+**Se borró `escalaBonita()`**, que solo servía a la rejilla de los conos. El código muerto que "por si acaso" se deja es el que dentro de tres meses nadie sabe si se puede tocar.
+
+
 ---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*
