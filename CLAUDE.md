@@ -1396,5 +1396,18 @@ Así que quedaron en **cuatro renglones plegados** (`detalleMesHtml`), con el pa
 **Se borró `escalaBonita()`**, que solo servía a la rejilla de los conos. El código muerto que "por si acaso" se deja es el que dentro de tres meses nadie sabe si se puede tocar.
 
 
+### 14.45 La plata al bloque, el porcentaje al panel (comentario 839)
+
+Ángel, viendo la infografía ya en producción: *"que en la parte de color de la derecha sea el número de millones vendidos, por ejemplo 22,1M, y que el porcentaje esté donde está el dinero en este momento"*. O sea: se intercambian.
+
+**Tenía razón en el orden.** La plata es la cifra que uno viene a ver, y el bloque de color es lo primero que salta a la vista. El porcentaje —qué tajada de los cinco meses se llevó ese mes— es contexto, y el contexto va en letra chica.
+
+**Lo que se complicó y por qué importa.** Un "29%" cabe en cualquier bloque; un "$22,5M" no. Y el ancho del bloque **es el dato**, así que no se puede ensanchar el bloque flojo para que le quepa el texto sin romper la comparación.
+
+La salida: el arranque del bloque (`BASE_BLOQUE`) se calcula una sola vez, a partir de la etiqueta más larga de los cinco meses, y es **el mismo para todos**. Así el texto siempre cabe y los bloques siguen siendo comparables entre sí, porque todos parten del mismo sitio y solo crece lo proporcional (`RANGO_BLOQUE`). *Si cada bloque usara su propio ancho mínimo, dejarían de medir lo mismo.*
+
+**El efecto secundario fue en el celular:** al crecer el bloque, el panel se angostó y "SEPTIEMBRE 2026" salía cortado con puntos suspensivos. Se escriben los **dos** nombres —largo y abreviado— y el CSS tapa el que no cabe (`.mes-largo` / `.mes-corto`, como ya se hacía con `.info-ventas` en el 838). Un nombre recortado con "..." no se lee; uno abreviado sí.
+
+
 ---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*
