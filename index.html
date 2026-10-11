@@ -1042,6 +1042,8 @@ button.lista-fila:active{background:var(--border)}
   /* 834. En celular el título grande baja un punto: 28px ocupa media
      pantalla de ancho cuando el ciclo lleva nombre largo. */
   .page-title{font-size:25px}
+  /* 838. El conteo de ventas de la infografía solo cabe en pantalla ancha. */
+  .info-ventas{display:none}
   /* Formularios de una sola columna */
   .f-row,.f-row.trio{grid-template-columns:1fr}
   /* Métricas en 2 columnas */
@@ -8124,6 +8126,11 @@ function crecimientoMesAMes(nMeses) {
   const vendidoEntre = (ini, fin) => DATA.ventas
     .filter(v => v.fecha >= ini && v.fecha <= fin)
     .reduce((s,v) => s + ingresoVenta(v), 0);
+  // 838. Cuántas ventas, no solo cuánta plata: el panel de la infografía
+  //      tiene sitio de sobra en pantalla ancha y "$4.099.000 en 12 ventas"
+  //      dice más que "$4.099.000" solo.
+  const cuantasEntre = (ini, fin) => DATA.ventas
+    .filter(v => v.fecha >= ini && v.fecha <= fin).length;
 
   const meses = [];
   for(let i = nVer; i >= 0; i--) {
@@ -8152,6 +8159,7 @@ function crecimientoMesAMes(nMeses) {
 
     meses.push({
       offset: i, enCurso, vendido, base, delta, nota,
+      nVentas: cuantasEntre(c.inicio, c.fin),
       etiqueta: enCurso ? 'Este mes' : c.label.replace(/ de \d+$/, '').slice(0,3),
       completo: enCurso ? 'Este ciclo' : c.label.charAt(0).toUpperCase() + c.label.slice(1).replace(' de ', ' '),
       anio: c.inicio.slice(0,4)
@@ -8179,54 +8187,76 @@ function textoSobre(hex) {
   return ((1.05) / (l + 0.05)) >= 3.6 ? '#FFFFFF' : '#101114';
 }
 
-// 837. Una escala con números redondos. Si las rayas de la rejilla caen en
-//      $9.568.000 / 2 nadie las lee; tienen que caer en 2,5M, 5M, 7,5M.
-//      Se busca el paso "bonito" más chico que alcance a tapar el máximo.
-function escalaBonita(max, divisiones) {
-  const bruto = Math.max(1, max) / divisiones;
-  const exp = Math.pow(10, Math.floor(Math.log10(bruto)));
-  const n = bruto / exp;
-  const paso = (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * exp;
-  return { paso, tope: paso * divisiones };
+// ============================================================
+// 838. EL RANKING DE MESES — la infografía
+//
+// Ángel mandó una plantilla de infografía (cintas numeradas 01-05 a la
+// izquierda, paneles crema en el medio, bloques 3D de colores con un
+// porcentaje a la derecha) y dijo: "la quiero exactamente así, con su
+// diseño, colores, detalles". Al preguntarle dónde: "en los meses,
+// ranking y dinero vendido".
+//
+// LO QUE NO SE COPIÓ, Y POR QUÉ. En la plantilla original la escalera de
+// bloques NO corresponde con los números: arriba iba 84%, debajo 35% y
+// debajo 62%. Los escalones suben porque es un dibujo bonito, no porque
+// uno valga más. Metiéndole datos de verdad, eso es una gráfica que
+// miente. Se le dijo y escogió que la altura correspondiera.
+//
+// Y resulta que sale gratis: como los meses van ORDENADOS por plata, los
+// bloques quedan de mayor a menor solos. O sea que la escalera se ve
+// igual que en la foto y además dice la verdad. Cuando la forma honesta
+// y la bonita coinciden, no hay nada que negociar.
+//
+// Qué cambió respecto a los conos del 837: los conos iban en orden de
+// TIEMPO y respondían "¿vamos subiendo?". Esto va en orden de PLATA y
+// responde "¿cuál fue el mejor mes?". Son dos preguntas distintas; la
+// primera no se perdió porque cada renglón sigue trayendo su ▲/▼ contra
+// el mes anterior.
+// ============================================================
+
+// Los cinco colores de la plantilla, cada uno con su cara clara (arriba)
+// y su cara oscura (el costado). Son tierra —terracota, mostaza, beige,
+// azul gris, carbón— y no salen de la paleta de las gráficas: esto no es
+// una serie de datos, es un adorno numerado. El dato lo lleva el ancho
+// del bloque, no el color.
+const CINTAS_MES = [
+  { base:'#B4482C', claro:'#CB5B3B', oscuro:'#8C3620' },
+  { base:'#D29A33', claro:'#E4AF47', oscuro:'#A67826' },
+  { base:'#CEC5B1', claro:'#E0D9C9', oscuro:'#ADA38B' },
+  { base:'#657F90', claro:'#7C97A9', oscuro:'#4B6271' },
+  { base:'#2E3338', claro:'#474E55', oscuro:'#1B1F22' }
+];
+
+// Un bloque isométrico: cara de arriba, cara de frente y costado. En SVG
+// y no en CSS con transforms porque aquí hacen falta TRES caras de tres
+// colores, y con transforms eso son tres divs rotados que se desalinean
+// medio píxel en cuanto cambia el zoom del navegador.
+function bloque3dHtml(ancho, alto, col, texto) {
+  const d = 9;                       // profundidad del bisel
+  const W = Math.max(34, Math.round(ancho)) + d;
+  const H = alto;
+  const tinta = textoSobre(col.base);
+  return '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" '
+    + 'style="display:block;overflow:visible" aria-hidden="true">'
+    + '<polygon points="0,' + d + ' ' + d + ',0 ' + W + ',0 ' + (W-d) + ',' + d + '" fill="' + col.claro + '"/>'
+    + '<polygon points="' + (W-d) + ',' + d + ' ' + W + ',0 ' + W + ',' + (H-d) + ' ' + (W-d) + ',' + H + '" fill="' + col.oscuro + '"/>'
+    + '<rect x="0" y="' + d + '" width="' + (W-d) + '" height="' + (H-d) + '" fill="' + col.base + '"/>'
+    + '<text x="' + ((W-d)/2) + '" y="' + (d + (H-d)/2) + '" text-anchor="middle" dominant-baseline="central" '
+      + 'font-size="13" font-weight="700" fill="' + tinta + '">' + texto + '</text>'
+  + '</svg>';
 }
 
-// ============================================================
-// 837. LA GRÁFICA DE CONOS
-//
-// Ángel mandó una foto: picos de colores sobre una rejilla, con los
-// valores en el eje izquierdo. "Quiero que las gráficas de barras sean
-// mejor así". Y después: "cada mes un color distinto y que adentro de
-// cada cono esté el número de millones vendido, por ejemplo 17,5M".
-//
-// Lo que cambia de fondo no es la forma, es que ahora se puede LEER un
-// valor sin tocar nada: antes había seis barras sin eje ni rejilla, así
-// que la única forma de saber cuánto valía una era compararla con la de
-// al lado. Ahora cada cono trae su número encima y hay rayas de
-// referencia detrás.
-//
-// Dónde va el número: DENTRO del cono, cerca de la base, que es donde
-// el triángulo tiene ancho. Si el mes fue flojo y el cono queda muy
-// chato, el número no cabe adentro y se pone encima de la punta, en
-// tinta normal. Un número recortado por el borde es peor que un número
-// afuera.
-//
-// El color lo pidió él y no significa nada —el nombre del mes ya está
-// debajo—, así que se reparte por posición, de izquierda a derecha, con
-// el orden de la paleta validada (835): así dos conos vecinos siempre
-// son dos colores que de verdad se distinguen, también para un daltónico.
-// ============================================================
 function crecimientoHtml() {
-  const meses = crecimientoMesAMes(6);
+  // Cinco meses, como la plantilla. El sexto no cabe: hay cinco cintas.
+  const meses = crecimientoMesAMes(5);
   const conVentas = meses.filter(m => m.vendido > 0);
   if(conVentas.length < 2) return '';
 
-  const ALTO = 158;             // alto del área de dibujo, en píxeles
-  const DIVISIONES = 4;
-  const { paso, tope } = escalaBonita(Math.max(...meses.map(m => m.vendido), 1), DIVISIONES);
   const actual = meses[meses.length - 1];
-  const paleta = coloresDeSerie().series;
+  const total = meses.reduce((s, m) => s + m.vendido, 0) || 1;
+  const max = Math.max(...meses.map(m => m.vendido), 1);
 
-  // El titular dice en una frase lo que el gráfico dice en seis columnas.
+  // El titular dice en una frase lo que la infografía dice en cinco renglones.
   let titular;
   if(actual.delta === null) {
     titular = 'Todavía no hay con qué comparar este mes.';
@@ -8238,89 +8268,94 @@ function crecimientoHtml() {
     titular = 'Vas <strong>igual</strong> que a esta misma altura del mes pasado.';
   }
 
-  const chip = (d) => {
-    if(d === null) return '<span style="font-size:12px;color:var(--ink-3)">—</span>';
-    const sube = d > 0, igual = d === 0;
-    const col = igual ? 'var(--ink-3)' : sube ? 'var(--green)' : 'var(--red)';
-    const bg  = igual ? 'var(--surface-3)' : sube ? 'var(--green-bg)' : 'var(--red-bg)';
-    return '<span style="display:inline-flex;align-items:center;gap:2px;font-size:12px;font-weight:600;'
-      + 'padding:2px 6px;border-radius:20px;background:' + bg + ';color:' + col + ';white-space:nowrap">'
-      + (igual ? '=' : sube ? '▲' : '▼') + (igual ? '' : Math.abs(d) + '%') + '</span>';
+  // 830. Los porcentajes se reparten para que sumen 100 EXACTO: redondeando
+  //      cada uno por su lado sale "34 + 33 + 20 + 9 + 5 = 101", y un total
+  //      que no da cien hace dudar de los pesos que están al lado.
+  const orden = [...meses].sort((a, b) => b.vendido - a.vendido);
+  const crudos = orden.map(m => (m.vendido / total) * 100);
+  const pcts = crudos.map(Math.floor);
+  let faltan = Math.round(crudos.reduce((a, b) => a + b, 0)) - pcts.reduce((a, b) => a + b, 0);
+  crudos.map((v, i) => ({ i, resto: v - Math.floor(v) }))
+    .sort((a, b) => b.resto - a.resto)
+    .forEach(x => { if(faltan > 0) { pcts[x.i]++; faltan--; } });
+
+  // El redondel con la flecha, que en la plantilla era un adorno (+, −, =)
+  // y aquí dice algo: si ese mes subió o bajó contra el anterior.
+  const redondel = (d) => {
+    // Sin mes anterior con ventas no hay comparación posible, y poner "="
+    // ahí sería decir "quedó igual", que es distinto de "no se sabe".
+    const signo = d === null ? '·' : d === 0 ? '=' : d > 0 ? '▲' : '▼';
+    const col = (d === null || d === 0) ? 'var(--ink-3)' : d > 0 ? 'var(--green)' : 'var(--red)';
+    const bg  = (d === null || d === 0) ? 'var(--surface-3)' : d > 0 ? 'var(--green-bg)' : 'var(--red-bg)';
+    return '<span style="width:20px;height:20px;border-radius:50%;flex-shrink:0;display:inline-flex;'
+      + 'align-items:center;justify-content:center;font-size:9px;background:' + bg + ';color:' + col + '">'
+      + signo + '</span>';
   };
 
-  // Millones con un decimal, como los pidió: $17,5M. Por debajo del millón
-  // se cae a miles, porque "$0,1M" no se lo dice a nadie.
-  const etiquetaPico = v => v >= 1000000
-    ? '$' + (v/1000000).toFixed(1).replace('.', ',') + 'M'
-    : v >= 1000 ? '$' + Math.round(v/1000) + 'k' : '$' + Math.round(v);
-  const etiquetaEje = v => v >= 1000000
-    ? '$' + String((v/1000000).toFixed(1)).replace(/[.,]0$/, '').replace('.', ',') + 'M'
-    : v >= 1000 ? '$' + Math.round(v/1000) + 'k' : '$' + Math.round(v);
+  // El bloque más ancho de todos, para reservarle una columna fija: si cada
+  // renglón termina donde termine su bloque, los paneles quedan de largos
+  // distintos y la tarjeta se ve rota. La escalera va en su propia columna.
+  const COL_BLOQUE = 38 + 72 + 9 + 9;
 
-  // ---- La rejilla y el eje ----
-  let rejilla = '', eje = '';
-  for(let i = 1; i <= DIVISIONES; i++) {
-    const pct = (i / DIVISIONES) * 100;
-    rejilla += '<div style="position:absolute;left:0;right:0;bottom:' + pct + '%;height:1px;background:var(--border)"></div>';
-    eje += '<div style="position:absolute;right:0;bottom:calc(' + pct + '% - 8px);font-size:11px;color:var(--ink-3);'
-      + 'white-space:nowrap;font-variant-numeric:tabular-nums">' + etiquetaEje(paso * i) + '</div>';
-  }
+  const renglones = orden.map((m, i) => {
+    const col = CINTAS_MES[i % CINTAS_MES.length];
+    const nro = String(i + 1).padStart(2, '0');
+    const anchoBloque = 38 + Math.round((m.vendido / max) * 72);
+    const nombre = m.enCurso ? 'Este mes' : m.completo;
+    // Un mes que vendió algo nunca es "0%": es "<1%". Un cero redondo ahí
+    // dice "no vendió nada", que es falso.
+    const pct = (pcts[i] === 0 && m.vendido > 0) ? '<1%' : pcts[i] + '%';
+    // La explicación de contra qué se compara vive en la nota del pie, no
+    // repetida en los cinco renglones: en celular se cortaba a la mitad.
+    const sub = m.vendido > 0
+      ? fmt(m.vendido) + (m.delta !== null ? ' · ' + (m.delta > 0 ? '+' : '') + m.delta + '%' : '')
+      : 'sin ventas';
 
-  // ---- Los conos ----
-  // 837. El cono tiene tope de ancho. Sin él, en pantalla de escritorio
-  //      cuatro conos se reparten 1.100px y quedan tan achatados que
-  //      parecen lomas, no picos: la misma plata se ve más chiquita solo
-  //      porque la ventana es más ancha. Con tope, el dibujo es el mismo
-  //      en el celular y en el computador.
-  const ANCHO_CONO = 96;
-  const TAM_NUM = meses.length >= 6 ? 10 : 11;
-  const conos = meses.map((m, i) => {
-    const px = Math.max(7, Math.round((m.vendido / tope) * ALTO));
-    const color = paleta[i % paleta.length];
-    const cabe = px >= 40;      // ¿hay alto para meter el número adentro?
-    const etiqueta = etiquetaPico(m.vendido);
-    // El mes en curso va rayado: todavía no termina, su cono no es definitivo.
-    const rayas = m.enCurso
-      ? ';background-image:repeating-linear-gradient(135deg,rgba(255,255,255,.48) 0 7px,rgba(255,255,255,0) 7px 14px)'
-      : '';
-    return '<div onclick="verCicloInicio(' + m.offset + ')" title="' + m.completo + ': ' + fmt(m.vendido) + '"'
-      + ' style="flex:1;min-width:0;position:relative;height:100%;display:flex;flex-direction:column;justify-content:flex-end;cursor:pointer">'
-      + (cabe ? '' :
-          '<div style="position:absolute;left:0;right:0;bottom:' + (px + 3) + 'px;text-align:center;font-size:' + TAM_NUM + 'px;'
-          + 'font-weight:700;color:var(--ink-2);white-space:nowrap;font-variant-numeric:tabular-nums">' + etiqueta + '</div>')
-      + '<div style="height:' + px + 'px;position:relative;align-self:center;width:100%;max-width:' + ANCHO_CONO + 'px;'
-        + 'background-color:' + color + rayas + ';'
-        + '-webkit-clip-path:polygon(50% 0,100% 100%,0 100%);clip-path:polygon(50% 0,100% 100%,0 100%)">'
-        + (cabe
-            ? '<span style="position:absolute;left:0;right:0;bottom:6px;text-align:center;font-size:' + TAM_NUM + 'px;font-weight:700;'
-              + 'color:' + textoSobre(color) + ';white-space:nowrap;font-variant-numeric:tabular-nums">' + etiqueta + '</span>'
+    return '<div onclick="verCicloInicio(' + m.offset + ')" title="' + nombre + ': ' + fmt(m.vendido) + '"'
+      + ' style="display:flex;align-items:stretch;gap:0;cursor:pointer;margin-bottom:9px">'
+
+      // --- la cinta numerada, con su punta hacia el panel ---
+      + '<div style="width:52px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;'
+        + 'justify-content:center;padding:9px 10px 9px 8px;color:' + textoSobre(col.base) + ';'
+        + 'background:linear-gradient(160deg,' + col.claro + ' 0%,' + col.base + ' 55%,' + col.oscuro + ' 100%);'
+        + 'border-radius:7px 0 0 7px;'
+        + '-webkit-clip-path:polygon(0 0,calc(100% - 9px) 0,100% 50%,calc(100% - 9px) 100%,0 100%);'
+        + 'clip-path:polygon(0 0,calc(100% - 9px) 0,100% 50%,calc(100% - 9px) 100%,0 100%)">'
+        + '<span style="font-size:19px;font-weight:300;line-height:1;letter-spacing:.02em">' + nro + '</span>'
+        + '<span style="font-size:7.5px;letter-spacing:.14em;opacity:.8;margin-top:2px">'
+          + (m.enCurso ? 'AHORA' : 'MES') + '</span>'
+      + '</div>'
+
+      // --- el panel crema ---
+      + '<div style="flex:1;min-width:0;display:flex;align-items:center;gap:9px;padding:9px 11px 9px 14px;'
+        + 'margin-left:-7px;background:#F7F4ED;border-radius:0 7px 7px 0;box-shadow:0 1px 2px rgba(0,0,0,.05)">'
+        + redondel(m.delta)
+        + '<div style="min-width:0;flex:1">'
+          + '<div style="font-size:13px;font-weight:600;letter-spacing:.04em;color:#3A3730;'
+            + 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + nombre.toUpperCase() + '</div>'
+          + '<div style="font-size:12px;color:#8A8578;margin-top:1px;white-space:nowrap;overflow:hidden;'
+            + 'text-overflow:ellipsis;font-variant-numeric:tabular-nums">' + sub + '</div>'
+        + '</div>'
+        + (m.nVentas
+            ? '<span class="info-ventas" style="font-size:12px;color:#A39D8E;white-space:nowrap;'
+              + 'font-variant-numeric:tabular-nums">' + m.nVentas + ' venta' + (m.nVentas === 1 ? '' : 's') + '</span>'
             : '')
+      + '</div>'
+
+      // --- el bloque 3D, de ancho proporcional ---
+      + '<div style="flex-shrink:0;width:' + COL_BLOQUE + 'px;display:flex;align-items:center;padding-left:9px">'
+        + bloque3dHtml(anchoBloque, 44, col, pct)
       + '</div>'
     + '</div>';
   }).join('');
 
-  const pies = meses.map(m =>
-    '<div style="flex:1;min-width:0;text-align:center">'
-    + '<div style="font-size:12.5px;color:' + (m.enCurso ? 'var(--ink)' : 'var(--ink-3)') + ';font-weight:' + (m.enCurso ? '600' : '400') + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + m.etiqueta + '</div>'
-    + '<div style="margin-top:3px">' + chip(m.delta) + '</div>'
-  + '</div>').join('');
-
-  const ANCHO_EJE = 42;
   return '<div class="card">'
     + '<div class="sec-title" style="margin-bottom:5px">📈 Cómo vamos mes a mes</div>'
-    + '<div style="font-size:14px;color:var(--ink-2);line-height:1.45;margin-bottom:16px">' + titular + '</div>'
-    + '<div style="display:flex;gap:9px;align-items:flex-end">'
-      + '<div style="width:' + ANCHO_EJE + 'px;flex-shrink:0;position:relative;height:' + ALTO + 'px">' + eje + '</div>'
-      + '<div style="flex:1;min-width:0;position:relative;height:' + ALTO + 'px">'
-        + rejilla
-        + '<div style="position:absolute;inset:0;display:flex;gap:6px;align-items:flex-end">' + conos + '</div>'
-      + '</div>'
-    + '</div>'
-    + '<div style="display:flex;gap:6px;margin-top:9px;padding-top:9px;border-top:1px solid var(--border);'
-      + 'margin-left:' + (ANCHO_EJE + 9) + 'px">' + pies + '</div>'
+    + '<div style="font-size:14px;color:var(--ink-2);line-height:1.45;margin-bottom:15px">' + titular + '</div>'
+    + renglones
     + '<div style="font-size:13px;color:var(--ink-3);margin-top:12px;line-height:1.4">'
-      + 'El cono rayado es el mes en curso: todavía no termina, por eso se compara contra '
-      + 'los mismos días del mes pasado y no contra el mes entero.</div>'
+      + 'Los meses van del que más vendió al que menos, y el ancho del bloque es esa misma plata. '
+      + 'El mes en curso todavía no termina, por eso se compara contra los mismos días del mes pasado.</div>'
   + '</div>';
 }
 
