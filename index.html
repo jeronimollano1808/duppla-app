@@ -4593,6 +4593,57 @@ window.setVentasPeriodo = (p) => {
 };
 
 // ============================================================
+// 843. ¿PRIMERA COMPRA O CLIENTE RECURRENTE?
+// Ángel: "que se vea si es un cliente recurrente o si es primera compra",
+// en Ventas y en Clientes. Duppla vive de la recompra: ver de un vistazo
+// cuánta venta del mes es gente que volvió es ver si el negocio se sostiene.
+//
+// Reglas:
+//  · Se cuenta por DÍAS de compra, no por renglones: dos ventas del mismo
+//    cliente el mismo día son una compra partida en dos (misma regla que
+//    calcularRecompras, 827). Si no, quien compró dos cosas en dos renglones
+//    saldría "recurrente" en su primer día.
+//  · El cliente se agrupa con claveBusqueda (791): "ISABELLA CERTUCHE" e
+//    "Isabella Certuche." son la misma persona.
+//  · Distribuidores fuera (por canal y por nombre, igual que 829): un
+//    gimnasio que repone no es un cliente que vuelve, es su trabajo.
+//  · Sin nombre de cliente no se marca nada: no se puede saber.
+// ============================================================
+function mapaDiasDeCompra() {
+  const esDist = {};
+  DATA.distribuidores.forEach(d => { esDist[claveBusqueda(d.nombre)] = true; });
+  const mapa = {};   // claveCliente -> [fechas distintas, ordenadas]
+  DATA.ventas.forEach(v => {
+    if(!v.cliente || !v.fecha) return;
+    if(v.canal === 'distribuidor' || v.distribuidorId) return;
+    const k = claveBusqueda(v.cliente);
+    if(!k || esDist[k]) return;
+    (mapa[k] = mapa[k] || new Set()).add(v.fecha);
+  });
+  Object.keys(mapa).forEach(k => { mapa[k] = [...mapa[k]].sort(); });
+  return mapa;
+}
+
+// Para una venta: { primera:true } o { primera:false, n } (n = qué compra es).
+// En Clientes se pasa { total:true } y n es cuántas compras lleva en total.
+function tipoCompraDeVenta(v, mapa) {
+  if(!v.cliente || !v.fecha || v.canal === 'distribuidor' || v.distribuidorId) return null;
+  const fechas = mapa[claveBusqueda(v.cliente)];
+  if(!fechas) return null;
+  const n = fechas.indexOf(v.fecha) + 1;
+  if(n < 1) return null;
+  return { primera: n === 1, n };
+}
+
+function insigniaTipoCompra(t) {
+  if(!t) return '';
+  return t.primera
+    ? '<span class="badge b-success" style="font-size:10px">Primera compra</span>'
+    : '<span class="badge b-info" style="font-size:10px">Recurrente · '
+      + (t.total ? t.n + ' compras' : t.n + 'ª compra') + '</span>';
+}
+
+// ============================================================
 // 55. PÁGINA: VENTAS
 // Lista de ventas con filtro de búsqueda y exportación CSV
 // ============================================================
@@ -4741,6 +4792,8 @@ function renderVentas() {
     return (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0);
   });
 
+  const diasCompra = mapaDiasDeCompra();   // 843. Una vez por render, no por fila
+
   // 520. FIX: ya no filtramos en el servidor — el filtro ahora ocurre 100% en
   //      el DOM (filtrarFilasVentas) para no perder el foco del input al escribir.
   const rows = ventasOrdenadas.map(v => {
@@ -4824,10 +4877,14 @@ function renderVentas() {
       //      El rojo se queda para el margen negativo, que sí hay que mirar.
       : `<td style="font-weight:600;color:${margenVenta>=0?'var(--ink-2)':'var(--red)'}">${fmt(margenVenta)}</td>`;
 
+    // 843. Primera compra / recurrente, debajo del nombre
+    const insTipo = insigniaTipoCompra(tipoCompraDeVenta(v, diasCompra));
+    const tipoCompraHtml = insTipo ? '<div style="margin-top:3px">' + insTipo + '</div>' : '';
+
     // 519. data-* attributes para filtrar sin re-renderizar — mismo patrón usado en Inventario
     return `<tr data-cliente="${(v.cliente||'').toLowerCase()}" data-producto="${(v.producto||'').toLowerCase()}" data-canal="${(v.canal||'').toLowerCase()}" data-fecha="${v.fecha||''}" data-total="${v.total||''}">
       <td style="color:var(--ink-3)">${v.fecha||''}</td>
-      <td style="font-weight:500">${v.cliente||'—'}</td>
+      <td style="font-weight:500">${v.cliente||'—'}${tipoCompraHtml}</td>
       ${productoCell}
       <td><span class="badge b-${v.canal||'web'}">${v.canal||''}</span></td>
       <td><span class="badge ${tpClass[tp]}">${tpLabel[tp]||tp}</span></td>
@@ -6923,14 +6980,22 @@ function renderClientes() {
   // 778. Tocar un cliente abre su ficha: cuántas veces compró, qué se
   //      lleva, mes a mes y qué debe. La fila entera es el botón — pedir
   //      puntería sobre el nombre en un celular es pedir demasiado.
+  // 843. Primera compra / recurrente: por días de compra distintos, no por
+  //      renglones (la columna "Compras" sigue contando renglones, como antes).
+  const diasCompra = mapaDiasDeCompra();
   const rows = clientes.map(c => {
     const initials = c.nombre.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
     const fav = Object.entries(c.fav).sort((a,b)=>b[1]-a[1])[0];
+    const dias = diasCompra[claveBusqueda(c.nombre)];
+    const insTipo = dias ? insigniaTipoCompra(dias.length > 1 ? { primera:false, n:dias.length, total:true } : { primera:true }) : '';
     return `<tr class="fila-click" onclick="abrirFichaCliente('${escAttr(c.nombre)}')" title="Ver historial de ${escAttr(c.nombre)}">
       <td>
         <div style="display:flex;align-items:center;gap:9px">
           <div class="avatar">${initials}</div>
-          <span style="font-weight:600;color:var(--ink)">${escTxt(c.nombre)}</span>
+          <div style="min-width:0">
+            <span style="font-weight:600;color:var(--ink)">${escTxt(c.nombre)}</span>
+            ${insTipo ? '<div style="margin-top:3px">' + insTipo + '</div>' : ''}
+          </div>
           <span class="ver-mas">›</span>
         </div>
       </td>
