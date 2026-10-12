@@ -317,13 +317,44 @@ Mismo diseño de siempre (`stock` total es fuente de verdad, Jero/Ángel es desg
 ---
 
 ## 12. PENDIENTES ACTIVOS
-Ninguno heredado del documento anterior — los dos ítems pendientes de la versión previa de este documento (fix de reporte de consignación multi-entrega, e `ingresoVenta`) **ya se implementaron y desplegaron** esta sesión, junto con todo lo listado en la sección 9.
+*Actualizado en el comentario 840 (12 oct 2026). Esta sección estaba desfasada: decía que no había roles ni auditoría, y las dos cosas ya existen. **Si trabajas aquí y cierras algo de esta lista, táchalo.** Una lista de pendientes que nadie actualiza se vuelve una lista de mentiras.*
 
-Limitaciones conocidas, no bugs, a tener presente:
+### 12.1 La lista que dictó Ángel (7 oct 2026)
+Siete tareas, con una regla suya encima: *"no harás ninguna todavía, luego cogeremos una por una y vamos a estructurarla bien primero y luego sí vamos ejecutando, mejor una a una"*. **La G ya se hizo** (comentarios 831-832). Quedan seis.
+
+| | Tarea | Estado | Depende de |
+|---|---|---|---|
+| **A** | Recompras de un solo clic | La pantalla existe (827-829). Falta definir qué es "un clic" | **C** — sin teléfono guardado, el primer toque siempre pide número |
+| **B** | Marcar cliente recurrente vs. primera compra, en Ventas y en Clientes | El dato ya está (nº de compras por cliente). Es una insignia | nada — **es la más barata de las seis** |
+| **C** | Exigir WhatsApp y correo al registrar una venta | No existe campo de correo; el teléfono vive en `clientesInfo` (827) | nada, pero **es el cimiento**: sin esto, D, E y F no existen |
+| **D** | Plantillas de WhatsApp y correo editables | La de WhatsApp ya se arma sola (827-828), con variante para deudores. Falta que Ángel las pueda editar, y la de correo | **C** (para el correo) |
+| **E** | Remitente virtual tipo "Laura" | No es código: es decidir qué número, qué correo y **quién contesta** cuando el cliente responda | nada |
+| **F** | Conectar la app con correo y WhatsApp | La más grande y **la única que cuesta plata**. Hoy la app es un HTML sin servidor: necesita backend, WhatsApp Business API con plantillas aprobadas por Meta, y un proveedor de correo | C, D, E |
+
+**Dos avisos sobre esta lista, que valen más que la lista:**
+
+- **La C choca de frente con algo que Ángel ya dijo antes:** *"la pantalla de venta tiene demasiados botones"*. Exigir dos campos más en el momento de registrar una venta va en la dirección contraria. Hay que resolver esa tensión **antes** de escribir código, no después.
+- **Falta decidir qué pasa con los ~242 clientes que ya están sin teléfono.** La C los deja en dos mundos distintos y nadie ha dicho cuál.
+
+**Y la pregunta que todavía no tiene respuesta, que cambia A, D y F a la vez:** ¿el seguimiento es **semiautomático** (Ángel aprueba cada mensaje antes de que salga) o **automático de verdad** (sale solo, sin que nadie lo lea)? No se puede diseñar A sin saberlo.
+
+### 12.2 Conversaciones que Ángel dejó abiertas a propósito
+- **La pantalla de Recompras.** Textual: *"la parte de la recompra después hablamos de ella"*.
+- **La dona de Distribuidores.** Textual: *"la parte del dashboard de distribuidores después hablamos de eso"*.
+- **El umbral de "Se durmieron".** En producción salen **70 productos**. La regla de hoy (vendió en los últimos 3 ciclos y este mes no) infla la lista cuando el catálogo es grande y muchos productos salen de vez en cuando. Se le propuso apretarlo —por ejemplo, solo los que vendían más de X unidades al mes— y quedó pendiente de decisión.
+
+### 12.3 Cosas que dependen de Ángel, no del código
+- **Las reglas de Firestore no están publicadas.** El bloqueo del rol "visitante" existe en la interfaz y el archivo `firestore.rules` está en el repo, pero **hasta que Ángel no lo publique desde la consola de Firebase, un visitante puede escribir en la base de datos.** Los pasos están en `COMO-ACTIVAR-LOS-PERMISOS.md`. *Un permiso que solo existe en la interfaz no es un permiso, es una sugerencia* (ver 14.x del 806).
+- **Los nombres que se muestran.** Arriba sale "Angelcertuchegaray123" y en "Quién registró" aparece "Jeronimollano1808": son los nombres con que se crearon las cuentas. Se cambian en la pestaña **Usuarios**. Ya se le ofreció dos veces; no ha dicho que sí.
+
+### 12.4 Pendiente técnico de fondo
+- **Notificaciones con la app cerrada.** Hoy los avisos solo existen mientras la pestaña está abierta. Para que lleguen al celular con la app cerrada hace falta PWA + service worker + FCM. No está empezado.
+
+### 12.5 Limitaciones conocidas (no son bugs)
 - **Restaurar un registro desde la Papelera no reconstruye lotes FIFO exactos** ni vuelve a aplicar automáticamente el stock/gasto que ya se había revertido al eliminarlo — el stock TOTAL queda siempre correcto, pero un restore de algo con más de unos días puede necesitar un ajuste manual de todas formas.
 - **Editar una venta múltiple** tiene la misma limitación de precisión de lotes FIFO que la Papelera (ver sección 9).
-- **Ningún cliente de venta al público (no distribuidor) tiene teléfono guardado en la app** — los recordatorios de WhatsApp (cobro y recompra) requieren escribir el número a mano cada vez. Los proveedores/distribuidores sí tienen `wa`/`telefono` y se precarga solo.
-- **No hay roles/permisos diferenciados entre Jero y Ángel** — ambos ven y pueden editar todo con su propio login. No hay registro de "quién hizo qué" (sin auditoría por usuario).
+- **Casi ningún cliente de venta al público tiene teléfono guardado.** Ya existe dónde guardarlo (`clientesInfo`, 827) y el botón "Poner número" en Recompras, pero la mayoría sigue vacío: los recordatorios de WhatsApp piden el número a mano. Los proveedores y distribuidores sí lo tienen en `wa`/`telefono` y se precarga solo.
+- **Los combos no se costean, a propósito** (ver 495). No son un error pendiente.
 
 ---
 
