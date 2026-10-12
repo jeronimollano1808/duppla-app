@@ -1629,6 +1629,11 @@ button.lista-fila:active{background:var(--border)}
       <div style="font-size:11px;color:var(--ink-3);margin-top:4px">
         Queda guardado: la próxima vez le escribes de un toque.</div>
     </div>
+    <!-- 842. El correo se pide al vender; aquí se corrige o se completa. -->
+    <div class="f-group">
+      <label class="f-label">Correo</label>
+      <input type="email" inputmode="email" id="con-correo" class="f-input" placeholder="nombre@correo.com" autocomplete="off" autocapitalize="off" spellcheck="false">
+    </div>
     <div class="f-group">
       <label class="f-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
         <input type="checkbox" id="con-nomolestar" style="width:auto;margin:0">
@@ -1806,6 +1811,27 @@ button.lista-fila:active{background:var(--border)}
       <input type="text" id="v-cliente" class="f-input" placeholder="Nombre del cliente" list="dl-clientes-venta" autocomplete="off" oninput="revisarClienteParecido()">
       <datalist id="dl-clientes-venta"></datalist>
       <div id="v-cliente-aviso" style="font-size:11px;color:var(--ink-3);margin-top:4px;display:none"></div>
+    </div>
+
+    <!-- 842. Contacto del cliente. Ángel: "cada vez que registremos una compra
+         pidamos el WhatsApp y el correo". Es el cimiento de las recompras y de
+         Andrea (la asesora virtual): sin teléfono no hay a quién escribirle. Se precarga solo
+         si el cliente ya lo tiene guardado, así a quien recompra no se le pide
+         dos veces. No aparece con canal distribuidor (su teléfono vive en
+         Distribuidores). -->
+    <div id="v-contacto-grupo">
+      <div class="f-group">
+        <label class="f-label">WhatsApp del cliente *</label>
+        <input type="tel" inputmode="numeric" id="v-wa" class="f-input" placeholder="3001234567" autocomplete="off" oninput="this.dataset.auto=''">
+      </div>
+      <div class="f-group">
+        <label class="f-label">Correo</label>
+        <input type="email" inputmode="email" id="v-correo" class="f-input" placeholder="nombre@correo.com" autocomplete="off" autocapitalize="off" spellcheck="false" oninput="this.dataset.auto=''">
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--ink-3);margin:-4px 0 12px">
+        <input type="checkbox" id="v-sin-wa" style="width:auto;margin:0">
+        <span>El cliente no quiso dar su WhatsApp</span>
+      </label>
     </div>
 
     <!-- Pago -->
@@ -2565,7 +2591,22 @@ button.lista-fila:active{background:var(--border)}
       <div id="prev-vc-precio" style="font-size:11px;margin-top:4px;font-weight:600"></div>
     </div>
     <div class="f-group"><label class="f-label">Cliente</label>
-      <input type="text" id="vc-cliente" class="f-input" placeholder="Nombre del cliente">
+      <input type="text" id="vc-cliente" class="f-input" placeholder="Nombre del cliente" list="dl-clientes-venta" autocomplete="off" oninput="precargarContactoVenta('vc')">
+    </div>
+    <!-- 842. Mismo contacto que en Registrar venta: un combo también es una compra. -->
+    <div id="vc-contacto-grupo">
+      <div class="f-group">
+        <label class="f-label">WhatsApp del cliente *</label>
+        <input type="tel" inputmode="numeric" id="vc-wa" class="f-input" placeholder="3001234567" autocomplete="off" oninput="this.dataset.auto=''">
+      </div>
+      <div class="f-group">
+        <label class="f-label">Correo</label>
+        <input type="email" inputmode="email" id="vc-correo" class="f-input" placeholder="nombre@correo.com" autocomplete="off" autocapitalize="off" spellcheck="false" oninput="this.dataset.auto=''">
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--ink-3);margin:-4px 0 12px">
+        <input type="checkbox" id="vc-sin-wa" style="width:auto;margin:0">
+        <span>El cliente no quiso dar su WhatsApp</span>
+      </label>
     </div>
     <!-- 435. Método de pago en venta de combo — mismo patrón usado en Ventas normales -->
     <div class="f-group">
@@ -3481,6 +3522,7 @@ window.abrirContactoCliente = (cliente) => {
   document.getElementById('con-titulo').textContent = cliente;
   document.getElementById('con-cliente').value = cliente;
   document.getElementById('con-telefono').value = info ? (info.telefono||'') : '';
+  document.getElementById('con-correo').value = info ? (info.correo||'') : '';   // 842
   document.getElementById('con-nomolestar').checked = !!(info && info.noMolestar);
   openModal('modal-contacto');
 };
@@ -3504,12 +3546,113 @@ async function escribirInfoCliente(cliente, campos) {
   }
 }
 
+// ============================================================
+// 842. CONTACTO DEL CLIENTE AL REGISTRAR UNA VENTA
+// Ángel: "cada vez que registremos una compra, pidamos el WhatsApp y el
+// correo". Hasta aquí el teléfono solo se guardaba desde Recompras ("Poner
+// número"), y por eso casi ningún cliente lo tenía: Recompras y Andrea (la asesora virtual)
+// no tenían a quién escribirle.
+//
+// Decisiones:
+//  · El WhatsApp es OBLIGATORIO en una venta nueva (no distribuidor). El
+//    correo se pide pero no frena la venta: en mostrador mucha gente no lo
+//    da, y un correo inventado para poder guardar es peor que ninguno.
+//  · Hay una salida explícita, "no quiso dar su WhatsApp". Sin ella, quien
+//    tiene afán teclea 3000000000 y eso termina en un mensaje a un número
+//    que no es de nadie.
+//  · Se precarga desde clientesInfo: a quien ya compró no se le pide dos veces.
+//    La precarga nunca pisa lo que se escribió a mano (dataset.auto).
+//  · Al EDITAR una venta vieja no se exige: sería obligar a llenar datos de
+//    ventas de hace meses para corregir un precio.
+//  · Vive en clientesInfo (827), no en la venta: el teléfono es del
+//    cliente, no de cada compra.
+// ============================================================
+function normalizarTelefono(t) {
+  let d = String(t || '').replace(/\D/g, '');
+  if(d.length === 12 && d.startsWith('57')) d = d.slice(2);   // +57 300... -> 300...
+  return d;
+}
+
+function correoValido(c) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(c || ''));
+}
+
+function resetContactoVenta(prefijo) {
+  ['-wa', '-correo'].forEach(suf => {
+    const el = document.getElementById(prefijo + suf);
+    if(el) { el.value = ''; el.dataset.auto = ''; }
+  });
+  const chk = document.getElementById(prefijo + '-sin-wa');
+  if(chk) chk.checked = false;
+}
+
+window.precargarContactoVenta = (prefijo) => {
+  const cli = document.getElementById(prefijo + '-cliente');
+  if(!cli) return;
+  const nombre = cli.value.trim();
+  const info = nombre ? infoDeCliente(nombre) : null;
+  [['-wa', 'telefono'], ['-correo', 'correo']].forEach(([suf, campo]) => {
+    const el = document.getElementById(prefijo + suf);
+    if(!el) return;
+    if(el.value && el.dataset.auto !== '1') return;   // lo escribieron a mano: no se toca
+    el.value = (info && info[campo]) || '';
+    el.dataset.auto = el.value ? '1' : '';
+  });
+};
+
+// Devuelve { telefono, correo } o null si hay que frenar el guardado.
+function leerContactoVenta(prefijo, cliente, canal, exigir) {
+  if(canal === 'distribuidor') return { telefono:'', correo:'' };
+  const telefono = normalizarTelefono(document.getElementById(prefijo + '-wa')?.value);
+  const correo = (document.getElementById(prefijo + '-correo')?.value || '').trim().toLowerCase();
+  const sinWa = !!document.getElementById(prefijo + '-sin-wa')?.checked;
+  const nombre = String(cliente || '').trim();
+  if(exigir && !sinWa && !telefono) {
+    alert('Falta el WhatsApp del cliente.\n\n'
+      + 'Es lo que permite avisarle cuando se le esté acabando el producto. '
+      + 'Si no lo quiso dar, marca "El cliente no quiso dar su WhatsApp".');
+    return null;
+  }
+  if(telefono && telefono.length < 10) {
+    alert('El WhatsApp debe tener 10 dígitos (ej: 3001234567).');
+    return null;
+  }
+  if(correo && !correoValido(correo)) {
+    alert('Ese correo no parece válido. Revísalo o déjalo vacío.');
+    return null;
+  }
+  if((telefono || correo) && !nombre) {
+    alert('Escribe el nombre del cliente: el WhatsApp y el correo se guardan con su nombre.');
+    return null;
+  }
+  return { telefono, correo };
+}
+
+// Se llama DESPUÉS de guardar la venta: si esto falla, la venta ya quedó.
+async function guardarContactoDeVenta(cliente, contacto) {
+  const nombre = String(cliente || '').trim();
+  if(!nombre || !contacto) return;
+  const info = infoDeCliente(nombre);
+  const campos = {};
+  if(contacto.telefono && contacto.telefono !== (info?.telefono || '')) campos.telefono = contacto.telefono;
+  if(contacto.correo && contacto.correo !== (info?.correo || '')) campos.correo = contacto.correo;
+  if(!Object.keys(campos).length) return;
+  try {
+    await escribirInfoCliente(nombre, campos);
+  } catch(e) {
+    console.error(e);
+    toast('La venta quedó registrada, pero no se pudo guardar el contacto', 'error');
+  }
+}
+
 window.guardarContactoCliente = async () => {
   if(!exigirAdmin()) return;
   const cliente = document.getElementById('con-cliente').value;
-  const telefono = document.getElementById('con-telefono').value.trim().replace(/\D/g,'');
+  const telefono = normalizarTelefono(document.getElementById('con-telefono').value);
+  const correo = document.getElementById('con-correo').value.trim().toLowerCase();   // 842
+  if(correo && !correoValido(correo)) { alert('Ese correo no parece válido. Revísalo o déjalo vacío.'); return; }
   const noMolestar = document.getElementById('con-nomolestar').checked;
-  await escribirInfoCliente(cliente, { telefono, noMolestar });
+  await escribirInfoCliente(cliente, { telefono, correo, noMolestar });
   closeModal('modal-contacto');
   toast('✅ Guardado');
   if(currentPage) renderPage(currentPage);
@@ -4792,6 +4935,8 @@ window.abrirModalVenta = () => {
     const cliAviso = document.getElementById('v-cliente-aviso');
     if(cliAviso) cliAviso.style.display = 'none';
     actualizarSugerenciasCliente();
+    resetContactoVenta('v');   // 842
+    toggleDistribuidorField('directo');
     // 362. Reset campos mixto
     const mixtoGrupo = document.getElementById('v-mixto-grupo');
     if(mixtoGrupo) mixtoGrupo.style.display = 'none';
@@ -5256,6 +5401,10 @@ window.guardarVenta = async () => {
       + 'Si es un distribuidor nuevo, créalo con el enlace que está debajo de la lista.');
     return;
   }
+  // 842. Contacto: se valida ANTES de tocar el stock, para no dejar nada a
+  //      medias si falta el WhatsApp. Solo se exige en ventas nuevas.
+  const contacto = leerContactoVenta('v', cliente, canal, !editId);
+  if(!contacto) return;
   // 361. Desglose mixto — solo se guarda si el método es mixto
   const mixtoEfectivo = metodoPago === 'mixto' ? Number(document.getElementById('v-mixto-efectivo').value)||0 : null;
   const mixtoTransferencia = metodoPago === 'mixto' ? Number(document.getElementById('v-mixto-transferencia').value)||0 : null;
@@ -5405,6 +5554,7 @@ window.guardarVenta = async () => {
 
     // 765. Aquí salía una notificación de stock bajo tras la venta. Ya no.
   }
+  await guardarContactoDeVenta(cliente, contacto);   // 842
   closeModal('modal-venta');
 };
 
@@ -5761,6 +5911,8 @@ window.editarVentaMultiple = (id) => {
     document.getElementById('v-cliente').value = venta.cliente || '';
     document.getElementById('v-nota').value = venta.nota || '';
     toggleDistribuidorField(venta.canal);
+    resetContactoVenta('v');          // 842. Lo que tenga guardado ese cliente
+    precargarContactoVenta('v');
     // 659. FIX — si la venta que editamos NO es de distribuidor hay que
     //      limpiar el select igual; si no, hereda el distribuidor que
     //      quedó de la venta anterior y al guardar se le vuelve a pegar.
@@ -9575,6 +9727,8 @@ window.abrirVenderCombo = () => {
   document.getElementById('vc-fecha').value = today();
   document.getElementById('vc-precio').value = '';
   document.getElementById('vc-cliente').value = '';
+  resetContactoVenta('vc');          // 842
+  actualizarSugerenciasCliente();
   document.getElementById('vc-pagado').value = '';
   document.getElementById('vc-saldo').value = '';
   document.getElementById('vc-nombre').value = '';
@@ -9707,6 +9861,8 @@ window.guardarVentaCombo = async () => {
   const estadoPago = saldo===0?'pagado':pagado>0?'parcial':'pendiente';
 
   if(!fecha||!precio) { alert('Completa fecha y precio del combo'); return; }
+  const contacto = leerContactoVenta('vc', cliente, canal, true);   // 842
+  if(!contacto) return;
 
   const esFijo = document.getElementById('vc-seccion-fijo').style.display !== 'none';
   let nombreCombo = '', productosCombo = [];
@@ -9759,6 +9915,7 @@ window.guardarVentaCombo = async () => {
   });
 
   await pushNotif('🎁 Combo vendido', `${nombreCombo}${cliente?' — '+cliente:''} · ${fmt(precio)}`, 'venta', {seccion:'ventas'});
+  await guardarContactoDeVenta(cliente, contacto);   // 842
   closeModal('modal-vender-combo');
   toast('✅ Combo registrado correctamente');
 };
@@ -10628,6 +10785,9 @@ window.toggleDistribuidorField = (canal) => {
     // 762. Al salir del canal distribuidor se devuelve el control del nombre.
     if(cli) { cli.readOnly = false; cli.style.opacity = ''; }
   }
+  // 842. El contacto se pide a clientes, no a distribuidores.
+  const contacto = document.getElementById('v-contacto-grupo');
+  if(contacto) contacto.style.display = canal === 'distribuidor' ? 'none' : 'block';
   actualizarSugerenciasCliente();
 };
 
@@ -10674,6 +10834,7 @@ window.revisarClienteParecido = () => {
   if(!cli || !aviso) return;
   const txt = cli.value.trim();
   aviso.style.display = 'none';
+  precargarContactoVenta('v');   // 842
   if(txt.length < 4 || cli.readOnly) return;
   const exactos = new Set([...DATA.ventas.map(v => v.cliente), ...DATA.distribuidores.map(d => d.nombre)].filter(Boolean));
   if(exactos.has(txt)) return;
@@ -10692,6 +10853,7 @@ window.usarClienteExistente = (nombre) => {
   if(cli) cli.value = nombre;
   const aviso = document.getElementById('v-cliente-aviso');
   if(aviso) aviso.style.display = 'none';
+  precargarContactoVenta('v');   // 842
 };
 
 window.abrirNuevoDistribuidor = () => {
