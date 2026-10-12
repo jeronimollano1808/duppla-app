@@ -325,10 +325,10 @@ Siete tareas, con una regla suya encima: *"no harás ninguna todavía, luego cog
 | | Tarea | Estado | Depende de |
 |---|---|---|---|
 | **A** | Recompras de un solo clic | La pantalla existe (827-829). Falta definir qué es "un clic" | **C** — sin teléfono guardado, el primer toque siempre pide número |
-| **B** | Marcar cliente recurrente vs. primera compra, en Ventas y en Clientes | El dato ya está (nº de compras por cliente). Es una insignia | nada — **es la más barata de las seis** |
-| **C** | Exigir WhatsApp y correo al registrar una venta | No existe campo de correo; el teléfono vive en `clientesInfo` (827) | nada, pero **es el cimiento**: sin esto, D, E y F no existen |
+| ~~**B**~~ | ~~Marcar cliente recurrente vs. primera compra, en Ventas y en Clientes~~ | **Hecha (843, 12 oct 2026)** — ver 14.48 | — |
+| ~~**C**~~ | ~~Exigir WhatsApp y correo al registrar una venta~~ | **Hecha (842, 12 oct 2026)** — WhatsApp obligatorio, correo opcional. Ver 14.47. Queda abierto qué hacer con los clientes viejos sin teléfono | — |
 | **D** | Plantillas de WhatsApp y correo editables | La de WhatsApp ya se arma sola (827-828), con variante para deudores. Falta que Ángel las pueda editar, y la de correo | **C** (para el correo) |
-| **E** | Remitente virtual tipo "Laura" | No es código: es decidir qué número, qué correo y **quién contesta** cuando el cliente responda | nada |
+| **E** | Remitente virtual: **Andrea Zuluaga, asesora de Duppla** (nombre definido el 12 oct 2026) | Diseñada en el Business OS de Ángel (`Desktop\claude\directives\andrea_duppla*.md`): agente en Kapso, plantillas de Meta, fase de prueba con aprobación de Ángel. Falta la cuenta de Kapso | nada |
 | **F** | Conectar la app con correo y WhatsApp | La más grande y **la única que cuesta plata**. Hoy la app es un HTML sin servidor: necesita backend, WhatsApp Business API con plantillas aprobadas por Meta, y un proveedor de correo | C, D, E |
 
 **Dos avisos sobre esta lista, que valen más que la lista:**
@@ -1438,6 +1438,38 @@ Así que quedaron en **cuatro renglones plegados** (`detalleMesHtml`), con el pa
 La salida: el arranque del bloque (`BASE_BLOQUE`) se calcula una sola vez, a partir de la etiqueta más larga de los cinco meses, y es **el mismo para todos**. Así el texto siempre cabe y los bloques siguen siendo comparables entre sí, porque todos parten del mismo sitio y solo crece lo proporcional (`RANGO_BLOQUE`). *Si cada bloque usara su propio ancho mínimo, dejarían de medir lo mismo.*
 
 **El efecto secundario fue en el celular:** al crecer el bloque, el panel se angostó y "SEPTIEMBRE 2026" salía cortado con puntos suspensivos. Se escriben los **dos** nombres —largo y abreviado— y el CSS tapa el que no cabe (`.mes-largo` / `.mes-corto`, como ya se hacía con `.info-ventas` en el 838). Un nombre recortado con "..." no se lee; uno abreviado sí.
+
+
+### 14.46 El teclado de números en todos los campos de plata (comentario 841)
+
+Ángel: *"abrí el de deudores y lo registré desde ahí, y me apareció otra vez el teclado normal"*. En iPhone `type="number"` **solo** no saca el teclado numérico: hace falta `inputmode="numeric"`. El abono de Deudores (`ab-valor`) no lo tenía, y tampoco otros 50 campos: cobros, abonos a pedidos, gastos, precios, costos, cantidades, consignación, combos, y las líneas que se arman en JS.
+
+**Regla nueva:** todo `<input type="number">` lleva `inputmode="numeric"`, y todo teléfono va como `type="tel"` (`rec-telefono`, `dist-telefono`, `tc-telefono`, `pr-wa`). **Única excepción:** `aj-delta` (ajuste de stock), que necesita el signo menos y el teclado numérico del iPhone no lo tiene. Para revisar que nadie la rompa: buscar `<input type="number"` sin `inputmode` debe dar solo `aj-delta`.
+
+
+### 14.47 WhatsApp y correo al registrar una venta (comentario 842) — cierra la tarea C de 12.1
+
+Ángel: *"cada vez que registremos una compra, pidamos el WhatsApp y el correo"*. Es el cimiento de Recompras y de la asesora virtual (Andrea): sin teléfono no hay a quién escribirle.
+
+- Registrar venta y Vender combo tienen **WhatsApp del cliente (obligatorio)** y **Correo (opcional, validado)**. Se guardan en `clientesInfo` (`telefono`, `correo`), no en la venta: el teléfono es del cliente, no de cada compra.
+- **Se precargan** al escribir o escoger un cliente que ya los tiene (`precargarContactoVenta`). La precarga nunca pisa lo que se escribió a mano (`dataset.auto`).
+- **Salida explícita: "El cliente no quiso dar su WhatsApp".** Sin ella, quien tiene afán teclea 3000000000 para poder guardar, y eso termina en un mensaje a un número que no es de nadie.
+- **El correo no frena la venta.** En mostrador mucha gente no lo da; un correo inventado es peor que ninguno. Si se decide exigirlo, es una línea en `leerContactoVenta`.
+- La validación va **antes** de tocar el stock (`leerContactoVenta`) y el guardado **después** de la venta (`guardarContactoDeVenta`): si falla el contacto, la venta ya quedó y lo avisa.
+- No aplica a **distribuidores** (el grupo se oculta; su teléfono vive en Distribuidores) ni al **editar** una venta vieja (se precarga, pero no se exige).
+- `normalizarTelefono` quita todo lo que no sea dígito y el `57` de un número de 12 dígitos. El modal "Poner número" de Recompras ahora también edita el correo.
+- **Resuelve la tensión que 12.1 dejaba abierta** ("la pantalla de venta tiene demasiados botones"): son dos campos y una casilla, y a quien recompra se le llenan solos.
+- **Sigue abierto:** los ~242 clientes viejos sin teléfono. Esto solo arregla los nuevos.
+
+
+### 14.48 Primera compra o cliente recurrente (comentario 843) — cierra la tarea B de 12.1
+
+Ángel: *"que se vea si es un cliente recurrente o si es primera compra, en ventas y en clientes"*.
+
+- `mapaDiasDeCompra()` arma, una vez por render, los **días de compra distintos** de cada cliente (por `claveBusqueda`). Dos ventas del mismo día son una compra partida en dos —la misma regla de `calcularRecompras`—; si no, quien compró dos cosas en dos renglones saldría "recurrente" en su primer día.
+- **Ventas:** debajo del nombre, "Primera compra" (verde) o "Recurrente · 2ª compra" (azul). Es por venta: la primera venta de un cliente que ya volvió sigue diciendo "Primera compra".
+- **Clientes:** debajo del nombre, "Primera compra" o "Recurrente · N compras". La columna "Compras" sigue contando renglones, como antes.
+- **Fuera los distribuidores** (por canal y por nombre, como en el 829) y las ventas sin nombre.
 
 
 ---
