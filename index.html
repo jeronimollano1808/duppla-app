@@ -1253,7 +1253,7 @@ button.lista-fila:active{background:var(--border)}
     <div class="f-row">
       <div class="f-group">
         <label class="f-label">Teléfono</label>
-        <input type="text" id="dist-telefono" class="f-input" placeholder="Ej: 3001234567">
+        <input type="tel" inputmode="numeric" id="dist-telefono" class="f-input" placeholder="Ej: 3001234567">
       </div>
       <div class="f-group">
         <label class="f-label">Ciudad</label>
@@ -1286,7 +1286,7 @@ button.lista-fila:active{background:var(--border)}
     <div class="f-row">
       <div class="f-group">
         <label class="f-label">Teléfono</label>
-        <input type="text" id="tc-telefono" class="f-input" placeholder="Ej: 3001234567">
+        <input type="tel" inputmode="numeric" id="tc-telefono" class="f-input" placeholder="Ej: 3001234567">
       </div>
       <div class="f-group">
         <label class="f-label">Ciudad</label>
@@ -1357,14 +1357,14 @@ button.lista-fila:active{background:var(--border)}
     </div>
     <div class="f-group">
       <label class="f-label">Cantidad *</label>
-      <input type="number" id="rc-cantidad" class="f-input" min="1" oninput="calcSaldoConsig()">
+      <input type="number" inputmode="numeric" id="rc-cantidad" class="f-input" min="1" oninput="calcSaldoConsig()">
     </div>
     <!-- 496. Campos solo visibles cuando el reporte es una venta -->
     <div id="rc-venta-campos">
       <div class="f-row">
         <div class="f-group">
           <label class="f-label">Precio de venta unitario ($)</label>
-          <input type="number" id="rc-precio" class="f-input" oninput="previoCOP('rc-precio','prev-rc-precio');calcSaldoConsig()">
+          <input type="number" inputmode="numeric" id="rc-precio" class="f-input" oninput="previoCOP('rc-precio','prev-rc-precio');calcSaldoConsig()">
           <div id="prev-rc-precio" style="font-size:11px;margin-top:3px;font-weight:600"></div>
           <!-- 513. Mostramos explícitamente el precio de distribuidor que se dejó acordado -->
           <div id="rc-precio-dist-ref" style="font-size:10px;color:var(--ink-3);margin-top:4px"></div>
@@ -1403,7 +1403,7 @@ button.lista-fila:active{background:var(--border)}
       </div>
       <div class="f-group" id="rc-abono-grupo" style="display:none">
         <label class="f-label">¿Cuánto pagó ahora? ($)</label>
-        <input type="number" id="rc-pagado" class="f-input" oninput="calcSaldoConsig()">
+        <input type="number" inputmode="numeric" id="rc-pagado" class="f-input" oninput="calcSaldoConsig()">
         <div id="rc-saldo-preview" style="font-size:11px;margin-top:3px;font-weight:600"></div>
       </div>
     </div>
@@ -1429,11 +1429,11 @@ button.lista-fila:active{background:var(--border)}
     <div class="f-row">
       <div class="f-group">
         <label class="f-label">Cantidad dejada (inicial)</label>
-        <input type="number" id="ec-cantidad-inicial" class="f-input" min="0" oninput="previewAjusteStockConsig()">
+        <input type="number" inputmode="numeric" id="ec-cantidad-inicial" class="f-input" min="0" oninput="previewAjusteStockConsig()">
       </div>
       <div class="f-group">
         <label class="f-label">Cantidad actual disponible</label>
-        <input type="number" id="ec-cantidad-actual" class="f-input" min="0">
+        <input type="number" inputmode="numeric" id="ec-cantidad-actual" class="f-input" min="0">
       </div>
     </div>
     <div id="ec-ajuste-preview" style="font-size:11px;margin-bottom:10px;font-weight:600"></div>
@@ -1442,13 +1442,13 @@ button.lista-fila:active{background:var(--border)}
         <label class="f-label" style="display:flex;align-items:center;gap:4px">Costo unitario ($)
           <button type="button" id="ec-usar-costo-actual" onclick="usarCostoActualConsig()" style="font-size:9px;color:var(--blue);background:none;border:none;cursor:pointer;text-decoration:underline;padding:0;display:none">usar actual</button>
         </label>
-        <input type="number" id="ec-costo" class="f-input" oninput="toggleUsarActualConsig()">
+        <input type="number" inputmode="numeric" id="ec-costo" class="f-input" oninput="toggleUsarActualConsig()">
       </div>
       <div class="f-group">
         <label class="f-label" style="display:flex;align-items:center;gap:4px">Precio acordado ($)
           <button type="button" id="ec-usar-precio-actual" onclick="usarPrecioActualConsig()" style="font-size:9px;color:var(--blue);background:none;border:none;cursor:pointer;text-decoration:underline;padding:0;display:none">usar dist.</button>
         </label>
-        <input type="number" id="ec-precio" class="f-input" oninput="toggleUsarActualConsig()">
+        <input type="number" inputmode="numeric" id="ec-precio" class="f-input" oninput="toggleUsarActualConsig()">
       </div>
     </div>
     <div class="modal-footer">
@@ -1682,7 +1682,7 @@ button.lista-fila:active{background:var(--border)}
     <input type="hidden" id="rec-cliente" value="">
     <div class="f-group">
       <label class="f-label">WhatsApp del cliente *</label>
-      <input type="text" id="rec-telefono" class="f-input" placeholder="Ej: 3001234567">
+      <input type="tel" inputmode="numeric" id="rec-telefono" class="f-input" placeholder="Ej: 3001234567">
     </div>
     <div class="f-group">
       <label class="f-label">Mensaje (puedes editarlo)</label>
@@ -1900,17 +1900,17 @@ button.lista-fila:active{background:var(--border)}
     <div class="f-row">
       <div class="f-group">
         <label class="f-label">Cantidad</label>
-        <input type="number" id="ev-cant" class="f-input" min="1" oninput="calcEditTotal()">
+        <input type="number" inputmode="numeric" id="ev-cant" class="f-input" min="1" oninput="calcEditTotal()">
       </div>
       <div class="f-group">
         <label class="f-label">Precio unitario ($)</label>
-        <input type="number" id="ev-precio" class="f-input" oninput="calcEditTotal();previoCOP('ev-precio','prev-ev-precio')">
+        <input type="number" inputmode="numeric" id="ev-precio" class="f-input" oninput="calcEditTotal();previoCOP('ev-precio','prev-ev-precio')">
         <div id="prev-ev-precio" style="font-size:11px;margin-top:4px;font-weight:600"></div>
       </div>
     </div>
     <div class="f-group">
       <label class="f-label">Total ($)</label>
-      <input type="number" id="ev-total" class="f-input" readonly style="opacity:.6;cursor:not-allowed">
+      <input type="number" inputmode="numeric" id="ev-total" class="f-input" readonly style="opacity:.6;cursor:not-allowed">
       <div id="prev-ev-total" style="font-size:12px;margin-top:4px;font-weight:700;color:var(--lime)"></div>
     </div>
     <div class="f-group"><label class="f-label">Cliente</label><input type="text" id="ev-cliente" class="f-input" placeholder="Nombre del cliente"></div>
@@ -1944,22 +1944,22 @@ button.lista-fila:active{background:var(--border)}
     <div class="f-row" id="ev-mixto-grupo" style="display:none">
       <div class="f-group">
         <label class="f-label">💵 Efectivo ($)</label>
-        <input type="number" id="ev-mixto-efectivo" class="f-input" placeholder="0" oninput="calcMixtoEdit()">
+        <input type="number" inputmode="numeric" id="ev-mixto-efectivo" class="f-input" placeholder="0" oninput="calcMixtoEdit()">
       </div>
       <div class="f-group">
         <label class="f-label">📲 Transferencia ($)</label>
-        <input type="number" id="ev-mixto-transferencia" class="f-input" placeholder="0" oninput="calcMixtoEdit()">
+        <input type="number" inputmode="numeric" id="ev-mixto-transferencia" class="f-input" placeholder="0" oninput="calcMixtoEdit()">
       </div>
     </div>
     <!-- 238. Saldo editable para corregir errores o ajustes manuales -->
     <div class="f-row">
       <div class="f-group">
         <label class="f-label">Pagado ($)</label>
-        <input type="number" id="ev-pagado" class="f-input" placeholder="0">
+        <input type="number" inputmode="numeric" id="ev-pagado" class="f-input" placeholder="0">
       </div>
       <div class="f-group">
         <label class="f-label">Saldo pendiente ($)</label>
-        <input type="number" id="ev-saldo" class="f-input" placeholder="0">
+        <input type="number" inputmode="numeric" id="ev-saldo" class="f-input" placeholder="0">
       </div>
     </div>
     <div class="modal-footer">
@@ -2002,8 +2002,17 @@ button.lista-fila:active{background:var(--border)}
     <div class="f-group">
       <label class="f-label">Valor del abono ($) *</label>
       <!-- 151. oninput dispara tanto el cálculo del nuevo saldo como la preview COP
-                Esto permite ver "$100.000 COP" mientras escribes "100000" -->
-      <input type="number" id="ab-valor" class="f-input" placeholder="Ej: 50000"
+                Esto permite ver "$100.000 COP" mientras escribes "100000"
+           841. Ángel: abrió Deudores para registrar un abono y le salió el
+                teclado de letras. En iPhone, type="number" SOLO no basta: hace
+                falta inputmode="numeric" para que salga el teclado de números.
+                Este campo no lo tenía, y tampoco otros 50 de la app (pagos,
+                precios, costos, cantidades, también los que se arman en JS).
+                Se les puso a todos. Regla: todo <input type="number"> lleva
+                inputmode="numeric", y todo teléfono va como type="tel".
+                Única excepción: aj-delta (ajuste de stock), que necesita el
+                signo menos y el teclado numérico del iPhone no lo tiene. -->
+      <input type="number" inputmode="numeric" id="ab-valor" class="f-input" placeholder="Ej: 50000"
         oninput="calcNuevoSaldo();previoCOP('ab-valor','prev-ab-valor')">
       <div id="prev-ab-valor" style="font-size:11px;margin-top:4px;font-weight:600"></div>
     </div>
@@ -2068,7 +2077,7 @@ button.lista-fila:active{background:var(--border)}
     </div>
     <div class="f-group">
       <label class="f-label">Valor ($) *</label>
-      <input type="number" id="cb-valor" class="f-input" placeholder="Ej: 500000"
+      <input type="number" inputmode="numeric" id="cb-valor" class="f-input" placeholder="Ej: 500000"
         oninput="previoCOP('cb-valor','prev-cb-valor')">
       <div id="prev-cb-valor" style="font-size:11px;margin-top:4px;font-weight:600"></div>
     </div>
@@ -2136,12 +2145,12 @@ button.lista-fila:active{background:var(--border)}
           <option value="Vitanas"><option value="Youtheory">
         </datalist>
       </div>
-      <div class="f-group"><label class="f-label">Stock</label><input type="number" id="p-stock" class="f-input" value="0" min="0"></div>
+      <div class="f-group"><label class="f-label">Stock</label><input type="number" inputmode="numeric" id="p-stock" class="f-input" value="0" min="0"></div>
     </div>
     <!-- 63. Precio de costo: lo que pagamos al proveedor, sirve para calcular margen -->
     <div class="f-group">
       <label class="f-label">Precio de costo ($)</label>
-      <input type="number" id="p-costo" class="f-input" value="0" oninput="previoCOP('p-costo','prev-costo')">
+      <input type="number" inputmode="numeric" id="p-costo" class="f-input" value="0" oninput="previoCOP('p-costo','prev-costo')">
       <!-- 129. Preview en tiempo real del valor formateado en COP -->
       <div id="prev-costo" style="font-size:11px;margin-top:4px;font-weight:600"></div>
     </div>
@@ -2157,7 +2166,7 @@ button.lista-fila:active{background:var(--border)}
             <span style="width:8px;height:8px;border-radius:50%;background:var(--blue);display:inline-block"></span>
             Precio público ($)
           </label>
-          <input type="number" id="p-pventa" class="f-input" value="0" placeholder="Ej: 110000" oninput="previoCOP('p-pventa','prev-pventa')">
+          <input type="number" inputmode="numeric" id="p-pventa" class="f-input" value="0" placeholder="Ej: 110000" oninput="previoCOP('p-pventa','prev-pventa')">
           <div id="prev-pventa" style="font-size:11px;margin-top:4px;font-weight:600"></div>
         </div>
         <div class="f-group" style="margin-bottom:0">
@@ -2165,7 +2174,7 @@ button.lista-fila:active{background:var(--border)}
             <span style="width:8px;height:8px;border-radius:50%;background:var(--amber);display:inline-block"></span>
             Precio distribuidor ($)
           </label>
-          <input type="number" id="p-pdist" class="f-input" value="0" placeholder="Ej: 91000" oninput="previoCOP('p-pdist','prev-pdist')">
+          <input type="number" inputmode="numeric" id="p-pdist" class="f-input" value="0" placeholder="Ej: 91000" oninput="previoCOP('p-pdist','prev-pdist')">
           <div id="prev-pdist" style="font-size:11px;margin-top:4px;font-weight:600"></div>
         </div>
         <div class="f-group" style="margin-bottom:0">
@@ -2173,18 +2182,18 @@ button.lista-fila:active{background:var(--border)}
             <span style="width:8px;height:8px;border-radius:50%;background:var(--green);display:inline-block"></span>
             Precio especial ($)
           </label>
-          <input type="number" id="p-pesp" class="f-input" value="0" placeholder="Ej: 100000" oninput="previoCOP('p-pesp','prev-pesp')">
+          <input type="number" inputmode="numeric" id="p-pesp" class="f-input" value="0" placeholder="Ej: 100000" oninput="previoCOP('p-pesp','prev-pesp')">
           <div id="prev-pesp" style="font-size:11px;margin-top:4px;font-weight:600"></div>
         </div>
       </div>
     </div>
-    <div class="f-group"><label class="f-label">Stock mínimo para alerta</label><input type="number" id="p-minimo" class="f-input" value="5" min="0"></div>
+    <div class="f-group"><label class="f-label">Stock mínimo para alerta</label><input type="number" inputmode="numeric" id="p-minimo" class="f-input" value="5" min="0"></div>
     <!-- 637. Duración estimada — cuántos días dura UNA unidad tomándolo como
          se recomienda. Se usa para avisarle al cliente cuando se le esté
          por acabar (ver calcularRecompras). Vacío/0 = no aplica para este producto. -->
     <div class="f-group">
       <label class="f-label">Duración por unidad (días)</label>
-      <input type="number" id="p-duracion" class="f-input" value="0" min="0" placeholder="Ej: 30">
+      <input type="number" inputmode="numeric" id="p-duracion" class="f-input" value="0" min="0" placeholder="Ej: 30">
       <div style="font-size:11px;color:var(--ink-3);margin-top:4px">Si se toma a diario, ¿cuántos días dura una unidad? Se usa para avisarle al cliente cuando se le esté acabando. Déjalo en 0 si no aplica.</div>
     </div>
     <div class="modal-footer">
@@ -2218,7 +2227,7 @@ button.lista-fila:active{background:var(--border)}
       </div>
     </div>
     <div class="f-group"><label class="f-label">Descripción *</label><input type="text" id="g-desc" class="f-input" placeholder="Ej: Pago proveedor MuscleTech"></div>
-    <div class="f-group"><label class="f-label">Valor ($) *</label><input type="number" id="g-valor" class="f-input"></div>
+    <div class="f-group"><label class="f-label">Valor ($) *</label><input type="number" inputmode="numeric" id="g-valor" class="f-input"></div>
     <!-- 669. Gasto fijo vs variable — alimenta el punto de equilibrio de Inicio
          y de Metas. Fijo = se paga todos los meses pase lo que pase. -->
     <div class="f-group">
@@ -2260,7 +2269,7 @@ button.lista-fila:active{background:var(--border)}
           <option value="otro">Otro</option>
         </select>
       </div>
-      <div class="f-group"><label class="f-label">Valor mensual ($) *</label><input type="number" id="gr-valor" class="f-input"></div>
+      <div class="f-group"><label class="f-label">Valor mensual ($) *</label><input type="number" inputmode="numeric" id="gr-valor" class="f-input"></div>
     </div>
     <!-- 673. Las plantillas recurrentes son fijas por naturaleza, pero se puede
          desmarcar (ej: una compra programada que sí depende de las ventas). -->
@@ -2294,7 +2303,7 @@ button.lista-fila:active{background:var(--border)}
     </div>
     <div class="f-row">
       <div class="f-group"><label class="f-label">Email</label><input type="email" id="pr-email" class="f-input"></div>
-      <div class="f-group"><label class="f-label">WhatsApp</label><input type="text" id="pr-wa" class="f-input" placeholder="+1 555 000 0000"></div>
+      <div class="f-group"><label class="f-label">WhatsApp</label><input type="tel" id="pr-wa" class="f-input" placeholder="+1 555 000 0000"></div>
     </div>
     <div class="f-group"><label class="f-label">Notas</label><input type="text" id="pr-notas" class="f-input" placeholder="Condiciones, plazos, observaciones..."></div>
     <div class="modal-footer">
@@ -2340,10 +2349,10 @@ button.lista-fila:active{background:var(--border)}
     <div id="pe-lineas-container"></div>
     <div class="f-group"><label class="f-label">Notas adicionales</label><input type="text" id="pe-prods" class="f-input" placeholder="Observaciones sobre el pedido completo"></div>
     <div class="f-row">
-      <div class="f-group"><label class="f-label">Total ($)</label><input type="number" id="pe-total" class="f-input" readonly style="opacity:.7">
+      <div class="f-group"><label class="f-label">Total ($)</label><input type="number" inputmode="numeric" id="pe-total" class="f-input" readonly style="opacity:.7">
         <div id="prev-pe-total" style="font-size:11px;margin-top:4px;font-weight:600"></div>
       </div>
-      <div class="f-group"><label class="f-label">Flete ($)</label><input type="number" id="pe-flete" class="f-input" value="0" oninput="recalcularTotalPedido()"></div>
+      <div class="f-group"><label class="f-label">Flete ($)</label><input type="number" inputmode="numeric" id="pe-flete" class="f-input" value="0" oninput="recalcularTotalPedido()"></div>
     </div>
     <!-- 606. ¿Cuánto pagaste al proveedor? — antes se asumía SIEMPRE pago
          completo, así que no había forma de dejar un pedido a crédito o
@@ -2367,7 +2376,7 @@ button.lista-fila:active{background:var(--border)}
     </div>
     <div class="f-group" id="pe-abono-grupo" style="display:none">
       <label class="f-label">Pagó ahora ($)</label>
-      <input type="number" id="pe-pagado" class="f-input" oninput="calcSaldoPedido()">
+      <input type="number" inputmode="numeric" id="pe-pagado" class="f-input" oninput="calcSaldoPedido()">
       <div id="pe-saldo-preview" style="font-size:11px;margin-top:3px;font-weight:600"></div>
     </div>
     <div class="f-group"><label class="f-label">Notas</label><input type="text" id="pe-notas" class="f-input" placeholder="Observaciones, fechas estimadas..."></div>
@@ -2387,7 +2396,7 @@ button.lista-fila:active{background:var(--border)}
     </div>
     <input type="hidden" id="ap-pedido-id" value="">
     <div id="ap-info" style="background:var(--surface-2);border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:13px;color:var(--ink-2)"></div>
-    <div class="f-group"><label class="f-label">Abono ($)</label><input type="number" id="ap-valor" class="f-input"></div>
+    <div class="f-group"><label class="f-label">Abono ($)</label><input type="number" inputmode="numeric" id="ap-valor" class="f-input"></div>
     <div class="f-group"><label class="f-label">Fecha</label><input type="date" id="ap-fecha" class="f-input"></div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('modal-abono-pedido')">Cancelar</button>
@@ -2417,24 +2426,24 @@ button.lista-fila:active{background:var(--border)}
       </div>
       <div class="f-group">
         <label class="f-label">Stock mínimo</label>
-        <input type="number" id="pr-minimo" class="f-input" value="5">
+        <input type="number" inputmode="numeric" id="pr-minimo" class="f-input" value="5">
       </div>
     </div>
     <div class="f-row">
       <div class="f-group">
         <label class="f-label">Precio público ($) *</label>
-        <input type="number" id="pr-pventa" class="f-input" oninput="previoCOP('pr-pventa','prev-pr-pventa')">
+        <input type="number" inputmode="numeric" id="pr-pventa" class="f-input" oninput="previoCOP('pr-pventa','prev-pr-pventa')">
         <div id="prev-pr-pventa" style="font-size:11px;margin-top:3px;font-weight:600"></div>
       </div>
       <div class="f-group">
         <label class="f-label">Precio distribuidor ($)</label>
-        <input type="number" id="pr-pdist" class="f-input" oninput="previoCOP('pr-pdist','prev-pr-pdist')">
+        <input type="number" inputmode="numeric" id="pr-pdist" class="f-input" oninput="previoCOP('pr-pdist','prev-pr-pdist')">
         <div id="prev-pr-pdist" style="font-size:11px;margin-top:3px;font-weight:600"></div>
       </div>
     </div>
     <div class="f-group">
       <label class="f-label">Precio especial ($)</label>
-      <input type="number" id="pr-pesp" class="f-input" oninput="previoCOP('pr-pesp','prev-pr-pesp')">
+      <input type="number" inputmode="numeric" id="pr-pesp" class="f-input" oninput="previoCOP('pr-pesp','prev-pr-pesp')">
       <div id="prev-pr-pesp" style="font-size:11px;margin-top:3px;font-weight:600"></div>
     </div>
     <div class="modal-footer">
@@ -2481,7 +2490,7 @@ button.lista-fila:active{background:var(--border)}
       </div>
       <div class="f-group" style="margin-bottom:0">
         <label class="f-label">Precio especial del combo ($) *</label>
-        <input type="number" id="combo-precio" class="f-input" placeholder="Precio con descuento"
+        <input type="number" inputmode="numeric" id="combo-precio" class="f-input" placeholder="Precio con descuento"
           oninput="previoCOP('combo-precio','prev-combo-precio');calcDescuentoCombo()">
         <div id="prev-combo-precio" style="font-size:11px;margin-top:4px;font-weight:600"></div>
         <div id="combo-descuento" style="font-size:12px;margin-top:4px;color:var(--green)"></div>
@@ -2551,7 +2560,7 @@ button.lista-fila:active{background:var(--border)}
     </div>
     <div class="f-group">
       <label class="f-label">Precio del combo ($)</label>
-      <input type="number" id="vc-precio" class="f-input"
+      <input type="number" inputmode="numeric" id="vc-precio" class="f-input"
         oninput="previoCOP('vc-precio','prev-vc-precio')">
       <div id="prev-vc-precio" style="font-size:11px;margin-top:4px;font-weight:600"></div>
     </div>
@@ -2580,22 +2589,22 @@ button.lista-fila:active{background:var(--border)}
     <div class="f-row" id="vc-mixto-grupo" style="display:none">
       <div class="f-group">
         <label class="f-label">💵 Efectivo ($)</label>
-        <input type="number" id="vc-mixto-efectivo" class="f-input" placeholder="0" oninput="calcMixtoCombo()">
+        <input type="number" inputmode="numeric" id="vc-mixto-efectivo" class="f-input" placeholder="0" oninput="calcMixtoCombo()">
       </div>
       <div class="f-group">
         <label class="f-label">📲 Transferencia ($)</label>
-        <input type="number" id="vc-mixto-transferencia" class="f-input" placeholder="0" oninput="calcMixtoCombo()">
+        <input type="number" inputmode="numeric" id="vc-mixto-transferencia" class="f-input" placeholder="0" oninput="calcMixtoCombo()">
       </div>
     </div>
     <div class="f-row">
       <div class="f-group">
         <label class="f-label">Pagó ahora ($)</label>
-        <input type="number" id="vc-pagado" class="f-input" placeholder="0"
+        <input type="number" inputmode="numeric" id="vc-pagado" class="f-input" placeholder="0"
           oninput="calcSaldoCombo()">
       </div>
       <div class="f-group">
         <label class="f-label">Saldo pendiente ($)</label>
-        <input type="number" id="vc-saldo" class="f-input" readonly style="opacity:.6">
+        <input type="number" inputmode="numeric" id="vc-saldo" class="f-input" readonly style="opacity:.6">
       </div>
     </div>
     <div class="modal-footer">
@@ -2628,7 +2637,7 @@ button.lista-fila:active{background:var(--border)}
         </button>
       </div>
     </div>
-    <div class="f-group"><label class="f-label">Cantidad a sumar (+) o restar (−)</label><input type="number" id="aj-delta" class="f-input" placeholder="Ej: 10 ó −5"></div>
+    <div class="f-group"><label class="f-label">Cantidad a sumar (+) o restar (−)</label><!-- 841. Sin inputmode a propósito: necesita el signo menos. --><input type="number" id="aj-delta" class="f-input" placeholder="Ej: 10 ó −5"></div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('modal-ajuste')">Cancelar</button>
       <button class="btn btn-lime" onclick="aplicarAjuste()">Aplicar ajuste</button>
@@ -2650,11 +2659,11 @@ button.lista-fila:active{background:var(--border)}
     <div class="f-row">
       <div class="f-group">
         <label class="f-label">Cantidad recibida *</label>
-        <input type="number" id="lote-cantidad" class="f-input" min="1" placeholder="Ej: 20">
+        <input type="number" inputmode="numeric" id="lote-cantidad" class="f-input" min="1" placeholder="Ej: 20">
       </div>
       <div class="f-group">
         <label class="f-label">Costo unitario ($) *</label>
-        <input type="number" id="lote-costo" class="f-input" placeholder="Ej: 20000" oninput="previoCOP('lote-costo','prev-lote-costo')">
+        <input type="number" inputmode="numeric" id="lote-costo" class="f-input" placeholder="Ej: 20000" oninput="previoCOP('lote-costo','prev-lote-costo')">
         <div id="prev-lote-costo" style="font-size:11px;margin-top:3px;font-weight:600"></div>
       </div>
     </div>
@@ -7636,9 +7645,9 @@ function renderLineasPedido() {
         + '</div>'
         + '<div style="display:grid;grid-template-columns:70px 1fr 1fr;gap:8px">'
           + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Cant.</label>'
-            + '<input type="number" class="f-input" value="' + (l.cant||1) + '" min="1" data-idx="' + i + '" data-tipo="cant" oninput="actualizarDatosPedido(this)" style="font-size:13px;text-align:center;padding:7px 6px"></div>'
+            + '<input type="number" inputmode="numeric" class="f-input" value="' + (l.cant||1) + '" min="1" data-idx="' + i + '" data-tipo="cant" oninput="actualizarDatosPedido(this)" style="font-size:13px;text-align:center;padding:7px 6px"></div>'
           + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Costo ($)</label>'
-            + '<input type="number" class="f-input" value="' + (l.costo||0) + '" data-idx="' + i + '" data-tipo="costo" oninput="actualizarDatosPedido(this)" style="font-size:13px;padding:7px 8px"></div>'
+            + '<input type="number" inputmode="numeric" class="f-input" value="' + (l.costo||0) + '" data-idx="' + i + '" data-tipo="costo" oninput="actualizarDatosPedido(this)" style="font-size:13px;padding:7px 8px"></div>'
           + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Subtotal</label>'
             + '<div style="font-size:13px;font-weight:700;color:var(--lime);padding:7px 0">' + fmt((l.cant||1)*(l.costo||0)) + '</div></div>'
         + '</div>';
@@ -9464,7 +9473,7 @@ function renderLineasCombo() {
     return '<div style="margin-bottom:10px;padding:8px;background:var(--surface-2);border-radius:10px">'
       + '<div style="display:grid;grid-template-columns:1fr 70px 32px;gap:8px;align-items:start">'
         + '<div>' + buscadorOResultado + '</div>'
-        + '<input type="number" class="f-input" value="' + (l.cant||1) + '" min="1" style="font-size:13px;text-align:center" data-idx="' + i + '" data-tipo="cant" oninput="actualizarLineaCombo(this);calcSumaIndividual()">'
+        + '<input type="number" inputmode="numeric" class="f-input" value="' + (l.cant||1) + '" min="1" style="font-size:13px;text-align:center" data-idx="' + i + '" data-tipo="cant" oninput="actualizarLineaCombo(this);calcSumaIndividual()">'
         + '<button type="button" onclick="quitarLineaCombo(' + i + ')" style="width:32px;height:38px;border:1px solid var(--red-bd);border-radius:8px;background:var(--red-bg);color:var(--red);cursor:pointer;font-size:14px">✕</button>'
       + '</div>'
     + '</div>';
@@ -9638,7 +9647,7 @@ function renderLineasVentaCombo() {
           `<option value="${p.id}" ${p.id===l.prodId?'selected':''}>${p.nombre} (${p.stock})</option>`
         ).join('')}
       </select>
-      <input type="number" class="f-input" value="${l.cant}" min="1"
+      <input type="number" inputmode="numeric" class="f-input" value="${l.cant}" min="1"
         style="font-size:13px;text-align:center"
         data-idx="${i}" data-tipo="cant"
         oninput="actualizarLineaVC(this)">
@@ -10204,16 +10213,16 @@ window.navegarANotif = (notifId, seccion, itemId) => {
       <div class="f-row">
         <div class="f-group">
           <label class="f-label">Cantidad</label>
-          <input type="number" id="cons-cant" class="f-input" value="1" min="1" oninput="calcTotalConsumo()">
+          <input type="number" inputmode="numeric" id="cons-cant" class="f-input" value="1" min="1" oninput="calcTotalConsumo()">
         </div>
         <div class="f-group">
           <label class="f-label">Costo unitario ($)</label>
-          <input type="number" id="cons-costo" class="f-input" readonly style="opacity:.6">
+          <input type="number" inputmode="numeric" id="cons-costo" class="f-input" readonly style="opacity:.6">
         </div>
       </div>
       <div class="f-group">
         <label class="f-label">Total a precio de costo ($)</label>
-        <input type="number" id="cons-total" class="f-input" readonly style="opacity:.6">
+        <input type="number" inputmode="numeric" id="cons-total" class="f-input" readonly style="opacity:.6">
         <div id="prev-cons-total" style="font-size:12px;margin-top:4px;font-weight:700;color:var(--blue)"></div>
       </div>
       <div class="modal-footer">
@@ -11189,12 +11198,12 @@ function renderLineasConsignacion() {
         + '</div>'
         + '<div style="display:grid;grid-template-columns:70px 1fr 1fr;gap:8px">'
           + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Cant.</label>'
-            + '<input type="number" class="f-input" value="' + (l.cant||1) + '" min="1" data-idx="' + i + '" data-tipo="cant" oninput="actualizarDatosLineaConsig(this)" style="font-size:13px;text-align:center;padding:7px 6px"></div>'
+            + '<input type="number" inputmode="numeric" class="f-input" value="' + (l.cant||1) + '" min="1" data-idx="' + i + '" data-tipo="cant" oninput="actualizarDatosLineaConsig(this)" style="font-size:13px;text-align:center;padding:7px 6px"></div>'
           + '<div>'
             + '<label style="font-size:11px;color:var(--ink-3);display:flex;align-items:center;gap:4px;margin-bottom:3px">Precio venta ($)'
               + (l.precioVenta !== Number(prod.pdist||0) ? '<button type="button" onclick="restaurarPrecioDistribuidor(' + i + ')" style="font-size:9px;color:var(--blue);background:none;border:none;cursor:pointer;text-decoration:underline;padding:0">usar dist.</button>' : '')
             + '</label>'
-            + '<input type="number" class="f-input" value="' + (l.precioVenta||0) + '" data-idx="' + i + '" data-tipo="precio" oninput="actualizarDatosLineaConsig(this)" style="font-size:13px;padding:7px 8px">'
+            + '<input type="number" inputmode="numeric" class="f-input" value="' + (l.precioVenta||0) + '" data-idx="' + i + '" data-tipo="precio" oninput="actualizarDatosLineaConsig(this)" style="font-size:13px;padding:7px 8px">'
             + '<div style="font-size:10px;margin-top:3px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--amber);margin-right:3px"></span><span style="color:var(--ink-3)">Distribuidor: ' + fmt(prod.pdist||0) + '</span></div>'
           + '</div>'
           + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Subtotal</label>'
@@ -12666,7 +12675,7 @@ window.abrirVentasSinCosto = () => {
           ? '<td style="text-align:right;font-weight:600">' + fmt(p.costoTotal) + '</td>'
           : (linea
             ? '<td style="text-align:right;white-space:nowrap">'
-              + '<input type="number" id="sc-costo-' + i + '" class="f-input" placeholder="costo x1"'
+              + '<input type="number" inputmode="numeric" id="sc-costo-' + i + '" class="f-input" placeholder="costo x1"'
               + ' style="width:110px;padding:5px 8px;font-size:12px;text-align:right;display:inline-block">'
               + (Number(linea.cant||1) > 1 ? '<div style="font-size:10.5px;color:var(--ink-3);margin-top:3px">× ' + linea.cant + ' unidades</div>' : '')
               + '</td>'
