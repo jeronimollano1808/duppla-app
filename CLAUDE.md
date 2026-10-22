@@ -15,7 +15,7 @@
 ---
 
 ## 1. QUÉ ES ESTO
-App interna de gestión para **DUPPLA**, negocio de suplementos deportivos (retail + distribución mayorista) cofundado por **Jerónimo "Jero" Arroyave Llano** y **Ángel Certuche Garay**, con sede en Medellín/Guarne, Colombia. Ambos socios usan la misma app, cada uno con su propio login, y tienen stock físico separado (ver sección 8).
+App interna de gestión para **DUPPLA**, negocio de suplementos deportivos (retail + distribución mayorista) cofundado por **Jerónimo "Jero" Arroyave Llano** y **Ángel Certuche Garay**, con sede en Medellín/Guarne, Colombia. Ambos socios usan la misma app, cada uno con su propio login. El stock es uno solo por producto (ver sección 8).
 
 Comunicación interna: español colombiano informal, directo. El tuteo/voseo de marca de Duppla (marketing al cliente) es un tema aparte — no aplica a esta app interna.
 
@@ -85,7 +85,7 @@ let DATA = {
 | `estadoPago` | `'pagado'\|'parcial'\|'pendiente'` — no confiar ciegamente, verificar saldo |
 | `abonos` | array `[{valor,fecha,metodoPago,nota}]` |
 | `distribuidorId` | string\|null |
-| `ubicacionStock` | `'jero'\|'angel'` |
+| `ubicacionStock` | `'jero'\|'angel'` — **solo en ventas viejas**. Desde el 844 ya no se escribe. |
 
 **Ingreso reconocido:** usar SIEMPRE `ingresoVenta(v) = Math.max(Number(v.total||0), Number(v.pagado||0))` para agregaciones de ingreso (dashboard, ventas, metas, canales, clientes, distribuidores, consignación, cierres) — si el cliente paga de más, el sobrante cuenta como ingreso real. **Nunca** usar `ingresoVenta` para cálculos de costo/margen por producto — esos siguen usando `total` (`calcularMargenVenta`).
 
@@ -94,7 +94,7 @@ let DATA = {
 |---|---|
 | `nombre`, `marca` | marca es texto libre con datalist |
 | `stock` | **SIEMPRE fuente de verdad del total** |
-| `stockJero`, `stockAngel` | desglose por ubicación — informativo, nunca bloquea ventas. `construirUpdateStockUbicacion()` autocorrige desincronización. Al editar reduciendo el stock total, si el faltante deja a Jero en negativo, el resto se descuenta de Ángel (fix aplicado — antes se truncaba a 0 sin tocar Ángel, desincronizando el total). |
+| `stockJero`, `stockAngel` | **Muertos desde el 844.** Siguen en los documentos viejos pero nadie los lee ni los escribe. No revivirlos. |
 | `costo` | precio de compra (o promedio ponderado si tiene lotes) |
 | `pventa`, `pdist`, `pesp` | precios público 🔵, distribuidor 🟠, especial 🟢 |
 | `stockMinimo` | alerta stock bajo |
@@ -214,8 +214,8 @@ function calcularRangoMeta(mesStr, diaInicio) { ... }
 // la transición de convención (ver sección 6).
 
 function consumirLotesFIFO(prod, cantidad) { ... }
-function construirUpdateStockUbicacion(prod, cantDescontar, ubicacion) { ... }
-// Sin cambios de fondo — ver CONTEXTO original si hace falta el detalle.
+function descontarStock(prod, cant) / sumarStock(prod, cant)
+// 844. Reemplazan a construirUpdateStockUbicacion. Un solo stock, nunca < 0.
 
 async function restaurarStockVenta(venta) { ... }
 async function restaurarStockConsignacion(item) { ... }
@@ -243,8 +243,8 @@ Ver CONTEXTO original si hace falta el detalle de `consumirLotesFIFO`/lotes. Sig
 
 ---
 
-## 8. STOCK POR UBICACIÓN (JERO/ÁNGEL) — sin cambios de fondo, un fix
-Mismo diseño de siempre (`stock` total es fuente de verdad, Jero/Ángel es desglose informativo). **Fix aplicado esta sesión:** al editar un producto reduciendo el stock total, si el faltante deja a Jero en negativo, el resto ahora se descuenta de Ángel — antes se truncaba Jero a 0 sin tocar Ángel, dejando `stockJero+stockAngel` desincronizado del stock total real.
+## 8. STOCK — UNO SOLO POR PRODUCTO (desde el 844, 21 oct 2026)
+Ya no hay stock por ubicación Jero/Ángel. Todo lo que mueve inventario suma o resta sobre `stock` con `descontarStock(prod, cant)` / `sumarStock(prod, cant)` (nunca baja de 0). Ver 14.49.
 
 ---
 
@@ -293,7 +293,7 @@ Mismo diseño de siempre (`stock` total es fuente de verdad, Jero/Ángel es desg
 - Estado UI en **variables globales JS** — nunca en el DOM.
 - Búsquedas filtran filas del DOM (`tr.style.display`) — NO re-renderizan (para no perder foco en móvil).
 - `saldoReal(v)` / `ingresoVenta(v)` — fuentes únicas de verdad, usarlas siempre en vez de leer `v.saldo`/`v.total` directo para esos propósitos.
-- `stock` total siempre fuente de verdad para validar ventas — Jero/Ángel solo informativo.
+- `stock` es el único número de inventario. Se mueve con `descontarStock` / `sumarStock`; no hay desglose por ubicación (844).
 - `fechaLocal(d)` / `today()` — fuente única de verdad para fechas locales. Nunca `.toISOString()` para eso (ver sección 11).
 - Modales reutilizados entre crear/editar (patrón usado en Pedidos, Gastos, Ventas, Consignación esta sesión): un campo oculto con el id en modo edición (`v-edit-id`, `pe-id`, `g-id`, `ec-id`...), título y texto del botón dinámicos, y la función de guardar bifurca `if(editId) updateDoc(...) else addDoc(...)`.
 - Al eliminar cualquier cosa: usar `eliminarDoc(col, id)` genérico (pasa por la Papelera) — nunca `deleteDoc` directo salvo dentro de la propia lógica de la Papelera.
@@ -305,9 +305,9 @@ Mismo diseño de siempre (`stock` total es fuente de verdad, Jero/Ángel es desg
 2. **Focus perdido en buscadores**: nunca `renderX()` en `oninput`; filtrar filas del DOM.
 3. **Foco incorrecto con múltiples líneas**: usar `querySelector('[data-idx="i"]')`, no índices posicionales.
 4. **Saldo flotante**: siempre `saldoReal()` / `Math.round()` antes de comparar o sumar saldos.
-5. **Stock Jero/Ángel desincronizado**: validar ventas solo por `prod.stock`; al reducir stock total, si Jero queda negativo, descontar el resto de Ángel (no truncar a 0 sin más).
+5. **Stock Jero/Ángel desincronizado**: resuelto de raíz en el 844 — ya no hay desglose. No volver a guardar el mismo número en dos campos.
 6. **Comillas en onclick con concatenación**: usar `'\'' + variable + '\''`. Validar con `node --check`.
-7. **Fallback de ubicación roto**: verificar `prod.stockJero != null` antes de decidir ubicación.
+7. **Fallback de ubicación roto**: ya no aplica (844).
 8. **Sobrescritura del archivo bueno**: trabajar solo sobre el `index.html` del repo clonado, nunca copias sueltas.
 9. **`.toISOString()` para fechas locales — BUG CRÍTICO real, ya arreglado pero fácil de reintroducir.** `new Date().toISOString()` convierte a UTC. En Colombia (UTC-5), de noche (desde ~7pm) esto corre la fecha calculada al día siguiente, y si es fin de mes, al MES siguiente. Causó que "Este mes" en Ventas (y Dashboard, Metas, gastos recurrentes, proyección de reposición) mostrara vacío de noche cerca de fin de mes — los datos seguían intactos, era solo el cálculo de fecha. **Regla: cualquier fecha "de hoy" o derivada de `new Date()` para uso LOCAL (comparar contra `v.fecha`, decidir el mes/ciclo actual, etc.) debe pasar por `fechaLocal()`, nunca por `.toISOString()`.** Dates construidos explícitamente a medianoche local vía `new Date(año, mes, día)` SÍ son seguros de formatear con `.toISOString()` (no tienen componente de hora que se corra), pero usa `fechaLocal()` de todas formas por consistencia — es más fácil de auditar que recordar cuál Date es "seguro".
 10. **`itemsActivos.length` ≠ número de productos distintos** (Consignación): una tienda puede tener varias entregas activas del mismo producto agrupadas en una fila — contar documentos no es contar productos. Usar `new Set(items.map(c => c.prodId)).size` cuando se necesite el conteo de productos distintos.
@@ -360,7 +360,7 @@ Siete tareas, con una regla suya encima: *"no harás ninguna todavía, luego cog
 
 ## 13. CONTEXTO DE NEGOCIO
 - Tres niveles de precio: público (retail), distribuidor (mayoristas/gimnasios/tiendas en consignación), especial (clientes frecuentes).
-- Jero y Ángel son los dos usuarios de la app, cada uno con su propio login y su propio stock físico (Jero/Ángel en Inventario).
+- Jero y Ángel son los dos usuarios de la app, cada uno con su propio login. El inventario es uno solo (844).
 - Moneda: pesos colombianos (COP), sin decimales.
 - La app **no cuenta `consumos`** (retiros internos) como ingresos ni utilidad.
 - Ciclo de negocio: ver sección 6 (convención del día 3, con el fix de zona horaria de la sección 11).
@@ -1444,7 +1444,7 @@ La salida: el arranque del bloque (`BASE_BLOQUE`) se calcula una sola vez, a par
 
 Ángel: *"abrí el de deudores y lo registré desde ahí, y me apareció otra vez el teclado normal"*. En iPhone `type="number"` **solo** no saca el teclado numérico: hace falta `inputmode="numeric"`. El abono de Deudores (`ab-valor`) no lo tenía, y tampoco otros 50 campos: cobros, abonos a pedidos, gastos, precios, costos, cantidades, consignación, combos, y las líneas que se arman en JS.
 
-**Regla nueva:** todo `<input type="number">` lleva `inputmode="numeric"`, y todo teléfono va como `type="tel"` (`rec-telefono`, `dist-telefono`, `tc-telefono`, `pr-wa`). **Única excepción:** `aj-delta` (ajuste de stock), que necesita el signo menos y el teclado numérico del iPhone no lo tiene. Para revisar que nadie la rompa: buscar `<input type="number"` sin `inputmode` debe dar solo `aj-delta`.
+**Regla nueva:** todo `<input type="number">` lleva `inputmode="numeric"`, y todo teléfono va como `type="tel"` (`rec-telefono`, `dist-telefono`, `tc-telefono`, `pr-wa`). La única excepción era `aj-delta` (ajuste de stock), que se fue en el 844: buscar `<input type="number"` sin `inputmode` debe dar cero resultados.
 
 
 ### 14.47 WhatsApp y correo al registrar una venta (comentario 842) — cierra la tarea C de 12.1
@@ -1470,6 +1470,27 @@ La salida: el arranque del bloque (`BASE_BLOQUE`) se calcula una sola vez, a par
 - **Ventas:** debajo del nombre, "Primera compra" (verde) o "Recurrente · 2ª compra" (azul). Es por venta: la primera venta de un cliente que ya volvió sigue diciendo "Primera compra".
 - **Clientes:** debajo del nombre, "Primera compra" o "Recurrente · N compras". La columna "Compras" sigue contando renglones, como antes.
 - **Fuera los distribuidores** (por canal y por nombre, como en el 829) y las ventas sin nombre.
+
+
+
+### 14.49 Un solo stock, y el stock vuelve a verse (comentarios 844–846) — sesión con Jero, 21 oct 2026
+
+**Cambio de criterio respecto al 813/814/821.** Ángel había quitado el stock de la vista porque "lo que tenemos en inventario no lo sabemos". Jero lo corrige: *"Ángel estaba equivocado... yo lo he hecho y corroboro que semanalmente sea lo que tenemos disponible"*. El número `stock` se considera real y se vuelve a mostrar. **Lo que NO se revierte:** nada bloquea una venta por falta de stock (813 sigue vigente); el aviso solo informa.
+
+**844. Fuera el stock por ubicación.** Se borraron el selector "¿De dónde salió? Jero / Ángel" de la venta, `construirUpdateStockUbicacion`, `ubicacionPorDefecto`, `ubicacionConStock`, `seleccionarUbicacionLinea` y el modal de Ajuste de stock (`abrirAjuste`, `aplicarAjuste`, `setUbicacionAjuste`, `aj-delta`). Jero sobre el ajuste: no hace falta, porque una devolución o una venta borrada ya devuelven el stock; una corrección puntual se escribe en Editar producto. En su lugar, `descontarStock` / `sumarStock`.
+
+- **Consolidación:** se leyó el inventario real antes de tocar nada (79 productos, 845 unidades). `stockAngel` era **0 en todos**, así que no hubo nada que sumar ni ninguna escritura en Firestore: `stock` ya era el total. Tres productos tenían `stockJero` distinto de `stock` (CRISP BAR 42 vs 40, HYDROXYCUT 7 vs 6, COLLAGEN SPORT 1 vs 2); manda `stock`, que es el número del formulario de edición.
+- **Por qué se descuadraba el desglose:** `restaurarStockVenta` solo tocaba `stock`, mientras lotes, pedidos y consignación recalculaban `stock = Jero + Ángel`. Dos fuentes para un número.
+- Las ventas nuevas ya no llevan `ubicacionStock`.
+
+**845. Unidades disponibles al vender.** Debajo del producto elegido sale "N disponibles", y si la cantidad lo supera, un aviso ámbar ("Vas a vender 5 y hay 4 disponibles. Puedes guardar igual."). Se actualiza en su sitio al escribir la cantidad, sin re-renderizar (bug 2). Al **editar** una venta, sus propias unidades se suman de vuelta, porque ya salieron del stock (salvo `stockDescontado:false`).
+
+**846. Inventario: chip de unidades y chip de costo.** En el bloque de precios:
+- Unidades: gris; ámbar si `stock <= stockMinimo`; rojo "agotado" en 0.
+- Costo (violeta, tokens `--violet` / `--violet-bg`, nuevos para no chocar con azul/ámbar/verde de los precios ni con el lima): `costoActualProducto(p)` toma **el lote más antiguo con unidades**, el mismo orden de `consumirLotesFIFO`. Cuando ese lote se acaba, el chip pasa solo al siguiente (pedido de Jero: *"cuando acabemos ese lote, lo cambias automáticamente"*). Sin lotes vivos, usa `p.costo`. Asterisco si hay lotes vivos con costos distintos; tocar el chip abre el detalle de lotes. El `title` lista cada lote y las unidades sin lote.
+- **Unidades sin lote:** en 5 productos el stock es mayor que la suma de sus lotes (ej. Omega 3 120 cáps: 13 vs 4). FIFO consume los lotes primero y esas unidades después, con el costo general.
+- **Visitante:** no ve el chip de costo, ni la columna Margen (deja deducir el costo), ni el botón 📦 de lotes. Recordatorio de 12.3: mientras las reglas de Firestore no estén publicadas, esto es solo de pantalla.
+- **Sigue mostrando costo al visitante:** el buscador de la página Combos (fuera del menú desde el 816) y los modales de edición, que el visitante no puede abrir.
 
 
 ---
