@@ -81,6 +81,9 @@
   --blue:#0B61D6;  --blue-bg:#EEF4FF;  --blue-bd:#D3E2FF;  --blue-ink:#084EAC;
   --amber:#B25000; --amber-bg:#FFF6EB; --amber-bd:#FFE2C2; --amber-ink:#8C3F00;
   --amber-bg-2:#FFEFDC;
+  /* 846. Color propio del chip de costo en Inventario: no podía ser
+     azul/ámbar/verde (los tres precios) ni lima (acción principal). */
+  --violet:#5b45b0; --violet-bg:#EFECFA;
   --green:#1F7A35; --green-bg:#EDF9F0; --green-bd:#C9ECD3; --green-ink:#176029;
   --on-lime:#101114;  /* texto sobre el lima fuerte: siempre oscuro */
   --on-ink:#FFFFFF;   /* texto sobre un fondo oscuro fuerte */
@@ -6120,6 +6123,45 @@ window.exportarBackupCompleto = () => {
 // 56. PÁGINA: INVENTARIO
 // Lista de productos con stock, precios y ajuste rápido
 // ============================================================
+// 846. Costo del lote que se está vendiendo AHORA: el más antiguo que todavía
+//      tiene unidades (el mismo orden de consumirLotesFIFO). Cuando ese lote
+//      se acaba, el siguiente pasa a ser el actual solo, sin tocar nada.
+//      Sin lotes, o con todos agotados, cae al `costo` general del producto.
+//      `mezcla` = hay lotes vivos con costos distintos (lleva asterisco).
+//      `sinLote` = unidades del stock que no están en ningún lote: FIFO las
+//      consume después de los lotes, con el costo general.
+function costoActualProducto(p) {
+  const activos = [...(p.lotes||[])]
+    .filter(l => Number(l.cantidadDisponible||0) > 0)
+    .sort((a,b) => (a.fecha||'') < (b.fecha||'') ? -1 : 1);
+  const enLotes = activos.reduce((s,l) => s + Number(l.cantidadDisponible||0), 0);
+  const sinLote = Math.max(0, Number(p.stock||0) - enLotes);
+  if(!activos.length) return { costo: Number(p.costo||0), deLote: false, mezcla: false, activos, sinLote };
+  const costos = new Set(activos.map(l => Math.round(Number(l.costoUnitario||0))));
+  if(sinLote > 0) costos.add(Math.round(Number(p.costo||0)));
+  return { costo: Number(activos[0].costoUnitario||0), deLote: true, mezcla: costos.size > 1, activos, sinLote };
+}
+
+// 846. Chips de unidades y costo para la columna de precios de Inventario.
+function chipsStockCosto(p) {
+  const st = Number(p.stock||0);
+  const minimo = Number(p.stockMinimo||0);
+  const [bg, ink] = st <= 0 ? ['var(--red-bg)','var(--red-ink)']
+    : (minimo > 0 && st <= minimo) ? ['var(--amber-bg)','var(--amber-ink)']
+    : ['var(--surface-2)','var(--ink-2)'];
+  const chip = (b, c, txt, extra) => '<span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;background:' + b + ';color:' + c + ';white-space:nowrap' + (extra||'">') + txt + '</span>';
+  let html = chip(bg, ink, st + ' ud' + (st===1?'':'s') + (st<=0 ? ' · agotado' : ''), '">');
+  // 846. El costo no lo ve el visitante (solo lectura).
+  if(esAdmin()) {
+    const c = costoActualProducto(p);
+    const detalle = c.activos.map(l => (l.fecha||'sin fecha') + ': ' + l.cantidadDisponible + ' uds a ' + fmt(l.costoUnitario||0)).concat(c.sinLote > 0 && c.deLote ? [c.sinLote + ' uds sin lote: ' + fmt(p.costo||0)] : []);
+    const titulo = c.deLote ? 'Costo del lote que se está vendiendo. ' + detalle.join(' · ') : 'Costo general (sin lotes con unidades)';
+    const abrir = (p.lotes && p.lotes.length) ? ';cursor:pointer" onclick="verLotesProducto(\'' + p.id + '\')"' : '"';
+    html += ' ' + chip('var(--violet-bg)', 'var(--violet)', 'Costo ' + fmt(c.costo) + (c.mezcla ? '*' : ''), abrir + ' title="' + escTxt(titulo) + '">');
+  }
+  return html;
+}
+
 function renderInventario() {
   // 823. Aquí había 210 líneas que no se pintaban en ninguna parte: el aviso
   //      de stock bajo con su tarjeta por producto, las cuatro métricas de
@@ -6159,7 +6201,7 @@ function renderInventario() {
     const marcaActual = p.marca || 'Sin marca';
     const marcaAnterior = idx > 0 ? (inventarioFiltrado[idx-1].marca || 'Sin marca') : null;
     const encabezadoMarca = marcaActual !== marcaAnterior
-      ? `<tr style="background:var(--surface-2)"><td colspan="5" style="padding:6px 12px;font-size:10px;font-weight:700;color:var(--ink-3);text-transform:uppercase;letter-spacing:.05em">${marcaActual}</td></tr>`
+      ? `<tr style="background:var(--surface-2)"><td colspan="${esAdmin() ? 5 : 4}" style="padding:6px 12px;font-size:10px;font-weight:700;color:var(--ink-3);text-transform:uppercase;letter-spacing:.05em">${marcaActual}</td></tr>`
       : '';
     // 80. Mostramos los 3 precios en columnas separadas con punto de color identificador
     //     Si un precio no está configurado mostramos "—"
@@ -6174,6 +6216,8 @@ function renderInventario() {
           <span><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--blue);margin-right:4px"></span>${p.pventa>0?fmt(p.pventa):'—'}</span>
           <span><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--amber);margin-right:4px"></span>${p.pdist>0?fmt(p.pdist):'—'}</span>
           <span><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-right:4px"></span>${p.pesp>0?fmt(p.pesp):'—'}</span>
+          ${/* 846. Unidades disponibles y costo del lote actual. */''}
+          <span style="display:flex;gap:4px;flex-wrap:wrap;margin-top:2px">${chipsStockCosto(p)}</span>
         </div>
       </td>
       ${/* 823. Aquí seguía viva la celda "Valor total en stock" (355), aunque el
@@ -6185,7 +6229,8 @@ function renderInventario() {
             stock × precio: justo lo que el 814 venía a quitar.
             Misma lección del 812: borrar la mitad de una cosa es peor que no
             borrarla. */''}
-      <td style="color:${margen>=30?'var(--green)':margen>=15?'var(--amber)':'var(--red)'}">${margen!==null?margen+'%':'—'}</td>
+      ${/* 846. El margen deja deducir el costo: tampoco lo ve el visitante. */''}
+      ${esAdmin() ? `<td style="color:${margen>=30?'var(--green)':margen>=15?'var(--amber)':'var(--red)'}">${margen!==null?margen+'%':'—'}</td>` : ''}
       <td>
         <div style="display:flex;gap:5px;flex-wrap:wrap">
           <!-- 83. Botón editar: carga los datos del producto en el formulario para modificarlos -->
@@ -6195,7 +6240,7 @@ function renderInventario() {
                 por si algún día hacen el conteo. */''}
           <!-- 469. Botones del sistema de lotes FIFO -->
           <button class="btn btn-xs" style="color:var(--blue);border-color:var(--blue-bd)" onclick="abrirModalLote('${p.id}')">+ Lote</button>
-          ${(p.lotes && p.lotes.length > 0) ? '<button class="btn btn-xs" style="color:var(--lime);border-color:var(--lime-accent)" onclick="verLotesProducto(\'' + p.id + '\')">📦 ' + p.lotes.length + '</button>' : ''}
+          ${(esAdmin() && p.lotes && p.lotes.length > 0) ? '<button class="btn btn-xs" style="color:var(--lime);border-color:var(--lime-accent)" onclick="verLotesProducto(\'' + p.id + '\')">📦 ' + p.lotes.length + '</button>' : ''}
           <button class="btn btn-xs btn-danger" onclick="eliminarDoc('inventario','${p.id}')">✕</button>
         </div>
       </td>
@@ -6240,7 +6285,7 @@ function renderInventario() {
     <div class="card">
       ${inventarioFiltrado.length ?
         `<div class="table-wrap"><table class="tbl">
-          <thead><tr><th>Producto</th><th>Marca</th><th>Precios 🔵Púb 🟠Dist 🟢Esp</th><th>Margen</th><th></th></tr></thead>
+          <thead><tr><th>Producto</th><th>Marca</th><th>Precios 🔵Púb 🟠Dist 🟢Esp</th>${esAdmin() ? '<th>Margen</th>' : ''}<th></th></tr></thead>
           <tbody id="inv-tabla-body">${rows}</tbody>
         </table></div>`
         : `<div class="empty-state"><div class="empty-state-icon">📦</div><div class="empty-state-text">${busquedaInventario ? 'Sin resultados para "'+busquedaInventario+'"' : 'Sin productos en inventario'}</div></div>`}
