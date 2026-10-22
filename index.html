@@ -3008,6 +3008,26 @@ function entradaConLotes(prod, cant, consumo) {
   upd.costo = calcularCostoPromedioLotes(lotes) ?? prod.costo;
   return { upd };
 }
+// 848. Saldo anterior. Si al entrar un lote nuevo el producto tiene
+//      unidades que no están en ningún lote (lo que quedaba de antes de
+//      empezar a usar lotes), se guardan como un lote propio con el costo que
+//      tenía el producto, fechado el día anterior para que FIFO las venda
+//      primero. Caso real: magnesio, lote nuevo de 30 + 3 que quedaban (Jero,
+//      21 oct 2026). Sin esto, esas 3 quedaban "sin lote" y el costo del lote
+//      nuevo terminaba aplicándoseles al venderlas.
+function loteSaldoAnterior(prod, fechaNuevo) {
+  const enLotes = (prod.lotes||[]).reduce((s,l) => s + Number(l.cantidadDisponible||0), 0);
+  const sinLote = Number(prod.stock||0) - enLotes;
+  const costo = Number(prod.costo)||0;
+  if(sinLote <= 0 || costo <= 0) return null;
+  const [y,m,d] = String(fechaNuevo || today()).split('-').map(Number);
+  return {
+    id: 'lote_saldo_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
+    cantidad: sinLote, cantidadDisponible: sinLote, costoUnitario: costo,
+    fecha: fechaLocal(new Date(y, m-1, d-1)), proveedor: 'Saldo anterior',
+  };
+}
+
 // Separa las últimas `cant` unidades de un registro de consumo (las que se
 // devuelven) del resto (las que siguen afuera).
 function tomarDelFinal(consumo, cant) {
@@ -6688,8 +6708,9 @@ window.guardarLote = async () => {
     fecha,
     proveedor: document.getElementById('lote-proveedor').value.trim() || null,
   };
+  const saldo = loteSaldoAnterior(prod, fecha);   // 848
   const lotesActuales = prod.lotes || [];
-  const lotesNuevos = [...lotesActuales, nuevoLote];
+  const lotesNuevos = [...lotesActuales, ...(saldo ? [saldo] : []), nuevoLote];
 
   // 465/844. El stock total sube con la cantidad recibida.
 
@@ -8086,7 +8107,8 @@ async function procesarRecepcionPedido(pedido) {
       fecha: pedido.fecha || today(),
       proveedor: pedido.proveedorNombre || null,
     };
-    const lotesNuevos = [...(prod.lotes||[]), nuevoLote];
+    const saldo = loteSaldoAnterior(prod, nuevoLote.fecha);   // 848
+    const lotesNuevos = [...(prod.lotes||[]), ...(saldo ? [saldo] : []), nuevoLote];
     const nuevoStock = sumarStock(prod, item.cant).stock;   // 844
     const costoPromedioNuevo = calcularCostoPromedioLotes(lotesNuevos);
 
