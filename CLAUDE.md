@@ -1488,9 +1488,40 @@ La salida: el arranque del bloque (`BASE_BLOQUE`) se calcula una sola vez, a par
 **846. Inventario: chip de unidades y chip de costo.** En el bloque de precios:
 - Unidades: gris; ámbar si `stock <= stockMinimo`; rojo "agotado" en 0.
 - Costo (violeta, tokens `--violet` / `--violet-bg`, nuevos para no chocar con azul/ámbar/verde de los precios ni con el lima): `costoActualProducto(p)` toma **el lote más antiguo con unidades**, el mismo orden de `consumirLotesFIFO`. Cuando ese lote se acaba, el chip pasa solo al siguiente (pedido de Jero: *"cuando acabemos ese lote, lo cambias automáticamente"*). Sin lotes vivos, usa `p.costo`. Asterisco si hay lotes vivos con costos distintos; tocar el chip abre el detalle de lotes. El `title` lista cada lote y las unidades sin lote.
-- **Unidades sin lote:** en 5 productos el stock es mayor que la suma de sus lotes (ej. Omega 3 120 cáps: 13 vs 4). FIFO consume los lotes primero y esas unidades después, con el costo general.
+- **Unidades sin lote:** resuelto en 847-848 (ver 14.50).
 - **Visitante:** no ve el chip de costo, ni la columna Margen (deja deducir el costo), ni el botón 📦 de lotes. Recordatorio de 12.3: mientras las reglas de Firestore no estén publicadas, esto es solo de pantalla.
 - **Sigue mostrando costo al visitante:** el buscador de la página Combos (fuera del menú desde el 816) y los modales de edición, que el visitante no puede abrir.
+
+
+### 14.50 El stock y los lotes se mueven juntos (comentarios 847–848) — Jero, 21 oct 2026
+
+**El problema que vio Jero:** *"si cancelamos una venta, ¿cómo así que las unidades no regresan al lote del que salieron?"*. Solo las ventas consumían lotes; **ninguna devolución los reponía**. Borrar una venta, devolver de consignación, borrar un consumo o editar una cantidad movían `stock` y dejaban los lotes quietos. Los combos y los consumos ni siquiera los descontaban.
+
+**847. Dos puertas, nada más:**
+- `salidaConLotes(prod, cant)` → FIFO, devuelve `{ upd, consumo, costoUnit }`. El `consumo` se guarda como `loteConsumo` en la venta, la línea de venta múltiple, la línea de combo, el consumo y **la entrega de consignación** (campo nuevo; en las reposiciones se va concatenando).
+- `entradaConLotes(prod, cant, consumo)` → devuelve cada unidad a su lote, del último consumido hacia atrás. Lo que no tiene rastro (registros viejos, unidades que salieron sin lote) va **al lote más reciente** (regla de Jero).
+- `tomarDelFinal(consumo, n)` separa lo que se devuelve de lo que sigue afuera. En consignación, lo vendido sale del principio del registro y lo devuelto del final.
+- `moverInventario(prod, upd)` escribe y refleja en memoria: editar = devolver y volver a sacar en la misma función.
+- Cubre: guardar/editar/borrar venta (simple, múltiple, combo), consumo y su borrado, consignación (dejar, devolver, editar cantidad inicial, borrar), y **corregir el stock a mano** en Editar producto (sobrante al lote más reciente, faltante por FIFO; el costo escrito se respeta).
+- Al editar la cantidad de una venta se recalculan `loteConsumo` y `costoUnit` (solo si todas sus unidades tienen lote).
+- Producto sin lotes: se comporta como antes, solo `stock`.
+- **No cubierto:** el importador de la hoja (13036) sigue moviendo solo `stock`.
+
+**Consignación en Inventario.** Lo que está en tiendas ya salió de `stock` al dejarlo. Ahora se ve aparte: chip "+N en consignación" (suma de `cantidadActual`), con el total de Duppla en el `title`. Al 21 oct: 47 unidades en 14 productos.
+
+**848. Saldo anterior.** Al registrar un lote (a mano o al recibir un pedido), si el producto tiene unidades fuera de todo lote, `loteSaldoAnterior` crea antes un lote "Saldo anterior" con `prod.costo`, fechado el día anterior para que FIFO lo venda primero. Caso que lo originó: magnesio, lote nuevo de 30 + 3 que quedaban.
+
+**Arreglo de datos (21 oct 2026, aprobado por Jero).** Las unidades que eran saldo de antes de los lotes se guardaron como lote "Saldo anterior", con el costo de las ventas justo antes del primer lote. Después del arreglo, en los 15 productos con lotes, la suma de los lotes es igual al stock.
+
+| Producto | Uds | Costo | Fecha del lote |
+|---|---|---|---|
+| GLICINATO DE MAGNESIO | 3 | $63.724 | 2026-10-20 |
+| OMEGA 3 (120 CÁPSULAS) | 9 | $86.100 | 2026-10-04 |
+| WHEY ELITE 2L VAINILLA | 2 | $102.750 (Jero: "antes tuve un mejor precio") | 2026-07-09 |
+| ISOLATE GOURMET 5L VAINILLA | 1 | $321.941 | 2026-09-24 |
+| CREATINA PLATINUM 450g | 1 | $97.000 | 2026-09-24 |
+
+Se escribió directo en Firestore (`lotes` y `costo` promedio), sin apunte en la bitácora.
 
 
 ---
