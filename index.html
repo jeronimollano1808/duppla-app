@@ -2955,6 +2955,84 @@ function sumarStock(prod, cant) {
 }
 
 // ============================================================
+// 847. EL STOCK Y LOS LOTES SE MUEVEN JUNTOS. Jero (21 oct 2026): "si
+//      cancelamos una venta, ¿cómo así que las unidades no regresan al lote
+//      del que salieron?". Tenía razón: solo las ventas consumían lotes, y
+//      ninguna devolución los reponía. Borrar una venta, una devolución de
+//      consignación, eliminar un consumo o editar una cantidad movían
+//      `stock` y dejaban los lotes quietos. De ahí salían las "unidades sin
+//      lote" (stock 33 contra 30 en lotes, 13 contra 4…).
+//
+//      Regla: TODO lo que saca unidades pasa por `salidaConLotes` (FIFO, y
+//      guarda `loteConsumo`: de qué lote salió cada unidad); TODO lo que las
+//      devuelve pasa por `entradaConLotes`, que las regresa a esos mismos
+//      lotes. Lo que no tiene rastro (registros viejos, o unidades que ya
+//      habían salido sin lote) va al lote más reciente, como pidió Jero:
+//      "colócalos en el último lote en el que se ingresó".
+//      Producto sin lotes: solo se mueve `stock`, igual que antes.
+// ============================================================
+function lotesPorFecha(lotes) {
+  return [...(lotes||[])].sort((a,b) => (a.fecha||'') < (b.fecha||'') ? -1 : (a.fecha||'') > (b.fecha||'') ? 1 : 0);
+}
+function salidaConLotes(prod, cant) {
+  const upd = descontarStock(prod, cant);
+  const fifo = consumirLotesFIFO(prod, cant);
+  let costoUnit = Number(prod?.costo)||0, consumo = null;
+  if(fifo) {
+    upd.lotes = fifo.lotesActualizados;
+    upd.costo = calcularCostoPromedioLotes(fifo.lotesActualizados) ?? prod.costo;
+    if(fifo.costoPromedioVenta != null) costoUnit = fifo.costoPromedioVenta;
+    consumo = fifo.consumo;
+  }
+  return { upd, consumo, costoUnit };
+}
+function entradaConLotes(prod, cant, consumo) {
+  const upd = sumarStock(prod, cant);
+  const lotes = (prod?.lotes||[]).map(l => ({ ...l }));
+  if(!lotes.length || !(Number(cant) > 0)) return { upd };
+  let resta = Number(cant);
+  // Del último lote consumido hacia atrás: lo último en salir es lo primero en volver.
+  for(const c of [...(consumo||[])].reverse()) {
+    if(resta <= 0) break;
+    const lote = c.loteId ? lotes.find(l => l.id === c.loteId) : null;
+    if(!lote) continue;
+    const n = Math.min(resta, Number(c.cantidad||0));
+    lote.cantidadDisponible = Number(lote.cantidadDisponible||0) + n;
+    resta -= n;
+  }
+  if(resta > 0) {
+    const ultimo = lotesPorFecha(lotes).at(-1);
+    ultimo.cantidadDisponible = Number(ultimo.cantidadDisponible||0) + resta;
+  }
+  upd.lotes = lotes;
+  upd.costo = calcularCostoPromedioLotes(lotes) ?? prod.costo;
+  return { upd };
+}
+// Separa las últimas `cant` unidades de un registro de consumo (las que se
+// devuelven) del resto (las que siguen afuera).
+function tomarDelFinal(consumo, cant) {
+  const resto = (consumo||[]).map(c => ({ ...c }));
+  const tomado = [];
+  let falta = Number(cant)||0;
+  while(falta > 0 && resto.length) {
+    const ult = resto[resto.length-1];
+    const n = Math.min(falta, Number(ult.cantidad||0));
+    tomado.unshift({ ...ult, cantidad: n });
+    ult.cantidad = Number(ult.cantidad||0) - n;
+    if(ult.cantidad <= 0) resto.pop();
+    falta -= n;
+  }
+  return { tomado, resto };
+}
+// Escribe el cambio y lo refleja en memoria, para que una salida que venga
+// justo después (editar = devolver + volver a sacar) vea los lotes ya puestos.
+async function moverInventario(prod, upd) {
+  if(!prod) return;
+  await updateDoc(doc(db,'inventario',prod.id), upd);
+  Object.assign(prod, upd);
+}
+
+// ============================================================
 // 456. SISTEMA DE LOTES FIFO (First In, First Out)
 // Cada producto puede tener lotes: [{ id, cantidad, cantidadDisponible,
 // costoUnitario, fecha, proveedor }]. Al vender, se descuenta SIEMPRE del
@@ -5449,28 +5527,17 @@ window.guardarVenta = async () => {
     } else if(lineasValidas.length === 1) {
       const l = lineasValidas[0];
       const prod = DATA.inventario.find(p => p.id === l.prodId);
-      const updateStock1 = descontarStock(prod, l.cant);   // 844
-
-      // 470. FIFO: si el producto tiene lotes, consumimos del más antiguo primero
-      //      y usamos ese costo exacto en vez del costo promedio/actual.
-      const fifo1 = consumirLotesFIFO(prod, l.cant);
-      let costoUnit;
-      if(fifo1) {
-        updateStock1.lotes = fifo1.lotesActualizados;
-        updateStock1.costo = calcularCostoPromedioLotes(fifo1.lotesActualizados) ?? prod.costo;
-        costoUnit = fifo1.costoPromedioVenta != null ? fifo1.costoPromedioVenta : Number(prod.costo)||0;
-      } else {
-        // 366. Sin lotes: seguimos usando el costo histórico tal como antes
-        costoUnit = Number(prod.costo)||0;
-      }
-      await updateDoc(doc(db,'inventario',l.prodId), updateStock1);
+      // 470/847. FIFO: del lote más antiguo, con su costo exacto.
+      const sal1 = salidaConLotes(prod, l.cant);
+      const costoUnit = sal1.costoUnit;
+      await moverInventario(prod, sal1.upd);
 
       const datosVenta = {
         fecha, canal, producto:prod.nombre, prodId:l.prodId, esManual:false, esMultiple:false, productosVenta:null,
         cant:l.cant, precio:l.precio, total, cliente, nota, tipoPrecio:l.tipoPrecio,
         metodoPago, pagado, saldo, estadoPago,
         mixtoEfectivo, mixtoTransferencia, costoUnit,
-        loteConsumo: fifo1 ? fifo1.consumo : null, // 471. Trazabilidad: de qué lote(s) salió exactamente
+        loteConsumo: sal1.consumo, // 471. Trazabilidad: de qué lote(s) salió exactamente
         distribuidorId: distribuidorId || null
       };
       await escribirVenta(editId, datosVenta, ventaOriginal);
@@ -5485,22 +5552,13 @@ window.guardarVenta = async () => {
           continue;
         }
         const prod = DATA.inventario.find(p => p.id === l.prodId);
-        const updateStock2 = descontarStock(prod, l.cant);   // 844
-
-        // 470. Mismo tratamiento FIFO para cada línea de una venta múltiple
-        const fifo2 = consumirLotesFIFO(prod, l.cant);
-        let costoUnitLinea;
-        if(fifo2) {
-          updateStock2.lotes = fifo2.lotesActualizados;
-          updateStock2.costo = calcularCostoPromedioLotes(fifo2.lotesActualizados) ?? prod.costo;
-          costoUnitLinea = fifo2.costoPromedioVenta != null ? fifo2.costoPromedioVenta : Number(prod.costo)||0;
-        } else {
-          costoUnitLinea = Number(prod.costo)||0;
-        }
-        await updateDoc(doc(db,'inventario',l.prodId), updateStock2);
+        // 470/847. Mismo FIFO para cada línea de una venta múltiple
+        const sal2 = salidaConLotes(prod, l.cant);
+        const costoUnitLinea = sal2.costoUnit;
+        await moverInventario(prod, sal2.upd);
 
         // 367. Cada línea de la venta múltiple guarda su propio costo histórico
-        productosVenta.push({ prodId:l.prodId, nombre:prod.nombre, cant:l.cant, precio:l.precio, tipoPrecio:l.tipoPrecio, costoUnit:costoUnitLinea, loteConsumo: fifo2 ? fifo2.consumo : null });
+        productosVenta.push({ prodId:l.prodId, nombre:prod.nombre, cant:l.cant, precio:l.precio, tipoPrecio:l.tipoPrecio, costoUnit:costoUnitLinea, loteConsumo: sal2.consumo });
         // 765. Aquí salía una notificación de stock bajo. Ya no: Ángel lo
         //      revisa desde el aviso de Inicio cuando abre la app.
       }
@@ -6049,18 +6107,36 @@ window.guardarEditarVenta = async () => {
   const prodNuevoData = DATA.inventario.find(p => p.id === prodNuevo);
   if(!prodNuevoData) { alert('Producto no encontrado en inventario'); return; }
 
+  // 847. El stock y los lotes se mueven juntos. Cambiar de producto devuelve
+  //      todo a los lotes del original y saca el nuevo por FIFO; vender menos
+  //      devuelve las últimas unidades a su lote; vender más saca las que
+  //      faltan por FIFO. `loteConsumo` y `costoUnit` quedan al día.
+  //      (813: ya no se deja el stock en negativo; descontarStock para en 0.)
+  let loteConsumoEd = venta.loteConsumo || null;
+  let costoUnitEd = venta.costoUnit;
+  const conLotes = (consumo) => (consumo||[]).filter(c => c.costoUnitario != null);
+  const costoDe = (consumo, cant) => {
+    const c = conLotes(consumo); const u = c.reduce((s,x)=>s+Number(x.cantidad||0),0);
+    return u > 0 && u === cant ? c.reduce((s,x)=>s+Number(x.cantidad||0)*Number(x.costoUnitario||0),0)/u : null;
+  };
   if(prodOriginal && prodOriginal !== prodNuevo) {
     const prodOriginalData = DATA.inventario.find(p => p.id === prodOriginal);
-    if(prodOriginalData)
-      await updateDoc(doc(db,'inventario',prodOriginal), { stock: prodOriginalData.stock + cantOriginal });
-    // 813. Sin bloqueo por stock (ver guardarVenta).
-    await updateDoc(doc(db,'inventario',prodNuevo), { stock: prodNuevoData.stock - cantNueva });
-  } else if(cantNueva !== cantOriginal) {
-    const diff = cantOriginal - cantNueva;
-    const nuevoStock = prodNuevoData.stock + diff;
-    // 813. Se permite que el stock quede negativo: es la verdad —se vendió algo
-    //      que la app no sabía que había— y truncarlo en cero sería inventar.
-    await updateDoc(doc(db,'inventario',prodNuevo), { stock: nuevoStock });
+    if(prodOriginalData) await moverInventario(prodOriginalData, entradaConLotes(prodOriginalData, cantOriginal, venta.loteConsumo).upd);
+    const sal = salidaConLotes(prodNuevoData, cantNueva);
+    await moverInventario(prodNuevoData, sal.upd);
+    loteConsumoEd = sal.consumo;
+    costoUnitEd = sal.costoUnit;
+  } else if(cantNueva < cantOriginal) {
+    const { tomado, resto } = tomarDelFinal(venta.loteConsumo, cantOriginal - cantNueva);
+    await moverInventario(prodNuevoData, entradaConLotes(prodNuevoData, cantOriginal - cantNueva, tomado).upd);
+    if(venta.loteConsumo) { loteConsumoEd = resto; costoUnitEd = costoDe(resto, cantNueva) ?? costoUnitEd; }
+  } else if(cantNueva > cantOriginal) {
+    const sal = salidaConLotes(prodNuevoData, cantNueva - cantOriginal);
+    await moverInventario(prodNuevoData, sal.upd);
+    if(sal.consumo) {
+      loteConsumoEd = [...(venta.loteConsumo||[]), ...sal.consumo];
+      costoUnitEd = costoDe(loteConsumoEd, cantNueva) ?? costoUnitEd;
+    }
   }
 
   await updateDoc(doc(db,'ventas',id), {
@@ -6068,6 +6144,8 @@ window.guardarEditarVenta = async () => {
     producto:   prodNuevoData.nombre,
     prodId:     prodNuevo,
     cant:       cantNueva,
+    loteConsumo: loteConsumoEd ?? null,   // 847
+    ...(costoUnitEd != null ? { costoUnit: costoUnitEd } : {}),
     tipoPrecio: document.getElementById('ev-tipo-precio').value,
   });
 
@@ -6150,7 +6228,12 @@ function chipsStockCosto(p) {
     : (minimo > 0 && st <= minimo) ? ['var(--amber-bg)','var(--amber-ink)']
     : ['var(--surface-2)','var(--ink-2)'];
   const chip = (b, c, txt, extra) => '<span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;background:' + b + ';color:' + c + ';white-space:nowrap' + (extra||'">') + txt + '</span>';
-  let html = chip(bg, ink, st + ' ud' + (st===1?'':'s') + (st<=0 ? ' · agotado' : ''), '">');
+  let html = chip(bg, ink, st + ' ud' + (st===1?'':'s') + (st<=0 ? ' · agotado' : ''), '" title="En bodega (sin contar lo que está en consignación)">');
+  // 847. Lo que está en las tiendas en consignación ya salió de `stock` (se
+  //      descuenta al dejarlo), pero sigue siendo de Duppla mientras no se
+  //      venda. Va aparte para que el total se pueda leer de un vistazo.
+  const enConsig = (DATA.consignaciones||[]).filter(c => c.prodId === p.id).reduce((s,c) => s + Number(c.cantidadActual||0), 0);
+  if(enConsig > 0) html += ' ' + chip('var(--surface)', 'var(--ink-2)', '+' + enConsig + ' en consignación', ';box-shadow:inset 0 0 0 1px var(--border)" title="En tiendas, sin vender. Total de Duppla: ' + (st + enConsig) + '">');
   // 846. El costo no lo ve el visitante (solo lectura).
   if(esAdmin()) {
     const c = costoActualProducto(p);
@@ -6484,6 +6567,16 @@ window.guardarProducto = async () => {
     // 844. El stock se guarda tal cual se escribe en el formulario: ya no hay
     //      reparto Jero/Ángel que recalcular (447, 614).
     const prodActual = DATA.inventario.find(p => p.id === prodId);
+    // 847. Si el producto tiene lotes y se corrige el stock a mano (el conteo
+    //      semanal), los lotes se ajustan con él para que no vuelvan a quedar
+    //      unidades sin lote: lo que sobra entra al lote más reciente, lo que
+    //      falta sale por FIFO. El costo escrito en el formulario se respeta.
+    const diffStock = prodActual ? stockTotal - Number(prodActual.stock||0) : 0;
+    if(diffStock !== 0 && (prodActual.lotes||[]).length) {
+      datos.lotes = diffStock > 0
+        ? entradaConLotes(prodActual, diffStock, null).upd.lotes
+        : (consumirLotesFIFO(prodActual, -diffStock)?.lotesActualizados || prodActual.lotes);
+    }
     await updateDoc(doc(db,'inventario',prodId), datos);
     // 785. El costo de un producto es el dato más peligroso de la app: mueve
     //      el margen de TODAS sus ventas pasadas, incluidas las de meses ya
@@ -9830,8 +9923,12 @@ window.guardarVentaCombo = async () => {
   for(const item of productosCombo) {
     const prod = DATA.inventario.find(p => p.id === item.prodId);
     if(!prod) continue;
-    item.costoUnit = Number(prod.costo)||0;
-    await updateDoc(doc(db,'inventario',item.prodId), { stock: prod.stock - item.cant });
+    // 847. El combo también saca de los lotes (antes solo bajaba `stock`)
+    //      y guarda de cuál, para devolverlo si se borra la venta.
+    const sal = salidaConLotes(prod, item.cant);
+    item.costoUnit = sal.costoUnit;
+    item.loteConsumo = sal.consumo;
+    await moverInventario(prod, sal.upd);
     // 765. Aquí salía una notificación de stock bajo. Ya no.
   }
 
@@ -9873,32 +9970,14 @@ async function restaurarStockVenta(venta) {
   // procesarRecepcionPedido) — si esto se llama desde editarVenta antes de
   // validar/descontar el stock nuevo, esa validación necesita ver el stock
   // YA restaurado sin esperar a que onSnapshot vuelva del servidor.
-  if(venta.esMultiple && venta.productosVenta?.length) {
-    for(const item of venta.productosVenta) {
-      if(!item.prodId) continue; // línea manual — no tiene stock que restaurar
-      const prod = DATA.inventario.find(p => p.id === item.prodId);
-      if(prod) {
-        const nuevoStock = prod.stock + Number(item.cant||0);
-        await updateDoc(doc(db,'inventario',item.prodId), { stock: nuevoStock });
-        prod.stock = nuevoStock;
-      }
-    }
-  } else if(venta.esCombo && venta.productosCombo?.length) {
-    for(const item of venta.productosCombo) {
-      const prod = DATA.inventario.find(p => p.id === item.prodId);
-      if(prod) {
-        const nuevoStock = prod.stock + Number(item.cant||0);
-        await updateDoc(doc(db,'inventario',item.prodId), { stock: nuevoStock });
-        prod.stock = nuevoStock;
-      }
-    }
-  } else if(venta.prodId && venta.cant) {
-    const prod = DATA.inventario.find(p => p.id === venta.prodId);
-    if(prod) {
-      const nuevoStock = prod.stock + Number(venta.cant);
-      await updateDoc(doc(db,'inventario',venta.prodId), { stock: nuevoStock });
-      prod.stock = nuevoStock;
-    }
+  // 847. Cada unidad vuelve al lote del que salió (`loteConsumo`).
+  const lineas = venta.esMultiple ? (venta.productosVenta||[])
+    : venta.esCombo ? (venta.productosCombo||[])
+    : (venta.prodId ? [{ prodId: venta.prodId, cant: venta.cant, loteConsumo: venta.loteConsumo }] : []);
+  for(const item of lineas) {
+    if(!item.prodId) continue; // línea manual — no tiene stock que restaurar
+    const prod = DATA.inventario.find(p => p.id === item.prodId);
+    if(prod) await moverInventario(prod, entradaConLotes(prod, Number(item.cant||0), item.loteConsumo).upd);
   }
 }
 
@@ -9912,9 +9991,9 @@ async function restaurarStockConsignacion(item) {
   if(cantidad <= 0) return;
   const prod = DATA.inventario.find(p => p.id === item.prodId);
   if(!prod) return;
-  const upd = sumarStock(prod, cantidad);   // 844
-  await updateDoc(doc(db,'inventario',item.prodId), upd);
-  prod.stock = upd.stock;
+  // 847. Lo que seguía en la tienda vuelve a sus lotes.
+  const { tomado } = tomarDelFinal(item.loteConsumo, cantidad);
+  await moverInventario(prod, entradaConLotes(prod, cantidad, tomado).upd);
 }
 
 // 595. PAPELERA SIMPLE — al eliminar, el borrado real se retrasa unos
@@ -10424,7 +10503,9 @@ window.guardarConsumo = async () => {
   const total = cant * costo;
 
   // 316. Descontamos stock — el producto SÍ sale del inventario
-  await updateDoc(doc(db,'inventario',prodId), { stock: prod.stock - cant });
+  // 847. Sale de los lotes (FIFO) y queda anotado de cuál.
+  const salCons = salidaConLotes(prod, cant);
+  await moverInventario(prod, salCons.upd);
 
   // 317. Guardamos en colección 'consumos' — NO en ventas
   //      Así el dashboard no lo cuenta como ingreso ni utilidad
@@ -10433,6 +10514,7 @@ window.guardarConsumo = async () => {
     prodId, nombre: prod.nombre, marca: prod.marca||'',
     cant, costoPorUnidad: costo,
     total,                        // total al precio de costo
+    loteConsumo: salCons.consumo || null,   // 847
     fecha, createdAt: serverTimestamp()
   });
 
@@ -10570,9 +10652,8 @@ window.eliminarConsumo = async (id, prodId, cant) => {
   if(!exigirAdmin()) return;   // 803
   if(!confirm('¿Eliminar este consumo? El stock se devolverá al inventario.')) return;
   const prod = DATA.inventario.find(p => p.id === prodId);
-  if(prod) {
-    await updateDoc(doc(db,'inventario',prodId), { stock: prod.stock + Number(cant) });
-  }
+  const cons = (DATA.consumos||[]).find(c => c.id === id);
+  if(prod) await moverInventario(prod, entradaConLotes(prod, Number(cant), cons?.loteConsumo).upd);   // 847
   await deleteDoc(doc(db,'consumos',id));
   toast('✅ Consumo eliminado — stock restaurado');
 };
@@ -11401,17 +11482,10 @@ window.guardarDejarConsignacion = async () => {
   //      consignación". Usamos FIFO si el producto tiene lotes.
   for(const l of lineasValidas) {
     const prod = DATA.inventario.find(p => p.id === l.prodId);
-    const fifo = consumirLotesFIFO(prod, l.cant);
-    const updateInv = descontarStock(prod, l.cant);   // 844
-    let costoUnit;
-    if(fifo) {
-      updateInv.lotes = fifo.lotesActualizados;
-      updateInv.costo = calcularCostoPromedioLotes(fifo.lotesActualizados) ?? prod.costo;
-      costoUnit = fifo.costoPromedioVenta != null ? fifo.costoPromedioVenta : Number(prod.costo)||0;
-    } else {
-      costoUnit = Number(prod.costo)||0;
-    }
-    await updateDoc(doc(db,'inventario',l.prodId), updateInv);
+    // 847. La entrega guarda de qué lotes salió, para devolver a esos mismos.
+    const sal = salidaConLotes(prod, l.cant);
+    const costoUnit = sal.costoUnit;
+    await moverInventario(prod, sal.upd);
 
     // 654. Si ya hay una entrega ACTIVA de este producto en esta tienda con
     // el MISMO precio acordado, sumamos la reposición ahí en vez de crear
@@ -11435,8 +11509,10 @@ window.guardarDejarConsignacion = async () => {
         cantidadActual: cantidadActualPrevia + l.cant,
         costoUnit: costoPromedio,
         fecha, // reflejamos la fecha de la reposición más reciente
-        historialMovimientos: [...(entregaExistente.historialMovimientos||[]), nuevoMovimiento]
+        historialMovimientos: [...(entregaExistente.historialMovimientos||[]), nuevoMovimiento],
+        loteConsumo: [...(entregaExistente.loteConsumo||[]), ...(sal.consumo||[])]   // 847
       });
+      entregaExistente.loteConsumo = [...(entregaExistente.loteConsumo||[]), ...(sal.consumo||[])];
       // Reflejamos el cambio en memoria por si hay más líneas de este mismo
       // producto en este mismo guardado (poco común, pero por si acaso).
       entregaExistente.cantidadInicial = Number(entregaExistente.cantidadInicial||0) + l.cant;
@@ -11453,6 +11529,7 @@ window.guardarDejarConsignacion = async () => {
         precioSugerido: l.precioVenta, // 510. Precio acordado para esta entrega — precarga al reportar venta
         fecha,
         historialMovimientos: [],
+        loteConsumo: sal.consumo || [],   // 847
         createdAt: serverTimestamp()
       });
     }
@@ -11625,18 +11702,24 @@ window.guardarReporteConsignacion = async () => {
     }
   } else {
     // 563. Devolución: el producto vuelve al stock de Duppla — sin afectar ingresos.
+    // 847. Cada entrega devuelve sus últimas unidades a los lotes de donde salieron.
     const prod = DATA.inventario.find(p => p.id === prodId);
-    if(prod) {
-      await updateDoc(doc(db,'inventario',prodId), sumarStock(prod, cantidad));   // 844
+    let devueltas = [];
+    for(const a of actualizaciones) {
+      const { tomado, resto } = tomarDelFinal(a.entrega.loteConsumo, a.consumido);
+      devueltas = devueltas.concat(tomado);
+      a.loteConsumo = resto;
     }
+    if(prod) await moverInventario(prod, entradaConLotes(prod, cantidad, devueltas).upd);
     await pushNotif('↩️ Devolución de consignación', primeraTienda + ' devolvió ' + cantidad + 'x ' + primerProd, 'consignacion', {seccion:'consignacion'});
   }
 
   // 564. Aplicamos el consumo FIFO a cada entrega tocada
-  for(const { entrega, consumido, movimiento } of actualizaciones) {
+  for(const { entrega, consumido, movimiento, loteConsumo } of actualizaciones) {
     await updateDoc(doc(db,'consignaciones',entrega.id), {
       cantidadActual: Number(entrega.cantidadActual) - consumido,
-      historialMovimientos: [...(entrega.historialMovimientos||[]), movimiento]
+      historialMovimientos: [...(entrega.historialMovimientos||[]), movimiento],
+      ...(loteConsumo ? { loteConsumo } : {})   // 847
     });
   }
 
@@ -11737,17 +11820,28 @@ window.guardarEditarConsignacion = async () => {
   // no tocamos nada si no cambió, para no interferir con ventas/devoluciones
   // que ya se hayan reportado sobre esta entrega mientras tanto.
   const diff = nuevaInicial - Number(item.cantidadInicial||0);
+  let loteConsumoNuevo = item.loteConsumo || [];
   if(diff !== 0) {
     const prod = DATA.inventario.find(p => p.id === item.prodId);
     if(prod) {
       // diff > 0 (dejaste más de lo digitado antes) => se descuenta más stock.
       // diff < 0 (dejaste menos) => ese stock nunca salió, se devuelve.
-      await updateDoc(doc(db,'inventario',item.prodId), descontarStock(prod, diff));   // 844
+      // 847. Con lotes: dejar más saca FIFO; dejar menos devuelve a sus lotes.
+      if(diff > 0) {
+        const sal = salidaConLotes(prod, diff);
+        await moverInventario(prod, sal.upd);
+        loteConsumoNuevo = [...loteConsumoNuevo, ...(sal.consumo||[])];
+      } else {
+        const { tomado, resto } = tomarDelFinal(loteConsumoNuevo, -diff);
+        await moverInventario(prod, entradaConLotes(prod, -diff, tomado).upd);
+        loteConsumoNuevo = resto;
+      }
     }
   }
 
   await updateDoc(doc(db,'consignaciones',id), {
-    fecha, cantidadInicial: nuevaInicial, cantidadActual: nuevaActual, costoUnit, precioSugerido
+    fecha, cantidadInicial: nuevaInicial, cantidadActual: nuevaActual, costoUnit, precioSugerido,
+    loteConsumo: loteConsumoNuevo   // 847
   });
 
   closeModal('modal-editar-consignacion');
