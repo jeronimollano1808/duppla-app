@@ -1543,6 +1543,9 @@ Se escribió directo en Firestore (`lotes` y `costo` promedio), sin apunte en la
 - Editar venta (modal de una sola venta): el total es editable y manda; se guarda `precio = total ÷ cant`.
 - Regla: **el total manda; el unitario es una consecuencia** (misma regla del 764).
 
+**854. Consignación a un distribuidor ya registrado.** Jero: *"a Juan Gabriel, el entrenador, le acabamos de dejar unos productos en consignación"*. El modal de tienda (`modal-tienda-consig`) pregunta *¿A quién se le deja?*: **Tienda nueva** o **Distribuidor**. Con distribuidor se escoge de la lista (sin los que ya tienen tienda), el nombre sale de su registro y se guarda `distribuidorId` en `tiendasConsignacion`. Al reportar una venta de esa tienda, la venta lleva ese `distribuidorId`: queda en el historial del distribuidor y no como "sin dueño" (antes toda venta de consignación salía con canal distribuidor y sin dueño). La tarjeta muestra 🏋️ en vez de 🏪.
+- Al 31 oct 2026, las tres tiendas existentes (OLIMPO GIMNASIO., GREEN ROOTS., RAICES SALUDABLES.) son distribuidores registrados pero quedaron **sin vincular**; se vinculan desde Editar tienda → Distribuidor.
+
 
 ---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*
