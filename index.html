@@ -5425,18 +5425,24 @@ function precioVisible(p) { return Math.round((Number(p)||0) * 100) / 100; }
 function totalPorCaja(prod, tipoPrecio, cant) {
   const uc = Number(prod?.unidadesCaja)||0, pc = Number(prod?.precioCajaDist)||0;
   if(tipoPrecio !== 'distribuidor' || uc < 2 || pc <= 0 || cant < uc) return null;
-  return Math.floor(cant / uc) * pc + (cant % uc) * (Number(prod.pdist)||0);
+  return Math.round(Math.floor(cant / uc) * pc + (cant % uc) * precioSueltaDist(prod));
+}
+// Una unidad suelta a precio distribuidor. Si el producto no tiene precio
+// distribuidor por unidad (el Crisp Bar no lo tiene), sale de la caja.
+function precioSueltaDist(prod) {
+  const pd = Number(prod?.pdist)||0, uc = Number(prod?.unidadesCaja)||0, pc = Number(prod?.precioCajaDist)||0;
+  return pd > 0 ? pd : (uc > 0 && pc > 0 ? pc / uc : 0);
 }
 function aplicarPrecioCaja(l, prod) {
   const t = totalPorCaja(prod, l.tipoPrecio, l.cant||1);
   if(t != null) { l.totalLinea = t; l.precio = t / (l.cant||1); l.porCaja = true; }
-  else if(l.porCaja) { l.totalLinea = null; l.precio = Number(prod?.pdist)||0; l.porCaja = false; }
+  else if(l.porCaja) { l.totalLinea = null; l.precio = precioSueltaDist(prod); l.porCaja = false; }
 }
 function avisoCajaLinea(prod, l) {
   if(!l.porCaja || !prod) return '';
   const uc = Number(prod.unidadesCaja), cajas = Math.floor((l.cant||1) / uc), sueltas = (l.cant||1) % uc;
   return '<div style="font-size:11.5px;color:var(--ink-2);margin-top:6px">📦 ' + cajas + (cajas === 1 ? ' caja' : ' cajas') + ' de ' + uc + ' a ' + fmt(prod.precioCajaDist)
-    + (sueltas ? ' + ' + sueltas + (sueltas === 1 ? ' suelta' : ' sueltas') + ' a ' + fmt(prod.pdist) : '') + '</div>';
+    + (sueltas ? ' + ' + sueltas + (sueltas === 1 ? ' suelta' : ' sueltas') + ' a ' + fmt(precioSueltaDist(prod)) : '') + '</div>';
 }
 // Cambia cantidad, unitario o total de una línea y refresca los otros campos
 // EN SU SITIO (sin re-renderizar: bug histórico 2, se pierde el foco).
