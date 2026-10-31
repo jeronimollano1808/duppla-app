@@ -11730,6 +11730,25 @@ window.eliminarTiendaConsig = async (id) => {
 // --- Dejar productos en consignación ---
 // 506. dcLineas — estado de las líneas de productos a dejar en consignación
 let dcLineas = [];
+// 855. CONSIGNACIÓN CON PRECIO POR CAJA. Jero (31 oct 2026): al dejar Crisp
+//      Bar en consignación tiene que salir la caja de distribuidor ($95.000 por
+//      12), no el precio distribuidor por unidad (que en ese producto es 0).
+//      La entrega guarda un unitario, así que se guarda el de la caja ÷
+//      unidades SIN redondear (7.916,666…): 12 × eso = 95.000 exactos. Al
+//      mostrarlo se ve con dos decimales; al reportar la venta, el total se
+//      redondea al peso (misma regla del 853: el total manda).
+function precioDistConsig(prod) {
+  const uc = Number(prod?.unidadesCaja)||0, pc = Number(prod?.precioCajaDist)||0;
+  return (uc > 1 && pc > 0) ? pc / uc : (Number(prod?.pdist)||0);
+}
+function refDistConsig(prod) {
+  const uc = Number(prod?.unidadesCaja)||0, pc = Number(prod?.precioCajaDist)||0;
+  return (uc > 1 && pc > 0) ? 'Distribuidor: caja de ' + uc + ' a ' + fmt(pc) : 'Distribuidor: ' + fmt(prod?.pdist||0);
+}
+// Si lo que se ve en la casilla es el mismo precio redondeado, se usa el exacto.
+function precioExactoSi(visto, exacto) {
+  return (exacto && Math.abs(Number(visto) - Number(exacto)) < 0.01) ? Number(exacto) : Number(visto);
+}
 
 window.abrirDejarConsignacion = (tiendaId) => {
   const t = DATA.tiendasConsignacion.find(x => x.id === tiendaId);
@@ -11760,7 +11779,7 @@ function resultadosLineaConsig(i) {
     : agruparProductosPorMarca(candidatos.slice(0,20), function(p) {
         return '<div onclick="seleccionarProductoLineaConsig(' + i + ',\'' + p.id + '\')" style="padding:7px 10px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px" onmouseover="this.style.background=\'var(--surface-2)\'" onmouseout="this.style.background=\'var(--surface)\'">'
           + '<div style="font-weight:500">' + p.nombre + '</div>'
-          + '<div style="color:var(--ink-3);font-size:11px">Stock disponible: ' + (p.stock||0) + ' · Dist: ' + fmt(p.pdist||0) + '</div>'
+          + '<div style="color:var(--ink-3);font-size:11px">Stock disponible: ' + (p.stock||0) + ' · ' + refDistConsig(p) + '</div>'
         + '</div>';
       });
   return '<div style="max-height:150px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--surface)">' + resultados + '</div>';
@@ -11787,13 +11806,13 @@ function renderLineasConsignacion() {
             + '<input type="number" inputmode="numeric" class="f-input" value="' + (l.cant||1) + '" min="1" data-idx="' + i + '" data-tipo="cant" oninput="actualizarDatosLineaConsig(this)" style="font-size:13px;text-align:center;padding:7px 6px"></div>'
           + '<div>'
             + '<label style="font-size:11px;color:var(--ink-3);display:flex;align-items:center;gap:4px;margin-bottom:3px">Precio venta ($)'
-              + (l.precioVenta !== Number(prod.pdist||0) ? '<button type="button" onclick="restaurarPrecioDistribuidor(' + i + ')" style="font-size:9px;color:var(--blue);background:none;border:none;cursor:pointer;text-decoration:underline;padding:0">usar dist.</button>' : '')
+              + (Math.abs(l.precioVenta - precioDistConsig(prod)) >= 0.01 ? '<button type="button" onclick="restaurarPrecioDistribuidor(' + i + ')" style="font-size:9px;color:var(--blue);background:none;border:none;cursor:pointer;text-decoration:underline;padding:0">usar dist.</button>' : '')
             + '</label>'
-            + '<input type="number" inputmode="numeric" class="f-input" value="' + (l.precioVenta||0) + '" data-idx="' + i + '" data-tipo="precio" oninput="actualizarDatosLineaConsig(this)" style="font-size:13px;padding:7px 8px">'
-            + '<div style="font-size:10px;margin-top:3px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--amber);margin-right:3px"></span><span style="color:var(--ink-3)">Distribuidor: ' + fmt(prod.pdist||0) + '</span></div>'
+            + '<input type="number" inputmode="numeric" class="f-input" value="' + precioVisible(l.precioVenta) + '" data-idx="' + i + '" data-tipo="precio" oninput="actualizarDatosLineaConsig(this)" style="font-size:13px;padding:7px 8px">'
+            + '<div style="font-size:10px;margin-top:3px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--amber);margin-right:3px"></span><span style="color:var(--ink-3)">' + refDistConsig(prod) + '</span></div>'
           + '</div>'
           + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Subtotal</label>'
-            + '<div style="font-size:13px;font-weight:700;color:var(--lime);padding:7px 0">' + fmt((l.cant||1)*(l.precioVenta||0)) + '</div></div>'
+            + '<div style="font-size:13px;font-weight:700;color:var(--lime);padding:7px 0">' + fmt(Math.round((l.cant||1)*(l.precioVenta||0))) + '</div></div>'
         + '</div>';
     }
 
@@ -11836,7 +11855,7 @@ window.seleccionarProductoLineaConsig = (i, prodId) => {
   dcLineas[i].prodId = prodId;
   dcLineas[i].busqueda = prod.nombre;
   // 508. Precio sugerido = precio distribuidor — editable después
-  dcLineas[i].precioVenta = Number(prod.pdist)||0;
+  dcLineas[i].precioVenta = precioDistConsig(prod);   // 855
   renderLineasConsignacion();
 };
 
@@ -11849,7 +11868,7 @@ window.cambiarProductoLineaConsig = (i) => {
 window.actualizarDatosLineaConsig = (el) => {
   const i = Number(el.dataset.idx);
   if(el.dataset.tipo === 'cant') dcLineas[i].cant = Number(el.value)||1;
-  if(el.dataset.tipo === 'precio') dcLineas[i].precioVenta = Number(el.value)||0;
+  if(el.dataset.tipo === 'precio') dcLineas[i].precioVenta = precioExactoSi(Number(el.value)||0, precioDistConsig(DATA.inventario.find(p => p.id === dcLineas[i].prodId)));   // 855
   // Solo actualizamos el subtotal sin perder el foco del input que se está editando
   renderLineasConsignacion();
   setTimeout(() => {
@@ -11863,7 +11882,7 @@ window.actualizarDatosLineaConsig = (el) => {
 window.restaurarPrecioDistribuidor = (i) => {
   const prod = DATA.inventario.find(p => p.id === dcLineas[i].prodId);
   if(!prod) return;
-  dcLineas[i].precioVenta = Number(prod.pdist)||0;
+  dcLineas[i].precioVenta = precioDistConsig(prod);   // 855
   renderLineasConsignacion();
 };
 
@@ -11950,6 +11969,7 @@ window.guardarDejarConsignacion = async () => {
 
 // --- Reportar venta o devolución ---
 let tipoReporteConsigActual = 'venta';
+let rcPrecioExacto = 0;   // 855. unitario sin redondear de la entrega
 // 572. Estado de pago del reporte de venta — antes se asumía SIEMPRE
 //      'completo', por eso nunca aparecía nada pendiente ni admitía abonos.
 let estadoPagoConsigActual = 'completo'; // 'completo' | 'parcial' | 'credito'
@@ -11988,8 +12008,8 @@ window.calcSaldoConsig = () => {
   const preview = document.getElementById('rc-saldo-preview');
   if(!preview) return;
   const cantidad = Number(document.getElementById('rc-cantidad')?.value) || 0;
-  const precio = Number(document.getElementById('rc-precio')?.value) || 0;
-  const total = cantidad * precio;
+  const precio = precioExactoSi(Number(document.getElementById('rc-precio')?.value) || 0, rcPrecioExacto);   // 855
+  const total = Math.round(cantidad * precio);
   const pagado = Number(document.getElementById('rc-pagado')?.value) || 0;
   const saldo = Math.max(0, total - pagado);
   preview.textContent = total > 0 ? 'Queda pendiente: ' + fmt(saldo) : '';
@@ -12019,11 +12039,12 @@ window.abrirReportarConsignacion = (tiendaId, prodId) => {
     + (entregas.length > 1 ? ' <span style="color:var(--ink-3)">(' + entregas.length + ' entregas)</span>' : '');
   document.getElementById('rc-cantidad').value = '';
   const prodItem = DATA.inventario.find(p => p.id === prodId);
-  document.getElementById('rc-precio').value = masReciente.precioSugerido || '';
+  rcPrecioExacto = Number(masReciente.precioSugerido) || 0;   // 855
+  document.getElementById('rc-precio').value = masReciente.precioSugerido ? precioVisible(masReciente.precioSugerido) : '';
   previoCOP('rc-precio','prev-rc-precio');
   document.getElementById('rc-precio-dist-ref').innerHTML =
     '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--amber);margin-right:3px"></span>'
-    + 'Se dejó a distribuidor: ' + fmt(masReciente.precioSugerido || prodItem?.pdist || 0);
+    + 'Se dejó a distribuidor: ' + fmt(masReciente.precioSugerido || prodItem?.pdist || 0) + ' c/u';
   document.getElementById('rc-fecha').value = today();
   document.getElementById('rc-pagado').value = '';
   setTipoReporteConsig('venta');
@@ -12066,11 +12087,11 @@ window.guardarReporteConsignacion = async () => {
     // 560. Reportar venta: AHORA SÍ se genera el ingreso real para Duppla.
     //      El producto ya había salido del stock cuando se dejó en consignación,
     //      así que aquí NO se vuelve a descontar — solo se registra el ingreso.
-    const precio = Number(document.getElementById('rc-precio').value);
+    const precio = precioExactoSi(Number(document.getElementById('rc-precio').value), rcPrecioExacto);   // 855
     if(!precio || precio <= 0) { alert('Ingresa el precio de venta'); return; }
     const fechaVenta = document.getElementById('rc-fecha').value || today();
     const metodoPago = document.getElementById('rc-metodo-pago').value;
-    const total = precio * cantidad;
+    const total = Math.round(precio * cantidad);   // 855. el total va al peso
 
     // 574. Estado de pago real — antes se forzaba SIEMPRE "pagado completo",
     //      por lo que una venta de consignación a crédito o abonada
@@ -12103,7 +12124,7 @@ window.guardarReporteConsignacion = async () => {
       createdAt: serverTimestamp()
     });
     // 567. Guardamos precio/total también en cada movimiento del historial (por entrega)
-    actualizaciones.forEach(a => { a.movimiento.precio = precio; a.movimiento.total = precio * a.consumido; });
+    actualizaciones.forEach(a => { a.movimiento.precio = precio; a.movimiento.total = Math.round(precio * a.consumido); });
     if(saldo > 0) {
       await pushNotif('💳 Venta a crédito', primeraTienda + ' debe ' + fmt(saldo) + ' por ' + cantidad + 'x ' + primerProd, 'credito', {seccion:'deudores'});
     } else {
@@ -12153,7 +12174,7 @@ window.abrirEditarConsignacion = (entregaId) => {
   document.getElementById('ec-cantidad-inicial').value = item.cantidadInicial || 0;
   document.getElementById('ec-cantidad-actual').value = item.cantidadActual || 0;
   document.getElementById('ec-costo').value = item.costoUnit || 0;
-  document.getElementById('ec-precio').value = item.precioSugerido || 0;
+  document.getElementById('ec-precio').value = precioVisible(item.precioSugerido || 0);   // 855
   document.getElementById('ec-ajuste-preview').textContent = '';
   toggleUsarActualConsig();
   openModal('modal-editar-consignacion');
@@ -12169,11 +12190,11 @@ window.toggleUsarActualConsig = () => {
   const prod = item && DATA.inventario.find(p => p.id === item.prodId);
   if(!prod) return;
   const costoActual = Number(prod.costo)||0;
-  const precioActual = Number(prod.pdist)||0;
+  const precioActual = precioDistConsig(prod);   // 855
   const costoInput = Number(document.getElementById('ec-costo').value)||0;
   const precioInput = Number(document.getElementById('ec-precio').value)||0;
   document.getElementById('ec-usar-costo-actual').style.display = costoInput !== costoActual ? 'inline' : 'none';
-  document.getElementById('ec-usar-precio-actual').style.display = precioInput !== precioActual ? 'inline' : 'none';
+  document.getElementById('ec-usar-precio-actual').style.display = Math.abs(precioInput - precioActual) >= 0.01 ? 'inline' : 'none';
 };
 
 window.usarCostoActualConsig = () => {
@@ -12190,7 +12211,7 @@ window.usarPrecioActualConsig = () => {
   const item = DATA.consignaciones.find(c => c.id === id);
   const prod = item && DATA.inventario.find(p => p.id === item.prodId);
   if(!prod) return;
-  document.getElementById('ec-precio').value = Number(prod.pdist)||0;
+  document.getElementById('ec-precio').value = precioVisible(precioDistConsig(prod));   // 855
   toggleUsarActualConsig();
 };
 
@@ -12220,7 +12241,7 @@ window.guardarEditarConsignacion = async () => {
   const nuevaInicial = Number(document.getElementById('ec-cantidad-inicial').value);
   const nuevaActual = Number(document.getElementById('ec-cantidad-actual').value);
   const costoUnit = Number(document.getElementById('ec-costo').value) || 0;
-  const precioSugerido = Number(document.getElementById('ec-precio').value) || 0;
+  const precioSugerido = precioExactoSi(precioExactoSi(Number(document.getElementById('ec-precio').value) || 0, item.precioSugerido), precioDistConsig(DATA.inventario.find(p => p.id === item.prodId)));   // 855
 
   if(nuevaInicial < 0 || nuevaActual < 0) { alert('Las cantidades no pueden ser negativas'); return; }
   if(nuevaActual > nuevaInicial) { alert('La cantidad actual no puede ser mayor que la inicial'); return; }
