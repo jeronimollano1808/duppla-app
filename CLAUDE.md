@@ -1524,5 +1524,15 @@ La salida: el arranque del bloque (`BASE_BLOQUE`) se calcula una sola vez, a par
 Se escribió directo en Firestore (`lotes` y `costo` promedio), sin apunte en la bitácora.
 
 
+### 14.51 Tres errores que vio Jero en el uso real (comentarios 849–851) — 31 oct 2026
+
+**850. El saldo se deduce, no se escribe.** En Deudores, RAICES tenía un Crisp Bar con total $190.008 y saldo $95.000: la cartera daba $930.654 y le debían $1.029.658. Causa: en "Editar venta", cambiar cantidad o precio recalculaba el total pero el **saldo era un campo libre** (238) y se quedaba con el valor viejo. Ahora `calcEditSaldo` lo pone siempre en `max(0, total − pagado)`, el campo es de solo lectura y al guardar se recalculan `saldo` y `estadoPago` (`ponerSaldo`). Además, la venta manual guardaba `total = precio` sin multiplicar por la cantidad.
+- **Datos viejos:** Deudores muestra una tarjeta ámbar con las ventas cuyo saldo no da total − pagado (`ventasSaldoDescuadrado`), con "Corregir" por venta o "Corregir todas" (`corregirSaldos`, con bitácora y candado de mes cerrado). No se corrigen solas porque puede estar mal el "pagado" y no el saldo.
+
+**851. Cada producto con su propio valor.** En la ficha de KARINA BAUM la Ashwagandha salía en $130.000 aunque se vendió en $150.000: una venta de varios productos se repartía **en partes iguales** (`ingreso / lineas.length`). Pasaba también en la dona de Inicio y en el detalle del mes (`acumularProductos`). `lineasConValor(v)` reparte por precio × cantidad, escalado para que la suma dé `ingresoVenta(v)`, y da el margen por línea con la misma cuenta de `calcularMargenVenta`.
+
+**849. Regalos de producto como gasto.** Categoría nueva `regalo` ("Regalos y muestras"). Al escogerla aparece el catálogo: se agregan productos y cantidades, salen del inventario por FIFO (`salidaConLotes`) y el gasto vale **su costo**, no el precio de venta. Queda `productosRegalo` con `loteConsumo`; borrar el gasto devuelve cada unidad a su lote. Un regalo guardado solo permite editar fecha y descripción: para cambiar productos, se borra y se registra de nuevo. No es compra de mercancía ni gasto fijo.
+
+
 ---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*
