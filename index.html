@@ -1282,8 +1282,22 @@ button.lista-fila:active{background:var(--border)}
       <button class="modal-close" onclick="closeModal('modal-tienda-consig')">✕</button>
     </div>
     <input type="hidden" id="tc-id" value="">
+    <!-- 854. A quién se le deja: una tienda nueva o un distribuidor que ya
+         existe (ej. un entrenador). Con distribuidor, las ventas que reporte
+         quedan en SU historial, no como "sin dueño". -->
     <div class="f-group">
-      <label class="f-label">Nombre de la tienda *</label>
+      <label class="f-label">¿A quién se le deja?</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <button type="button" id="tc-modo-tienda" class="btn btn-sm" onclick="setModoTiendaConsig('tienda')">🏪 Tienda nueva</button>
+        <button type="button" id="tc-modo-dist" class="btn btn-sm" onclick="setModoTiendaConsig('dist')">🏋️ Distribuidor</button>
+      </div>
+    </div>
+    <div class="f-group" id="tc-dist-grupo" style="display:none">
+      <label class="f-label">Distribuidor *</label>
+      <select id="tc-dist-id" class="f-input" onchange="elegirDistTiendaConsig()"></select>
+    </div>
+    <div class="f-group">
+      <label class="f-label" id="tc-nombre-label">Nombre de la tienda *</label>
       <input type="text" id="tc-nombre" class="f-input" placeholder="Ej: Tienda Naturista El Roble">
     </div>
     <div class="f-row">
@@ -11607,13 +11621,57 @@ window.eliminarDistribuidor = async (id) => {
 // ============================================================
 
 // --- Gestión de tiendas ---
+// 854. TIENDA O DISTRIBUIDOR. Jero (31 oct 2026): "a Juan Gabriel, el
+//      entrenador, le acabamos de dejar unos productos en consignación".
+//      Antes solo se podía crear una tienda escribiendo el nombre, y las ventas
+//      que reportaba salían con canal distribuidor pero SIN distribuidorId: en
+//      Distribuidores quedaban como "sin dueño". Ahora la tienda puede ser un
+//      distribuidor ya registrado: se guarda `distribuidorId`, el nombre se
+//      toma de él (no se escribe dos veces, 762) y cada venta reportada queda
+//      vinculada a ese distribuidor.
+let modoTiendaConsig = 'tienda';
+window.setModoTiendaConsig = (modo) => {
+  modoTiendaConsig = modo;
+  const esDist = modo === 'dist';
+  document.getElementById('tc-modo-tienda').className = 'btn btn-sm' + (esDist ? '' : ' btn-lime');
+  document.getElementById('tc-modo-dist').className = 'btn btn-sm' + (esDist ? ' btn-lime' : '');
+  document.getElementById('tc-dist-grupo').style.display = esDist ? 'block' : 'none';
+  document.getElementById('tc-nombre-label').textContent = esDist ? 'Nombre' : 'Nombre de la tienda *';
+  const nombre = document.getElementById('tc-nombre');
+  nombre.readOnly = esDist;
+  nombre.style.opacity = esDist ? '.6' : '';
+  if(esDist) {
+    const sel = document.getElementById('tc-dist-id');
+    const actual = sel.value;
+    const editId = document.getElementById('tc-id').value;
+    // Fuera los distribuidores que ya tienen su tienda de consignación.
+    const yaUsados = new Set(DATA.tiendasConsignacion.filter(t => t.distribuidorId && t.id !== editId).map(t => t.distribuidorId));
+    const lista = [...DATA.distribuidores].filter(d => !yaUsados.has(d.id)).sort((a,b) => (a.nombre||'').localeCompare(b.nombre||''));
+    sel.innerHTML = '<option value="">— Escoge el distribuidor —</option>'
+      + lista.map(d => '<option value="' + escAttr(d.id) + '">' + escTxt(d.nombre) + '</option>').join('');
+    sel.value = actual;
+    elegirDistTiendaConsig();
+  } else {
+    document.getElementById('tc-dist-id').value = '';
+  }
+};
+window.elegirDistTiendaConsig = () => {
+  const d = DATA.distribuidores.find(x => x.id === document.getElementById('tc-dist-id').value);
+  document.getElementById('tc-nombre').value = d ? (d.nombre || '') : '';
+  if(d) {
+    if(d.telefono && !document.getElementById('tc-telefono').value) document.getElementById('tc-telefono').value = d.telefono;
+    if(d.ciudad && !document.getElementById('tc-ciudad').value) document.getElementById('tc-ciudad').value = d.ciudad;
+  }
+};
 window.abrirNuevaTiendaConsig = () => {
   document.getElementById('tc-id').value = '';
   document.getElementById('tc-nombre').value = '';
   document.getElementById('tc-telefono').value = '';
   document.getElementById('tc-ciudad').value = '';
   document.getElementById('tc-notas').value = '';
-  document.getElementById('tc-titulo').textContent = 'Nueva tienda';
+  document.getElementById('tc-titulo').textContent = 'Agregar a consignación';
+  document.getElementById('tc-dist-id').value = '';
+  setModoTiendaConsig('tienda');   // 854
   openModal('modal-tienda-consig');
 };
 
@@ -11628,16 +11686,23 @@ window.editarTiendaConsig = (id) => {
     document.getElementById('tc-ciudad').value = t.ciudad || '';
     document.getElementById('tc-notas').value = t.notas || '';
     document.getElementById('tc-titulo').textContent = 'Editar — ' + t.nombre;
+    document.getElementById('tc-dist-id').innerHTML = '<option value="' + escAttr(t.distribuidorId||'') + '"></option>';
+    document.getElementById('tc-dist-id').value = t.distribuidorId || '';
+    setModoTiendaConsig(t.distribuidorId ? 'dist' : 'tienda');   // 854
   }, 30);
 };
 
 window.guardarTiendaConsignacion = async () => {
   if(!exigirAdmin()) return;   // 803
-  const nombre = document.getElementById('tc-nombre').value.trim();
+  // 854. Con distribuidor, el nombre sale de su registro.
+  const distribuidorId = modoTiendaConsig === 'dist' ? document.getElementById('tc-dist-id').value : '';
+  if(modoTiendaConsig === 'dist' && !distribuidorId) { alert('Escoge el distribuidor'); return; }
+  const distSel = DATA.distribuidores.find(x => x.id === distribuidorId);
+  const nombre = distSel ? (distSel.nombre || '').trim() : document.getElementById('tc-nombre').value.trim();
   if(!nombre) { alert('El nombre es obligatorio'); return; }
   const id = document.getElementById('tc-id').value;
   const data = {
-    nombre,
+    nombre, distribuidorId: distribuidorId || null,
     telefono: document.getElementById('tc-telefono').value.trim(),
     ciudad: document.getElementById('tc-ciudad').value.trim(),
     notas: document.getElementById('tc-notas').value.trim(),
@@ -12028,6 +12093,8 @@ window.guardarReporteConsignacion = async () => {
       producto: primerProd, prodId, esManual:false,
       cant: cantidad, precio, total,
       cliente: primeraTienda,
+      // 854. Si la tienda es un distribuidor registrado, la venta va a su historial.
+      distribuidorId: (DATA.tiendasConsignacion.find(t => t.id === entregas[0].tiendaId) || {}).distribuidorId || null,
       tipoPrecio: 'distribuidor', metodoPago,
       pagado, saldo, estadoPago,
       abonos: [],
@@ -12287,10 +12354,10 @@ function renderConsignacion() {
       cardsHtml += '<div class="card" style="margin-bottom:12px">'
         + '<div style="display:flex;justify-content:space-between;align-items:flex-start">'
           + '<div style="display:flex;align-items:center;gap:12px;flex:1">'
-            + '<div style="width:40px;height:40px;border-radius:10px;background:var(--lime-bg);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">🏪</div>'
+            + '<div style="width:40px;height:40px;border-radius:10px;background:var(--lime-bg);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">' + (t.distribuidorId ? '🏋️' : '🏪') + '</div>'   /* 854 */
             + '<div style="flex:1;min-width:0">'
-              + '<div style="font-size:14px;font-weight:700;color:var(--ink)">' + t.nombre + '</div>'
-              + '<div style="font-size:11px;color:var(--ink-3);margin-top:2px">' + (t.ciudad?t.ciudad+' · ':'') + (t.telefono||'') + '</div>'
+              + '<div style="font-size:14px;font-weight:700;color:var(--ink)">' + escTxt(t.nombre) + '</div>'
+              + '<div style="font-size:11px;color:var(--ink-3);margin-top:2px">' + (t.distribuidorId ? 'Distribuidor · ' : '') + (t.ciudad?escTxt(t.ciudad)+' · ':'') + escTxt(t.telefono||'') + '</div>'
             + '</div>'
           + '</div>'
           + '<div style="text-align:right;flex-shrink:0;margin-left:12px">'
@@ -12313,7 +12380,7 @@ function renderConsignacion() {
   document.getElementById('page-consignacion').innerHTML =
     '<div class="page-header">'
       + '<div><div class="page-title">Consignación</div><div class="page-sub">Productos prestados a tiendas físicas</div></div>'
-      + '<button class="btn btn-lime btn-sm" onclick="abrirNuevaTiendaConsig()">+ Agregar tienda</button>'
+      + '<button class="btn btn-lime btn-sm" onclick="abrirNuevaTiendaConsig()">+ Agregar tienda o distribuidor</button>'
     + '</div>'
     + resumenHtml
     + cardsHtml;
