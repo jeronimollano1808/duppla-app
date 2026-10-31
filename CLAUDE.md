@@ -1535,6 +1535,14 @@ Se escribió directo en Firestore (`lotes` y `costo` promedio), sin apunte en la
 
 **852. Regalo de varios productos de una pasada.** Jero: *"solamente me está dejando agregar un solo producto"*. El selector + "Agregar" se cambió por el catálogo entero a la vista, con buscador (filtra filas del DOM) y − / casilla / + en cada renglón; tocar el nombre suma 1. El resumen y el costo de abajo se actualizan solos. Funciones: `pintarCatalogoRegalo`, `filtrarCatalogoRegalo`, `ponerCantRegalo`, `cambiarCantRegalo` (reemplazan `agregarLineaRegalo`).
 
+**853. Precio por caja y total exacto por línea.** Jero: la caja de 12 Crisp Bar se vende en $95.000 a distribuidores, pero la app guardaba el unitario y lo multiplicaba: 95.000 ÷ 12 = $7.916,67 → se escribía $7.917 → 12 × 7.917 = **$95.004**.
+- Producto: `unidadesCaja` y `precioCajaDist` ("Unidades por caja" / "Precio caja distribuidor" en Editar producto). CRISP BAR quedó en 12 / $95.000 (31 oct 2026). Su `pdist` por unidad está en 0.
+- Venta con precio **Dist.**: si la cantidad llega a una caja, `aplicarPrecioCaja` cobra las cajas exactas; las sueltas de más van a `pdist`, o a precio de caja ÷ unidades si `pdist` es 0 (`precioSueltaDist`). Aviso "📦 1 caja de 12 a $95.000" debajo de la línea.
+- **El total de cada línea se puede escribir** (a quien se le dejó la caja en $100.000 o $110.000): el unitario sale como total ÷ cantidad y se guarda **sin redondear**, para que unitario × cantidad vuelva a dar el total. `subtotalLinea` redondea al peso; `calcVentaTotal` suma subtotales.
+- `cambioNumeroLinea` actualiza cantidad / precio / total en su sitio, sin re-renderizar (bug 2).
+- Editar venta (modal de una sola venta): el total es editable y manda; se guarda `precio = total ÷ cant`.
+- Regla: **el total manda; el unitario es una consecuencia** (misma regla del 764).
+
 
 ---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*
