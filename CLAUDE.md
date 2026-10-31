@@ -1533,6 +1533,8 @@ Se escribió directo en Firestore (`lotes` y `costo` promedio), sin apunte en la
 
 **849. Regalos de producto como gasto.** Categoría nueva `regalo` ("Regalos y muestras"). Al escogerla aparece el catálogo: se agregan productos y cantidades, salen del inventario por FIFO (`salidaConLotes`) y el gasto vale **su costo**, no el precio de venta. Queda `productosRegalo` con `loteConsumo`; borrar el gasto devuelve cada unidad a su lote. Un regalo guardado solo permite editar fecha y descripción: para cambiar productos, se borra y se registra de nuevo. No es compra de mercancía ni gasto fijo.
 
+**852. Regalo de varios productos de una pasada.** Jero: *"solamente me está dejando agregar un solo producto"*. El selector + "Agregar" se cambió por el catálogo entero a la vista, con buscador (filtra filas del DOM) y − / casilla / + en cada renglón; tocar el nombre suma 1. El resumen y el costo de abajo se actualizan solos. Funciones: `pintarCatalogoRegalo`, `filtrarCatalogoRegalo`, `ponerCantRegalo`, `cambiarCantRegalo` (reemplazan `agregarLineaRegalo`).
+
 
 ---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*
