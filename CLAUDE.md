@@ -1550,6 +1550,10 @@ Se escribió directo en Firestore (`lotes` y `costo` promedio), sin apunte en la
 
 **Precios distribuidor Nutricost (31 oct 2026, del catálogo mayorista GA de Jero).** Estaban en 0. Se escribieron en Firestore con apunte en la bitácora: Cafeína 250 $80.000 · Berberina + canela $130.000 · Testosterona Complex $80.000 · Vitamina B Complex $80.000 · Glicinato de magnesio $80.000 · Inositol $90.000 · D3 + K2 $85.000 · Vitamina D3 (240) $76.000 · Beet Root $85.000 · Multivitamínico + probióticos $86.000 · Glucosamina $123.000. Todos por encima del costo. **Citrato de magnesio en polvo** no está en el catálogo: sigue en 0. El precio público del catálogo NO se usó (Jero: es distinto al de la página y al de la app).
 
+**856. Abono con doble toque.** AIDE RUIZ (7 oct) tenía el abono de $195.004 registrado dos veces en el mismo instante: Jero tocó "Guardar" dos veces. `guardarAbono` queda envuelto con `guardandoAbono`: mientras uno se guarda, el segundo toque no hace nada.
+
+**Arreglo de datos Crisp Bar (31 oct 2026, aprobado por Jero).** Ventas del ciclo de octubre con los pesos de más del 853, llevadas al total redondo con apunte en la bitácora: GREEN ROOTS y RAICES $190.008 → $190.000, JUANCHO JARDINES $100.008 → $100.000, GO UP GYM $95.004 → $95.000, AIDE RUIZ $515.004 → $515.000 (y se quitó el abono duplicado: queda $195.000 + $70.000, saldo $250.000), PAOLA BUILES $142.488 → $142.500 (18 barras = caja y media).
+
 
 ---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*
