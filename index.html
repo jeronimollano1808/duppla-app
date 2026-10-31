@@ -608,6 +608,7 @@ body.solo-lectura [onclick*="eliminar"],
 body.solo-lectura [onclick*="registrar"],
 body.solo-lectura [onclick*="restaurar"],
 body.solo-lectura [onclick*="purgar"],
+body.solo-lectura [onclick*="corregirSaldos"],
 body.solo-lectura [onclick*="cerrarMes"],
 body.solo-lectura [onclick*="reabrirMes"],
 body.solo-lectura [onclick*="corregir"],
@@ -1983,11 +1984,11 @@ button.lista-fila:active{background:var(--border)}
     <div class="f-row">
       <div class="f-group">
         <label class="f-label">Pagado ($)</label>
-        <input type="number" inputmode="numeric" id="ev-pagado" class="f-input" placeholder="0">
+        <input type="number" inputmode="numeric" id="ev-pagado" class="f-input" placeholder="0" oninput="calcEditSaldo()">
       </div>
       <div class="f-group">
         <label class="f-label">Saldo pendiente ($)</label>
-        <input type="number" inputmode="numeric" id="ev-saldo" class="f-input" placeholder="0">
+        <input type="number" inputmode="numeric" id="ev-saldo" class="f-input" placeholder="0" readonly style="opacity:.6;cursor:not-allowed" title="Se calcula solo: total − pagado (850)">
       </div>
     </div>
     <div class="modal-footer">
@@ -2243,16 +2244,28 @@ button.lista-fila:active{background:var(--border)}
     <div class="f-row">
       <div class="f-group"><label class="f-label">Fecha *</label><input type="date" id="g-fecha" class="f-input"></div>
       <div class="f-group"><label class="f-label">Categoría</label>
-        <select id="g-cat" class="f-input">
+        <select id="g-cat" class="f-input" onchange="cambioCatGasto()">
           <option value="importacion">Importación / Proveedor</option>
           <option value="marketing">Marketing y publicidad</option>
           <option value="logistica">Logística y envíos</option>
           <option value="plataformas">Plataformas (web, apps)</option>
           <option value="finanzas">Finanzas (intereses, comisiones)</option>
           <option value="operativo">Gastos operativos</option>
+          <option value="regalo">🎁 Regalo / muestra de producto</option>
           <option value="otro">Otro</option>
         </select>
       </div>
+    </div>
+    <!-- 849. Regalo de producto: se escogen del catálogo, salen del inventario
+         y el gasto vale lo que costaron (no lo que valen al público). -->
+    <div id="g-regalo-grupo" style="display:none;background:var(--surface-2);border-radius:var(--radius);padding:12px;margin-bottom:12px">
+      <div style="font-size:12px;color:var(--ink-2);margin-bottom:8px">Escoge lo que se regaló. Sale del inventario y el gasto queda al <strong>costo</strong>.</div>
+      <div id="g-regalo-agregar" style="display:grid;grid-template-columns:1fr 70px auto;gap:6px;margin-bottom:8px">
+        <select id="g-regalo-prod" class="f-input" style="font-size:14px"></select>
+        <input type="number" inputmode="numeric" id="g-regalo-cant" class="f-input" value="1" min="1" style="text-align:center">
+        <button type="button" class="btn btn-sm" onclick="agregarLineaRegalo()">+ Agregar</button>
+      </div>
+      <div id="g-regalo-lineas"></div>
     </div>
     <div class="f-group"><label class="f-label">Descripción *</label><input type="text" id="g-desc" class="f-input" placeholder="Ej: Pago proveedor MuscleTech"></div>
     <div class="f-group"><label class="f-label">Valor ($) *</label><input type="number" inputmode="numeric" id="g-valor" class="f-input"></div>
@@ -5089,6 +5102,7 @@ window.calcMixtoEdit = () => {
   const ef = Number(document.getElementById('ev-mixto-efectivo').value)||0;
   const tr = Number(document.getElementById('ev-mixto-transferencia').value)||0;
   document.getElementById('ev-pagado').value = ef + tr;
+  calcEditSaldo();   // 850
 };
 
 // 439. setMetodoPagoCombo — toggle método de pago en venta de combo
@@ -6045,6 +6059,22 @@ window.calcEditTotal = () => {
   document.getElementById('ev-total').value = total;
   const prevTotal = document.getElementById('prev-ev-total');
   if(prevTotal) prevTotal.textContent = total > 0 ? '→ ' + fmt(total) + ' COP' : '';
+  calcEditSaldo();   // 850
+};
+
+// 850. EL SALDO SE DEDUCE, NO SE ESCRIBE. Jero (31 oct 2026) vio en Deudores
+//      a RAICES con un Crisp Bar de total $190.008 y saldo $95.000: el total
+//      de la cartera daba $930.654 cuando le debían $1.029.658. Causa: al
+//      editar una venta, cambiar cantidad o precio recalculaba el TOTAL pero
+//      el SALDO se quedaba con el número viejo (era un campo libre, 238).
+//      Venta registrada de 1 unidad a crédito y después corregida a 2 =
+//      se cobra la mitad.
+//      Ahora el saldo es siempre total − pagado (nunca negativo) y el campo
+//      queda de solo lectura. Para dar algo por pagado se toca "Pagado".
+window.calcEditSaldo = () => {
+  const total  = Number(document.getElementById('ev-total').value)||0;
+  const pagado = Number(document.getElementById('ev-pagado').value)||0;
+  document.getElementById('ev-saldo').value = Math.max(0, Math.round(total - pagado));
 };
 
 window.guardarEditarVenta = async () => {
@@ -6073,10 +6103,16 @@ window.guardarEditarVenta = async () => {
     nota:       document.getElementById('ev-nota').value,
     metodoPago: metodoPagoEdit,
     pagado:     Number(document.getElementById('ev-pagado').value)||0,
-    saldo:      Number(document.getElementById('ev-saldo').value)||0,
+    // 850. saldo y estadoPago se completan abajo, cuando ya se sabe el total final.
     // 367. Desglose mixto — null si el método no es mixto
     mixtoEfectivo: metodoPagoEdit === 'mixto' ? (Number(document.getElementById('ev-mixto-efectivo').value)||0) : null,
     mixtoTransferencia: metodoPagoEdit === 'mixto' ? (Number(document.getElementById('ev-mixto-transferencia').value)||0) : null,
+  };
+
+  // 850. El saldo sale del total que de verdad se va a guardar en cada caso.
+  const ponerSaldo = (tot) => {
+    camposBase.saldo = Math.max(0, Math.round(Number(tot||0) - camposBase.pagado));
+    camposBase.estadoPago = camposBase.saldo <= 0 ? 'pagado' : camposBase.pagado > 0 ? 'parcial' : 'pendiente';
   };
 
   // Rehabilitamos campos al cerrar
@@ -6087,6 +6123,7 @@ window.guardarEditarVenta = async () => {
 
   // 298. Combo — solo campos básicos
   if(venta.esCombo) {
+    ponerSaldo(precio);
     await updateDoc(doc(db,'ventas',id), { ...camposBase, precio, total: precio });
     rehabilitar();
     closeModal('modal-editar-venta');
@@ -6096,6 +6133,7 @@ window.guardarEditarVenta = async () => {
 
   // 299. Venta múltiple — solo campos básicos, no tocamos stock ni productos
   if(venta.esMultiple || prodVal === '__multiple__') {
+    ponerSaldo(total);
     await updateDoc(doc(db,'ventas',id), { ...camposBase, precio, total });
     rehabilitar();
     closeModal('modal-editar-venta');
@@ -6105,8 +6143,11 @@ window.guardarEditarVenta = async () => {
 
   // 300. Venta manual — solo campos básicos + precio y cantidad
   if(venta.esManual || !venta.prodId || prodVal === '__manual__') {
+    // 850. Antes guardaba total = precio unitario, ignorando la cantidad.
+    const totalManual = total || precio;
+    ponerSaldo(totalManual);
     await updateDoc(doc(db,'ventas',id), {
-      ...camposBase, precio, total: precio,
+      ...camposBase, precio, total: totalManual,
       cant:       Number(document.getElementById('ev-cant').value)||1,
       tipoPrecio: document.getElementById('ev-tipo-precio').value,
     });
@@ -6159,6 +6200,7 @@ window.guardarEditarVenta = async () => {
     }
   }
 
+  ponerSaldo(total);   // 850
   await updateDoc(doc(db,'ventas',id), {
     ...camposBase, precio, total,
     producto:   prodNuevoData.nombre,
@@ -7028,7 +7070,9 @@ const CATS = {
   // 687. Finanzas — intereses de préstamos, comisiones bancarias, 4x1000.
   //      Antes estos gastos caían en "Otro" y se perdían de vista, aunque
   //      los intereses son uno de los gastos fijos más grandes de Duppla.
-  finanzas:'Finanzas', operativo:'Operativo', otro:'Otro'
+  finanzas:'Finanzas', operativo:'Operativo',
+  regalo:'Regalos y muestras',   // 849
+  otro:'Otro'
 };
 
 // ============================================================
@@ -7337,6 +7381,68 @@ function renderGastos() {
     </div>`;
 }
 
+// ============================================================
+// 849. REGALOS DE PRODUCTO. Jero (31 oct 2026): "a veces regalamos cositas a
+//      distribuidores... que podamos seleccionar los productos que le
+//      regalamos y saber cuánto nos costó, al costo, porque es un regalo de
+//      la marca". Un regalo es un gasto (de promoción) y a la vez una salida
+//      de inventario: sale por FIFO como una venta (salidaConLotes, 847), el
+//      gasto vale el costo de esos lotes y queda `productosRegalo` con el
+//      rastro, para que borrar el gasto devuelva cada unidad a su lote.
+//      No es compra de mercancía (esCompraMercancia) ni gasto fijo.
+//      Al EDITAR un regalo se pueden cambiar fecha y descripción, no los
+//      productos: para eso se borra y se registra de nuevo (así el inventario
+//      nunca queda a medio mover).
+// ============================================================
+let regaloLineas = [];
+let regaloBloqueado = false;
+function costoPrevioRegalo(prod, cant) {
+  const fifo = consumirLotesFIFO(prod, cant);
+  return fifo && fifo.costoPromedioVenta != null ? fifo.costoPromedioVenta : Number(prod.costo||0);
+}
+function pintarRegalo() {
+  const caja = document.getElementById('g-regalo-lineas');
+  const total = Math.round(regaloLineas.reduce((s,l) => s + l.costoUnit * l.cant, 0));
+  caja.innerHTML = regaloLineas.length
+    ? regaloLineas.map((l,i) => '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--border);font-size:13px">'
+        + '<span>' + l.cant + '× ' + escTxt(l.nombre) + '</span>'
+        + '<span style="display:flex;align-items:center;gap:8px"><span style="color:var(--ink-2)">' + fmt(l.costoUnit * l.cant) + '</span>'
+        + (regaloBloqueado ? '' : '<button type="button" class="btn btn-xs" onclick="quitarLineaRegalo(' + i + ')">✕</button>') + '</span></div>').join('')
+      + '<div style="display:flex;justify-content:space-between;padding-top:6px;border-top:1px solid var(--border);font-weight:700;font-size:13px"><span>Costo del regalo</span><span>' + fmt(total) + '</span></div>'
+      + (regaloBloqueado ? '<div style="font-size:11px;color:var(--ink-3);margin-top:6px">Para cambiar los productos, borra este regalo y regístralo de nuevo.</div>' : '')
+    : '<div style="font-size:12px;color:var(--ink-3)">Todavía no agregas productos.</div>';
+  if(regaloLineas.length) document.getElementById('g-valor').value = total;
+}
+window.cambioCatGasto = () => {
+  const esRegalo = document.getElementById('g-cat').value === 'regalo';
+  document.getElementById('g-regalo-grupo').style.display = esRegalo ? 'block' : 'none';
+  const valor = document.getElementById('g-valor');
+  valor.readOnly = esRegalo;
+  valor.style.opacity = esRegalo ? '.6' : '';
+  if(esRegalo) {
+    document.getElementById('g-es-fijo').checked = false;
+    const sel = document.getElementById('g-regalo-prod');
+    sel.innerHTML = [...DATA.inventario].sort((a,b) => (a.nombre||'').localeCompare(b.nombre||''))
+      .map(p => '<option value="' + escAttr(p.id) + '">' + escTxt(p.nombre) + ' · ' + Number(p.stock||0) + ' uds</option>').join('');
+    document.getElementById('g-regalo-agregar').style.display = regaloBloqueado ? 'none' : 'grid';
+    if(!document.getElementById('g-desc').value) document.getElementById('g-desc').placeholder = 'Ej: Regalo a OLIMPO GYM';
+    pintarRegalo();
+  }
+};
+window.agregarLineaRegalo = () => {
+  const prod = DATA.inventario.find(p => p.id === document.getElementById('g-regalo-prod').value);
+  const cant = Math.max(1, Number(document.getElementById('g-regalo-cant').value)||1);
+  if(!prod) return;
+  const ya = regaloLineas.find(l => l.prodId === prod.id);
+  const nuevaCant = (ya ? ya.cant : 0) + cant;
+  const costoUnit = costoPrevioRegalo(prod, nuevaCant);
+  if(ya) { ya.cant = nuevaCant; ya.costoUnit = costoUnit; }
+  else regaloLineas.push({ prodId: prod.id, nombre: prod.nombre, cant, costoUnit });
+  document.getElementById('g-regalo-cant').value = 1;
+  pintarRegalo();
+};
+window.quitarLineaRegalo = (i) => { regaloLineas.splice(i, 1); pintarRegalo(); if(!regaloLineas.length) document.getElementById('g-valor').value = ''; };
+
 window.abrirModalGasto = () => {
   // 94. Al abrir para crear nuevo, reseteamos el formulario y el modo
   document.getElementById('g-id').value = '';
@@ -7350,6 +7456,9 @@ window.abrirModalGasto = () => {
   // 670. Mismo cuidado que con la categoría (bug 12): la casilla de gasto fijo
   //      también se resetea al abrir en modo creación.
   document.getElementById('g-es-fijo').checked = false;
+  regaloLineas = []; regaloBloqueado = false;   // 849
+  document.getElementById('g-cat').disabled = false;
+  cambioCatGasto();
   document.getElementById('modal-gasto-title').textContent = 'Registrar gasto';
   openModal('modal-gasto');
 };
@@ -7374,6 +7483,24 @@ window.guardarGasto = async () => {
     esFijo: document.getElementById('g-es-fijo').checked
   };
 
+  // 849. Regalo: en un regalo ya guardado no se tocan productos ni valor.
+  if(gastoOriginal?.productosRegalo) {
+    datos.cat = 'regalo'; datos.valor = gastoOriginal.valor; datos.esFijo = false;
+  } else if(datos.cat === 'regalo') {
+    if(!regaloLineas.length) { alert('Agrega los productos que se regalaron. Si el regalo fue en plata, usa la categoría Marketing.'); return; }
+    const productosRegalo = [];
+    for(const l of regaloLineas) {
+      const prod = DATA.inventario.find(p => p.id === l.prodId);
+      if(!prod) { alert('Producto no encontrado: ' + l.nombre); return; }
+      const sal = salidaConLotes(prod, l.cant);
+      await moverInventario(prod, sal.upd);
+      productosRegalo.push({ prodId: prod.id, nombre: prod.nombre, cant: l.cant, costoUnit: sal.costoUnit, loteConsumo: sal.consumo });
+    }
+    datos.productosRegalo = productosRegalo;
+    datos.valor = Math.round(productosRegalo.reduce((s,l) => s + l.costoUnit * l.cant, 0));
+    datos.esFijo = false;
+  }
+
   if(gastoId) {
     await updateDoc(doc(db,'gastos',gastoId), datos);
     // 785. Bitácora del gasto editado.
@@ -7390,6 +7517,7 @@ window.guardarGasto = async () => {
   document.getElementById('g-id').value = '';
   document.getElementById('g-desc').value = '';
   document.getElementById('g-valor').value = '';
+  regaloLineas = []; regaloBloqueado = false;   // 849
 };
 
 window.editarGasto = (id) => {
@@ -7405,6 +7533,11 @@ window.editarGasto = (id) => {
   // 672. Si el gasto es viejo y no trae el flag, mostramos lo que la app está
   //      deduciendo por la descripción — así al guardar queda explícito.
   document.getElementById('g-es-fijo').checked = esGastoFijo(gasto);
+  // 849. Un regalo muestra sus productos, pero bloqueados.
+  regaloBloqueado = !!gasto.productosRegalo;
+  regaloLineas = (gasto.productosRegalo||[]).map(l => ({ ...l }));
+  document.getElementById('g-cat').disabled = regaloBloqueado;
+  cambioCatGasto();
   document.getElementById('modal-gasto-title').textContent = 'Editar gasto';
   openModal('modal-gasto');
 };
@@ -10060,6 +10193,13 @@ async function confirmarEliminacionPendiente() {
   // 652. Igual que con ventas — si se elimina una entrega de consignación,
   // devolvemos a Duppla lo que seguía disponible sin vender en la tienda.
   if(col === 'consignaciones') await restaurarStockConsignacion(snapshot);
+  // 849. Borrar un regalo devuelve cada producto a su lote.
+  if(col === 'gastos' && snapshot?.productosRegalo) {
+    for(const l of snapshot.productosRegalo) {
+      const prod = DATA.inventario.find(p => p.id === l.prodId);
+      if(prod) await moverInventario(prod, entradaConLotes(prod, Number(l.cant||0), l.loteConsumo).upd);
+    }
+  }
 
   // 785. Bitácora del borrado. Va ANTES de mover a la papelera: si algo
   //      falla en el camino, por lo menos queda constancia del intento.
@@ -10558,6 +10698,52 @@ window.guardarConsumo = async () => {
 // 319. PÁGINA: DEUDORES
 // Dos secciones: clientes con saldo pendiente + consumo interno
 // ============================================================
+// 850. Ventas cuyo saldo guardado no cuadra con total − pagado. Son las que
+//      quedaron mal antes del arreglo (o importadas así). No se corrigen
+//      solas: puede estar mal el saldo o puede estar mal el "pagado", y eso
+//      solo lo sabe quien cobró. Se listan con los números a la vista y se
+//      corrigen una por una o todas de un toque.
+function ventasSaldoDescuadrado() {
+  return DATA.ventas.filter(v => {
+    const deberia = Math.max(0, Math.round(Number(v.total||0) - Number(v.pagado||0)));
+    return Math.abs(deberia - saldoReal(v)) >= 1;
+  }).map(v => ({ v, deberia: Math.max(0, Math.round(Number(v.total||0) - Number(v.pagado||0))) }));
+}
+window.corregirSaldos = async (id) => {
+  if(!exigirAdmin('corregir saldos')) return;
+  const lista = ventasSaldoDescuadrado().filter(x => !id || x.v.id === id);
+  if(!lista.length) return;
+  if(!id && !confirm('¿Corregir el saldo de ' + lista.length + ' venta(s) a total − pagado?')) return;
+  let hechas = 0, cerradas = 0;
+  for(const { v, deberia } of lista) {
+    if(!exigirMesAbierto(v.fecha, 'corregir el saldo de una venta')) { cerradas++; continue; }
+    const estadoPago = deberia <= 0 ? 'pagado' : Number(v.pagado||0) > 0 ? 'parcial' : 'pendiente';
+    await updateDoc(doc(db,'ventas',v.id), { saldo: deberia, estadoPago });
+    await registrarEnBitacora({ accion:'editó', coleccion:'ventas', docId:v.id,
+      titulo: tituloRegistro('ventas', v),
+      cambios: [{ campo:'saldo', etiqueta:'Saldo (corregido a total − pagado)', antes: fmt(saldoReal(v)), despues: fmt(deberia) }] });
+    hechas++;
+  }
+  toast('✅ ' + hechas + ' saldo(s) corregido(s)' + (cerradas ? ' · ' + cerradas + ' en mes cerrado' : ''));
+};
+function avisoSaldosDescuadradosHtml() {
+  const lista = ventasSaldoDescuadrado();
+  if(!lista.length) return '';
+  const filas = lista.sort((a,b) => (b.v.fecha||'') > (a.v.fecha||'') ? 1 : -1).map(({ v, deberia }) =>
+    '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--amber-bd);font-size:12px">'
+      + '<div><div style="font-weight:600;color:var(--ink)">' + escTxt(v.cliente||'Sin nombre') + ' · ' + escTxt(v.producto||'') + '</div>'
+      + '<div style="color:var(--ink-2)">' + (v.fecha||'') + ' · total ' + fmt(v.total) + ' · pagado ' + fmt(v.pagado||0)
+      + ' · saldo guardado <strong>' + fmt(saldoReal(v)) + '</strong> → debería ser <strong>' + fmt(deberia) + '</strong></div></div>'
+      + '<button class="btn btn-xs" onclick="corregirSaldos(\'' + v.id + '\')">Corregir</button>'
+    + '</div>').join('');
+  return '<div class="card" style="background:var(--amber-bg);margin-bottom:16px">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px">'
+      + '<div style="font-weight:700;color:var(--amber-ink)">⚠️ ' + lista.length + ' venta(s) con el saldo descuadrado</div>'
+      + '<button class="btn btn-sm" onclick="corregirSaldos()">Corregir todas</button></div>'
+    + '<div style="font-size:12px;color:var(--amber-ink);margin-bottom:6px">El saldo guardado no da total − pagado. Pasa cuando se editó la cantidad o el precio de una venta. Si lo que está mal es el "pagado", corrígelo editando la venta.</div>'
+    + filas + '</div>';
+}
+
 function renderDeudores() {
   // --- SECCIÓN A: Deudores externos ---
   // 320. Agrupamos ventas con saldo > 0 por cliente (ver calcularDeudores, 576)
@@ -10651,6 +10837,7 @@ function renderDeudores() {
       + '<div class="page-sub">Para cerrar una venta con saldo usa <strong>+ Abono</strong>. '
       + 'Si te pagan algo de un mes viejo que no está en la app, va por <strong>Cobro de cuenta</strong>.</div></div>'
       + '<button class="btn btn-sm" onclick="abrirModalCobro()">💳 Cobro de cuenta</button></div>'
+    + avisoSaldosDescuadradosHtml()   // 850
     + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'
       + '<div style="font-size:13px;font-weight:700;color:var(--ink);text-transform:uppercase;letter-spacing:.04em">Clientes — Cartera pendiente</div>'
       + (totalCartera > 0 ? '<span style="font-size:16px;font-weight:800;color:var(--red)">' + fmt(totalCartera) + '</span>' : '')
@@ -13571,6 +13758,37 @@ function lineasDeVenta(v) {
   return [{ nombre: v.producto || '(sin nombre)', cant: Number(v.cant || 1) }];
 }
 
+// 851. Cuánta plata y cuánto margen le toca a cada producto de una venta.
+//      Jero (31 oct 2026): en la ficha de KARINA BAUM la Ashwagandha salía
+//      en $130.000 cuando se vendió en $150.000. Una venta de Gomitas +
+//      Ashwagandha se repartía MITAD Y MITAD (`ingreso / lineas.length`),
+//      sin mirar el precio de cada línea. El mismo reparto lo usaban la dona
+//      de Inicio y el detalle del mes.
+//      Ahora cada línea pesa lo que vale (precio × cantidad), escalado para
+//      que la suma dé exactamente lo que se reconoce de la venta
+//      (ingresoVenta). El margen por línea es (precio − costo) × cantidad,
+//      la misma cuenta de calcularMargenVenta; si una línea no tiene costo,
+//      queda `null` en vez de inventarle uno.
+function lineasConValor(v) {
+  const ing = ingresoVenta(v);
+  if(v.esMultiple && Array.isArray(v.productosVenta) && v.productosVenta.length) {
+    const ls = v.productosVenta;
+    const base = ls.map(l => Number(l.precio||0) * Number(l.cant||1));
+    const suma = base.reduce((a,b) => a + b, 0);
+    return ls.map((l, i) => {
+      const w = suma > 0 ? base[i] / suma : 1 / ls.length;
+      let costo = l.costoUnit;
+      if(costo == null && l.prodId) { const prod = DATA.inventario.find(x => x.id === l.prodId); costo = prod ? Number(prod.costo||0) : null; }
+      return {
+        nombre: l.nombre || '(sin nombre)', cant: Number(l.cant || 1),
+        dinero: ing * w,
+        margen: costo == null ? null : (Number(l.precio||0) - Number(costo||0)) * Number(l.cant||0),
+      };
+    });
+  }
+  return [{ nombre: v.producto || '(sin nombre)', cant: Number(v.cant || 1), dinero: ing, margen: calcularMargenVenta(v) }];
+}
+
 // ============================================================
 // 789. BUSCADOR GLOBAL DE CLIENTES Y DISTRIBUIDORES
 //
@@ -13857,13 +14075,11 @@ function fichaCompradorHtml(ventas) {
   // ---- Qué compra ----
   const prods = {};
   ventas.forEach(v => {
-    const lineas = lineasDeVenta(v);
-    const ing = ingresoVenta(v);
-    lineas.forEach(l => {
+    lineasConValor(v).forEach(l => {   // 851. Cada producto con su propio valor
       prods[l.nombre] = prods[l.nombre] || { nombre: l.nombre, cant: 0, veces: 0, valor: 0 };
       prods[l.nombre].cant  += l.cant;
       prods[l.nombre].veces += 1;
-      prods[l.nombre].valor += ing / lineas.length;
+      prods[l.nombre].valor += l.dinero;
     });
   });
   const listaProds = Object.values(prods).sort((a,b) => b.valor - a.valor);
@@ -14559,21 +14775,20 @@ function renderUsuarios() {
 //      productos con la MISMA cuenta. Dos sitios sumando lo mismo por su lado
 //      es como nació el lío de "utilidad neta" del 818.
 function acumularProductos(mapa, v) {
-  const lineas = lineasDeVenta(v);
-  const ing = ingresoVenta(v);
+  // 851. Antes: ingreso y margen repartidos en partes iguales entre líneas.
+  const lineas = lineasConValor(v);
   // 830. El margen se reparte entre las líneas igual que el dinero, con la
   //      misma fuente de verdad de siempre (calcularMargenVenta). Si la venta
   //      no tiene costo conocido, el producto queda marcado `sinCosto` en vez
   //      de sumarle cero: un cero inventado lo hunde en el ranking por margen
   //      por una razón que no tiene nada que ver con el producto.
-  const m = calcularMargenVenta(v);
   lineas.forEach(l => {
     const k = String(l.nombre || '(sin nombre)').trim();
     mapa[k] = mapa[k] || { nombre:k, unidades:0, dinero:0, ventas:0, margen:0, sinCosto:false };
     mapa[k].unidades += Number(l.cant || 0);
-    mapa[k].dinero   += ing / lineas.length;
+    mapa[k].dinero   += l.dinero;
     mapa[k].ventas   += 1;
-    if(m === null) mapa[k].sinCosto = true; else mapa[k].margen += m / lineas.length;
+    if(l.margen === null) mapa[k].sinCosto = true; else mapa[k].margen += l.margen;
   });
 }
 
