@@ -1939,7 +1939,7 @@ button.lista-fila:active{background:var(--border)}
     </div>
     <div class="f-group">
       <label class="f-label">Total ($)</label>
-      <input type="number" inputmode="numeric" id="ev-total" class="f-input" readonly style="opacity:.6;cursor:not-allowed">
+      <input type="number" inputmode="numeric" id="ev-total" class="f-input" oninput="calcEditPrecioDesdeTotal()">
       <div id="prev-ev-total" style="font-size:12px;margin-top:4px;font-weight:700;color:var(--lime)"></div>
     </div>
     <div class="f-group"><label class="f-label">Cliente</label><input type="text" id="ev-cliente" class="f-input" placeholder="Nombre del cliente"></div>
@@ -2215,6 +2215,12 @@ button.lista-fila:active{background:var(--border)}
           <div id="prev-pesp" style="font-size:11px;margin-top:4px;font-weight:600"></div>
         </div>
       </div>
+    </div>
+    <!-- 853. Precio por caja para distribuidor: con 12, 24, 36... unidades la
+         venta cobra la caja exacta en vez de unidad × precio redondeado. -->
+    <div class="f-row">
+      <div class="f-group"><label class="f-label">Unidades por caja</label><input type="number" inputmode="numeric" id="p-ucaja" class="f-input" value="0" min="0" placeholder="Ej: 12"><div style="font-size:11px;color:var(--ink-3);margin-top:4px">0 = no se vende por caja</div></div>
+      <div class="f-group"><label class="f-label">Precio caja distribuidor ($)</label><input type="number" inputmode="numeric" id="p-pcaja" class="f-input" value="0" min="0" placeholder="Ej: 95000" oninput="previoCOP('p-pcaja','prev-pcaja')"><div id="prev-pcaja" style="font-size:11px;margin-top:4px;font-weight:600"></div></div>
     </div>
     <div class="f-group"><label class="f-label">Stock mínimo para alerta</label><input type="number" inputmode="numeric" id="p-minimo" class="f-input" value="5" min="0"></div>
     <!-- 637. Duración estimada — cuántos días dura UNA unidad tomándolo como
@@ -5158,7 +5164,6 @@ function contenidoLineaVenta(i) {
       // 583. Línea manual DENTRO de una venta de inventario — permite mezclar
       //      productos de catálogo con productos fuera de catálogo en la
       //      MISMA venta (antes tenías que elegir todo-catálogo o todo-manual).
-      const subtotalManual = fmt((l.cant||1)*(l.precio||0));
       const nombreVal = (l.nombre||'').replace(/"/g, '&quot;');
       contenido = '<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--amber-bg);border-radius:8px;margin-bottom:8px">'
         + '<span style="font-size:12px;font-weight:600;color:var(--amber-ink);flex:1">✏️ Escrito a mano</span>'
@@ -5174,9 +5179,9 @@ function contenidoLineaVenta(i) {
         + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Cant.</label>'
           + '<input type="number" inputmode="numeric" class="f-input" value="' + (l.cant||1) + '" min="1" data-idx="' + i + '" data-tipo="cant" oninput="actualizarManualLinea(this)" style="font-size:13px;text-align:center;padding:7px 6px"></div>'
         + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Precio ($)</label>'
-          + '<input type="number" inputmode="numeric" class="f-input" value="' + (l.precio||0) + '" data-idx="' + i + '" data-tipo="precio" oninput="actualizarManualLinea(this)" style="font-size:13px;padding:7px 8px"></div>'
-        + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Subtotal</label>'
-          + '<div style="font-size:13px;font-weight:700;color:var(--lime);padding:7px 0">' + subtotalManual + '</div></div>'
+          + '<input type="number" inputmode="numeric" class="f-input" value="' + precioVisible(l.precio) + '" data-idx="' + i + '" data-tipo="precio" oninput="actualizarManualLinea(this)" style="font-size:13px;padding:7px 8px"></div>'
+        + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Total ($)</label>'   /* 853 */
+          + '<input type="number" inputmode="numeric" class="f-input" value="' + subtotalLinea(l) + '" data-idx="' + i + '" data-tipo="total" oninput="actualizarManualLinea(this)" style="font-size:13px;padding:7px 8px;font-weight:700"></div>'
       + '</div>';
     } else if(!l.prodId) {
       // 433. Lista de resultados agrupados por marca
@@ -5219,7 +5224,6 @@ function contenidoLineaVenta(i) {
           + '</button>';
       });
 
-      const subtotal = fmt((l.cant||1)*(l.precio||0));
 
       // 844. Aquí iba el selector "¿De dónde salió? Jero / Ángel" (451, 808).
       //      Fuera con el stock por ubicación.
@@ -5238,10 +5242,13 @@ function contenidoLineaVenta(i) {
           + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Cant.</label>'
             + '<input type="number" inputmode="numeric" class="f-input" value="' + (l.cant||1) + '" min="1" data-idx="' + i + '" data-tipo="cant" oninput="actualizarDatosLinea(this)" style="font-size:13px;text-align:center;padding:7px 6px"></div>'
           + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Precio ($)</label>'   /* 821. teclado numérico */
-            + '<input type="number" inputmode="numeric" class="f-input" value="' + (l.precio||0) + '" data-idx="' + i + '" data-tipo="precio" oninput="actualizarDatosLinea(this)" style="font-size:13px;padding:7px 8px"></div>'
-          + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Subtotal</label>'
-            + '<div style="font-size:13px;font-weight:700;color:var(--lime);padding:7px 0">' + subtotal + '</div></div>'
-        + '</div>';
+            + '<input type="number" inputmode="numeric" class="f-input" value="' + precioVisible(l.precio) + '" data-idx="' + i + '" data-tipo="precio" oninput="actualizarDatosLinea(this)" style="font-size:13px;padding:7px 8px"></div>'
+          // 853. El total de la línea se puede escribir: 12 a $95.000 queda en
+          //      $95.000 exactos y el unitario sale solo.
+          + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Total ($)</label>'
+            + '<input type="number" inputmode="numeric" class="f-input" value="' + subtotalLinea(l) + '" data-idx="' + i + '" data-tipo="total" oninput="actualizarDatosLinea(this)" style="font-size:13px;padding:7px 8px;font-weight:700"></div>'
+        + '</div>'
+        + '<div id="caja-linea-' + i + '">' + avisoCajaLinea(prod, l) + '</div>';
   }
 
   return contenido;
@@ -5307,6 +5314,7 @@ window.seleccionarProductoLinea = (i, prodId) => {
   ventaLineas[i].nombre = prod.nombre;
   ventaLineas[i].precio = prod.pventa || 0;
   ventaLineas[i].tipoPrecio = 'publico';
+  ventaLineas[i].totalLinea = null; ventaLineas[i].porCaja = false;   // 853
   ventaLineas[i].busqueda = prod.nombre;
   renderLineasVenta();
   calcVentaTotal();
@@ -5334,6 +5342,7 @@ window.desactivarManualLinea = (i) => {
   ventaLineas[i].esManual = false;
   ventaLineas[i].nombre = '';
   ventaLineas[i].precio = 0;
+  ventaLineas[i].totalLinea = null; ventaLineas[i].porCaja = false;   // 853
   renderLineasVenta();
   calcVentaTotal();
 };
@@ -5342,8 +5351,7 @@ window.actualizarManualLinea = (el) => {
   const i = Number(el.dataset.idx);
   const tipo = el.dataset.tipo;
   if(tipo === 'nombre') ventaLineas[i].nombre = el.value;
-  if(tipo === 'cant') ventaLineas[i].cant = Number(el.value)||1;
-  if(tipo === 'precio') ventaLineas[i].precio = Number(el.value)||0;
+  if(tipo === 'cant' || tipo === 'precio' || tipo === 'total') { cambioNumeroLinea(i, tipo, el.value, null); return; }   // 853
   // 586. Igual que actualizarDatosLinea (catálogo): no re-renderizamos en
   // cada tecla para no perder el foco — solo se actualiza el total general.
   calcVentaTotal();
@@ -5355,6 +5363,8 @@ window.seleccionarTipoPrecioLinea = (i, tipo) => {
   ventaLineas[i].tipoPrecio = tipo;
   const precios = { publico:prod.pventa||0, distribuidor:prod.pdist||0, especial:prod.pesp||0 };
   ventaLineas[i].precio = precios[tipo];
+  ventaLineas[i].totalLinea = null; ventaLineas[i].porCaja = false;   // 853
+  aplicarPrecioCaja(ventaLineas[i], prod);
   renderLineasVenta();
   calcVentaTotal();
 };
@@ -5362,17 +5372,8 @@ window.seleccionarTipoPrecioLinea = (i, tipo) => {
 
 window.actualizarDatosLinea = (el) => {
   const i = Number(el.dataset.idx);
-  if(el.dataset.tipo === 'cant') ventaLineas[i].cant = Number(el.value)||1;
-  if(el.dataset.tipo === 'precio') ventaLineas[i].precio = Number(el.value)||0;
-  // 845. El aviso de stock se actualiza en su sitio, sin re-renderizar la
-  //      línea: re-renderizar mientras se escribe le quita el foco al campo
-  //      (bug histórico 2).
-  if(el.dataset.tipo === 'cant') {
-    const caja = document.getElementById('stock-linea-' + i);
-    const prod = DATA.inventario.find(p => p.id === ventaLineas[i].prodId);
-    if(caja && prod) caja.innerHTML = avisoStockLinea(prod, ventaLineas[i].cant);
-  }
-  calcVentaTotal();
+  cambioNumeroLinea(i, el.dataset.tipo, el.value, DATA.inventario.find(p => p.id === ventaLineas[i].prodId));   // 853
+  // 845. El aviso de stock también se refresca allá, en su sitio.
 };
 
 // 845. Texto de unidades disponibles para una línea de venta.
@@ -5402,11 +5403,72 @@ function avisoStockLinea(prod, cant) {
 // 817. `fillVentaPrecio` se borró: era un no-op "por compatibilidad".
 // 817. `seleccionarPrecio` se borró: también era un no-op.
 
+// ============================================================
+// 853. PRECIO POR CAJA Y TOTAL EXACTO DE LA LÍNEA. Jero (31 oct 2026): la caja
+//      de 12 Crisp Bar se vende en $95.000, pero la app guarda precio por
+//      unidad y lo multiplica: 95.000 ÷ 12 = $7.916,67, se escribía $7.917 y
+//      12 × 7.917 = $95.004. Cuatro pesos que no existen.
+//      Dos arreglos que conviven:
+//        1. El producto puede tener `unidadesCaja` y `precioCajaDist`. Con
+//           precio distribuidor y 12, 24, 36... unidades, la línea cobra las
+//           cajas exactas (las sueltas que sobren, a precio distribuidor).
+//        2. El total de cada línea se puede escribir a mano (a quien se le
+//           dejó la caja en $100.000 o $110.000). El unitario sale solo como
+//           total ÷ cantidad y se guarda sin redondear, para que unitario ×
+//           cantidad vuelva a dar el total.
+//      Regla: el total manda; el unitario es una consecuencia.
+// ============================================================
+function subtotalLinea(l) {
+  return Math.round(l.totalLinea != null ? Number(l.totalLinea)||0 : (l.cant||1) * (l.precio||0));
+}
+function precioVisible(p) { return Math.round((Number(p)||0) * 100) / 100; }
+function totalPorCaja(prod, tipoPrecio, cant) {
+  const uc = Number(prod?.unidadesCaja)||0, pc = Number(prod?.precioCajaDist)||0;
+  if(tipoPrecio !== 'distribuidor' || uc < 2 || pc <= 0 || cant < uc) return null;
+  return Math.floor(cant / uc) * pc + (cant % uc) * (Number(prod.pdist)||0);
+}
+function aplicarPrecioCaja(l, prod) {
+  const t = totalPorCaja(prod, l.tipoPrecio, l.cant||1);
+  if(t != null) { l.totalLinea = t; l.precio = t / (l.cant||1); l.porCaja = true; }
+  else if(l.porCaja) { l.totalLinea = null; l.precio = Number(prod?.pdist)||0; l.porCaja = false; }
+}
+function avisoCajaLinea(prod, l) {
+  if(!l.porCaja || !prod) return '';
+  const uc = Number(prod.unidadesCaja), cajas = Math.floor((l.cant||1) / uc), sueltas = (l.cant||1) % uc;
+  return '<div style="font-size:11.5px;color:var(--ink-2);margin-top:6px">📦 ' + cajas + (cajas === 1 ? ' caja' : ' cajas') + ' de ' + uc + ' a ' + fmt(prod.precioCajaDist)
+    + (sueltas ? ' + ' + sueltas + (sueltas === 1 ? ' suelta' : ' sueltas') + ' a ' + fmt(prod.pdist) : '') + '</div>';
+}
+// Cambia cantidad, unitario o total de una línea y refresca los otros campos
+// EN SU SITIO (sin re-renderizar: bug histórico 2, se pierde el foco).
+function cambioNumeroLinea(i, tipo, valor, prod) {
+  const l = ventaLineas[i];
+  const n = Number(valor)||0;
+  if(tipo === 'cant') {
+    l.cant = n || 1;
+    if(l.totalLinea != null && !l.porCaja) l.totalLinea = null;   // conserva el unitario
+    if(prod) aplicarPrecioCaja(l, prod);
+  } else if(tipo === 'precio') {
+    l.precio = n; l.totalLinea = null; l.porCaja = false;
+  } else if(tipo === 'total') {
+    l.totalLinea = n; l.precio = n / (l.cant||1); l.porCaja = false;
+  }
+  const campo = (t) => document.querySelector('#v-lineas-container [data-idx="' + i + '"][data-tipo="' + t + '"]');
+  if(tipo !== 'precio') { const e = campo('precio'); if(e) e.value = precioVisible(l.precio); }
+  if(tipo !== 'total')  { const e = campo('total');  if(e) e.value = subtotalLinea(l); }
+  const caja = document.getElementById('caja-linea-' + i);
+  if(caja) caja.innerHTML = avisoCajaLinea(prod, l);
+  if(tipo === 'cant' && prod) {
+    const st = document.getElementById('stock-linea-' + i);
+    if(st) st.innerHTML = avisoStockLinea(prod, l.cant);
+  }
+  calcVentaTotal();
+}
+
 window.calcVentaTotal = () => {
   // 284/821. El total es la suma de las líneas. Punto. Antes había que preguntar
   //          antes si el formulario estaba en modo inventario o en modo manual,
   //          y ese `if` era el único motivo por el que existía el toggle.
-  const total = ventaLineas.reduce((s,l) => s + ((l.cant||1)*(l.precio||0)), 0);
+  const total = ventaLineas.reduce((s,l) => s + subtotalLinea(l), 0);   // 853. sin decimales sueltos
   document.getElementById('v-total').value = total;
   const prevTotal = document.getElementById('prev-vtotal');
   if(prevTotal) prevTotal.textContent = total > 0 ? '→ ' + fmt(total) + ' COP' : '';
@@ -5927,7 +5989,7 @@ window.editarVenta = (id) => {
     document.getElementById('ev-fecha').value = venta.fecha || '';
     document.getElementById('ev-canal').value = venta.canal || 'directo';
     document.getElementById('ev-cant').value = venta.cant || 1;
-    document.getElementById('ev-precio').value = venta.precio || 0;
+    document.getElementById('ev-precio').value = Math.round((venta.precio || 0) * 100) / 100;   // 853
     document.getElementById('ev-total').value = venta.total || 0;
     document.getElementById('ev-cliente').value = venta.cliente || '';
     document.getElementById('ev-tipo-precio').value = venta.tipoPrecio || 'publico';
@@ -6012,7 +6074,7 @@ window.abrirEditarComboVenta = (id) => {
     document.getElementById('ev-fecha').value = venta.fecha || '';
     document.getElementById('ev-canal').value = venta.canal || 'directo';
     document.getElementById('ev-cant').value = 1;
-    document.getElementById('ev-precio').value = venta.precio || 0;
+    document.getElementById('ev-precio').value = Math.round((venta.precio || 0) * 100) / 100;   // 853
     document.getElementById('ev-total').value = venta.total || 0;
     document.getElementById('ev-cliente').value = venta.cliente || '';
     document.getElementById('ev-tipo-precio').value = venta.tipoPrecio || 'especial';
@@ -6052,11 +6114,22 @@ window.fillEditVentaPrecio = () => {
   }
 };
 
+// 853. Escribir el total y que el unitario salga solo (12 Crisp Bar a $95.000
+//      es $7.916,67 cada una: escribir el unitario redondeado daba $95.004).
+window.calcEditPrecioDesdeTotal = () => {
+  const c = Number(document.getElementById('ev-cant').value)||1;
+  const t = Number(document.getElementById('ev-total').value)||0;
+  document.getElementById('ev-precio').value = Math.round(t / c * 100) / 100;
+  previoCOP('ev-precio','prev-ev-precio');
+  const prevTotal = document.getElementById('prev-ev-total');
+  if(prevTotal) prevTotal.textContent = t > 0 ? '→ ' + fmt(t) + ' COP' : '';
+  calcEditSaldo();
+};
 window.calcEditTotal = () => {
   // 148. Calculamos el total en tiempo real mientras editan
   const c = Number(document.getElementById('ev-cant').value)||0;
   const p = Number(document.getElementById('ev-precio').value)||0;
-  const total = c * p;
+  const total = Math.round(c * p);   // 853. el peso no lleva decimales
   document.getElementById('ev-total').value = total;
   const prevTotal = document.getElementById('prev-ev-total');
   if(prevTotal) prevTotal.textContent = total > 0 ? '→ ' + fmt(total) + ' COP' : '';
@@ -6086,8 +6159,11 @@ window.guardarEditarVenta = async () => {
   const venta = DATA.ventas.find(v => v.id === id);
   if(!venta) { toast('Venta no encontrada', 'error'); return; }
 
-  const precio  = Number(document.getElementById('ev-precio').value)||0;
   const total   = Number(document.getElementById('ev-total').value)||0;
+  // 853. El total manda: el unitario se guarda como total ÷ cantidad, exacto,
+  //      para que precio × cantidad dé el total sin pesos de más.
+  const cantEv  = Number(document.getElementById('ev-cant').value)||1;
+  const precio  = total ? total / cantEv : (Number(document.getElementById('ev-precio').value)||0);
   const prodVal = document.getElementById('ev-prod').value;
 
   // 297. Campos comunes a todos los tipos de venta
@@ -6552,6 +6628,8 @@ window.abrirNuevoProducto = () => {
   document.getElementById('p-pesp').value = '0';
   document.getElementById('p-minimo').value = '5';
   document.getElementById('p-duracion').value = '0';
+  document.getElementById('p-ucaja').value = '0';   // 853
+  document.getElementById('p-pcaja').value = '0';
   // 348. Limpiamos marca y precargamos datalist con marcas existentes en inventario
   const marcaInput = document.getElementById('p-marca');
   if(marcaInput) marcaInput.value = '';
@@ -6622,6 +6700,8 @@ window.guardarProducto = async () => {
     pesp:  Number(document.getElementById('p-pesp').value)||0,
     stockMinimo: Number(document.getElementById('p-minimo').value)||5,
     duracionDias: Number(document.getElementById('p-duracion').value)||0, // 637. Recordatorio de recompra
+    unidadesCaja: Math.max(0, Math.floor(Number(document.getElementById('p-ucaja').value)||0)),   // 853
+    precioCajaDist: Math.max(0, Number(document.getElementById('p-pcaja').value)||0),             // 853
   };
 
   // 86. Si hay ID = editar, si no = crear nuevo
@@ -6667,6 +6747,8 @@ window.guardarProducto = async () => {
   document.getElementById('p-pventa').value = '0';
   document.getElementById('p-pdist').value = '0';
   document.getElementById('p-pesp').value = '0';
+  document.getElementById('p-ucaja').value = '0';   // 853
+  document.getElementById('p-pcaja').value = '0';
   document.getElementById('modal-producto-title').textContent = 'Agregar producto';
   document.getElementById('btn-guardar-producto').textContent = 'Guardar producto';
 };
@@ -6691,6 +6773,9 @@ window.editarProducto = (id) => {
     document.getElementById('p-pesp').value = prod.pesp || 0;
     document.getElementById('p-minimo').value = prod.stockMinimo || 5;
     document.getElementById('p-duracion').value = prod.duracionDias || 0;
+    document.getElementById('p-ucaja').value = prod.unidadesCaja || 0;     // 853
+    document.getElementById('p-pcaja').value = prod.precioCajaDist || 0;
+    previoCOP('p-pcaja','prev-pcaja');
 
     // Previews
     previoCOP('p-costo','prev-costo');
@@ -14632,10 +14717,11 @@ const ETIQUETAS_CAMPO = {
   desc:'Descripción', valor:'Valor', cat:'Categoría', esFijo:'Gasto fijo',
   nombre:'Nombre', costo:'Costo', pventa:'Precio público', pdist:'Precio distribuidor',
   pesp:'Precio especial', stock:'Stock', alias:'Otros nombres', marca:'Marca',
-  stockMinimo:'Stock mínimo', duracionDias:'Duración (días)'
+  stockMinimo:'Stock mínimo', duracionDias:'Duración (días)',
+  unidadesCaja:'Unidades por caja', precioCajaDist:'Precio caja distribuidor'   // 853
 };
 
-const MONETARIOS = ['total','pagado','saldo','valor','costo','costoUnit','precio','pventa','pdist','pesp'];
+const MONETARIOS = ['total','pagado','saldo','valor','costo','costoUnit','precio','pventa','pdist','pesp','precioCajaDist'];
 
 function valorLegible(campo, v) {
   if(v === undefined || v === null || v === '') return '—';
@@ -14698,7 +14784,7 @@ function tituloRegistro(col, d) {
 const CAMPOS_AUDITADOS = {
   ventas: ['fecha','cliente','canal','producto','cant','total','pagado','saldo','precio','costoUnit','prodId','distribuidorId','metodoPago','nota'],
   gastos: ['fecha','cat','desc','valor','esFijo'],
-  inventario: ['nombre','alias','marca','costo','pventa','pdist','pesp','stock','stockMinimo','duracionDias'],
+  inventario: ['nombre','alias','marca','costo','pventa','pdist','pesp','stock','stockMinimo','duracionDias','unidadesCaja','precioCajaDist'],
   distribuidores: ['nombre','tipo','ciudad','telefono']
 };
 
