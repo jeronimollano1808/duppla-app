@@ -2260,10 +2260,11 @@ button.lista-fila:active{background:var(--border)}
          y el gasto vale lo que costaron (no lo que valen al público). -->
     <div id="g-regalo-grupo" style="display:none;background:var(--surface-2);border-radius:var(--radius);padding:12px;margin-bottom:12px">
       <div style="font-size:12px;color:var(--ink-2);margin-bottom:8px">Escoge lo que se regaló. Sale del inventario y el gasto queda al <strong>costo</strong>.</div>
-      <div id="g-regalo-agregar" style="display:grid;grid-template-columns:1fr 70px auto;gap:6px;margin-bottom:8px">
-        <select id="g-regalo-prod" class="f-input" style="font-size:14px"></select>
-        <input type="number" inputmode="numeric" id="g-regalo-cant" class="f-input" value="1" min="1" style="text-align:center">
-        <button type="button" class="btn btn-sm" onclick="agregarLineaRegalo()">+ Agregar</button>
+      <!-- 852. Todo el catálogo a la vista, con cantidad por renglón: un regalo
+           de varios productos se arma de una sola pasada. -->
+      <div id="g-regalo-agregar" style="margin-bottom:8px">
+        <input type="search" id="g-regalo-buscar" class="f-input" placeholder="Buscar producto…" oninput="filtrarCatalogoRegalo()" style="margin-bottom:6px">
+        <div id="g-regalo-catalogo" style="max-height:280px;overflow-y:auto;background:var(--surface);border-radius:var(--radius);padding:0 10px"></div>
       </div>
       <div id="g-regalo-lineas"></div>
     </div>
@@ -7421,27 +7422,68 @@ window.cambioCatGasto = () => {
   valor.style.opacity = esRegalo ? '.6' : '';
   if(esRegalo) {
     document.getElementById('g-es-fijo').checked = false;
-    const sel = document.getElementById('g-regalo-prod');
-    sel.innerHTML = [...DATA.inventario].sort((a,b) => (a.nombre||'').localeCompare(b.nombre||''))
-      .map(p => '<option value="' + escAttr(p.id) + '">' + escTxt(p.nombre) + ' · ' + Number(p.stock||0) + ' uds</option>').join('');
-    document.getElementById('g-regalo-agregar').style.display = regaloBloqueado ? 'none' : 'grid';
+    pintarCatalogoRegalo();   // 852
+    document.getElementById('g-regalo-agregar').style.display = regaloBloqueado ? 'none' : 'block';
     if(!document.getElementById('g-desc').value) document.getElementById('g-desc').placeholder = 'Ej: Regalo a OLIMPO GYM';
     pintarRegalo();
   }
 };
-window.agregarLineaRegalo = () => {
-  const prod = DATA.inventario.find(p => p.id === document.getElementById('g-regalo-prod').value);
-  const cant = Math.max(1, Number(document.getElementById('g-regalo-cant').value)||1);
-  if(!prod) return;
-  const ya = regaloLineas.find(l => l.prodId === prod.id);
-  const nuevaCant = (ya ? ya.cant : 0) + cant;
-  const costoUnit = costoPrevioRegalo(prod, nuevaCant);
-  if(ya) { ya.cant = nuevaCant; ya.costoUnit = costoUnit; }
-  else regaloLineas.push({ prodId: prod.id, nombre: prod.nombre, cant, costoUnit });
-  document.getElementById('g-regalo-cant').value = 1;
-  pintarRegalo();
+// 852. REGALO DE VARIOS PRODUCTOS DE UNA SOLA PASADA. Jero (31 oct 2026):
+//      "solamente me está dejando agregar un solo producto... me toca agregar
+//      uno a uno". El selector + "Agregar" (849) obligaba a escoger, agregar y
+//      volver a escoger. Ahora el catálogo entero queda a la vista con − / + y
+//      una casilla de cantidad en cada renglón; el resumen y el costo de abajo
+//      se actualizan solos. El buscador filtra filas del DOM (bug 2: nunca
+//      re-renderizar en oninput) y cambiar una cantidad toca solo su renglón.
+const normRegalo = (t) => (t||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+function pintarCatalogoRegalo() {
+  const caja = document.getElementById('g-regalo-catalogo');
+  const buscar = document.getElementById('g-regalo-buscar');
+  if(buscar) buscar.value = '';
+  const prods = [...DATA.inventario].sort((a,b) => (a.nombre||'').localeCompare(b.nombre||''));
+  caja.innerHTML = prods.length ? prods.map(p => {
+    const id = '\'' + escAttr(p.id) + '\'';
+    const linea = regaloLineas.find(l => l.prodId === p.id);
+    const cant = linea ? linea.cant : 0;
+    return '<div class="regalo-fila" data-id="' + escAttr(p.id) + '" data-busca="' + escAttr(normRegalo(p.nombre + ' ' + (p.marca||''))) + '" style="display:flex;align-items:center;gap:8px;padding:7px 0;border-top:1px solid var(--border)">'
+      + '<div onclick="cambiarCantRegalo(' + id + ',1)" style="flex:1;min-width:0;cursor:pointer">'
+      +   '<div class="regalo-nombre" style="font-size:13px;font-weight:' + (cant ? '700' : '500') + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escTxt(p.nombre) + '</div>'
+      +   '<div style="font-size:11px;color:var(--ink-3)">' + Number(p.stock||0) + ' disponibles</div>'
+      + '</div>'
+      + '<button type="button" class="btn btn-xs" onclick="cambiarCantRegalo(' + id + ',-1)" style="min-width:30px">−</button>'
+      + '<input type="number" inputmode="numeric" min="0" value="' + (cant || '') + '" placeholder="0" onchange="ponerCantRegalo(' + id + ',this.value)" style="width:46px;text-align:center;font-size:16px;border:none;background:var(--surface-2);border-radius:8px;padding:4px 0">'
+      + '<button type="button" class="btn btn-xs" onclick="cambiarCantRegalo(' + id + ',1)" style="min-width:30px">+</button>'
+      + '</div>';
+  }).join('') : '<div style="font-size:12px;color:var(--ink-3);padding:8px 0">No hay productos en el inventario.</div>';
+}
+window.filtrarCatalogoRegalo = () => {
+  const q = normRegalo(document.getElementById('g-regalo-buscar').value).split(/\s+/).filter(Boolean);
+  document.querySelectorAll('#g-regalo-catalogo .regalo-fila').forEach(f => {
+    const t = f.dataset.busca || '';
+    f.style.display = q.every(w => t.includes(w)) ? 'flex' : 'none';
+  });
 };
-window.quitarLineaRegalo = (i) => { regaloLineas.splice(i, 1); pintarRegalo(); if(!regaloLineas.length) document.getElementById('g-valor').value = ''; };
+window.ponerCantRegalo = (prodId, valor) => {
+  const prod = DATA.inventario.find(p => p.id === prodId);
+  if(!prod || regaloBloqueado) return;
+  const cant = Math.max(0, Math.floor(Number(valor)||0));
+  const i = regaloLineas.findIndex(l => l.prodId === prodId);
+  if(cant === 0) { if(i >= 0) regaloLineas.splice(i, 1); }
+  else if(i >= 0) { regaloLineas[i].cant = cant; regaloLineas[i].costoUnit = costoPrevioRegalo(prod, cant); }
+  else regaloLineas.push({ prodId, nombre: prod.nombre, cant, costoUnit: costoPrevioRegalo(prod, cant) });
+  const fila = document.querySelector('#g-regalo-catalogo .regalo-fila[data-id="' + CSS.escape(prodId) + '"]');
+  if(fila) {
+    fila.querySelector('input').value = cant || '';
+    fila.querySelector('.regalo-nombre').style.fontWeight = cant ? '700' : '500';
+  }
+  pintarRegalo();
+  if(!regaloLineas.length) document.getElementById('g-valor').value = '';
+};
+window.cambiarCantRegalo = (prodId, delta) => {
+  const l = regaloLineas.find(x => x.prodId === prodId);
+  ponerCantRegalo(prodId, (l ? l.cant : 0) + delta);
+};
+window.quitarLineaRegalo = (i) => { const l = regaloLineas[i]; if(l) ponerCantRegalo(l.prodId, 0); };   // 852
 
 window.abrirModalGasto = () => {
   // 94. Al abrir para crear nuevo, reseteamos el formulario y el modo
