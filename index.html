@@ -5871,6 +5871,18 @@ window.guardarAbono = async () => {
   closeModal('modal-abono');
   abonoVentaId = null;
 };
+// 856. Un doble toque en "Guardar abono" lo registraba dos veces (AIDE RUIZ,
+//      7 oct 2026: dos abonos de $195.004 en el mismo instante). Mientras un
+//      abono se está guardando, el segundo toque no hace nada.
+let guardandoAbono = false;
+{
+  const guardarAbonoUnaVez = window.guardarAbono;
+  window.guardarAbono = async () => {
+    if(guardandoAbono) return;
+    guardandoAbono = true;
+    try { await guardarAbonoUnaVez(); } finally { guardandoAbono = false; }
+  };
+}
 
 // ============================================================
 // 736. COBRO DE CUENTA — el registro que faltaba (ver 727 y 735).
