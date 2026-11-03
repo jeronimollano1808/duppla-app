@@ -3970,6 +3970,64 @@ function firmaRegistro() {
     creadoEnHora: new Date().toTimeString().slice(0,5)
   };
 }
+// ============================================================
+// 857. EL PROBLEMA GRANDE: Ángel y Jero abren la app cada uno en su casa y
+// registran la misma venta. Lo raro del caso es que la app YA guardaba quién
+// y a qué hora (firmaRegistro, 785) y no lo mostraba en ninguna parte:
+// creadoEnHora no se leía ni una vez en 15.000 líneas. Así que no hace falta
+// otra pestaña llena de información —hacía falta sacar a la vista lo que ya
+// estaba escrito— más dos candados:
+//   1. la firma debajo de la fecha de cada venta ("Jero · 14:37");
+//   2. un aviso antes de guardar si ya hay una venta igual, diciendo quién
+//      la metió y cuándo (avisa, no bloquea: ver 813);
+//   3. el doble toque en "Registrar venta", que es la otra mitad de los
+//      duplicados y ya se había arreglado para el abono en el 856.
+// ============================================================
+
+// 857. Quién registró, en corto. Las cuentas se llaman por el correo
+//      ("Jeronimollano1808"), así que en una tabla solo cabe la primera
+//      palabra. Sin firma devuelve vacío: a una venta de hace tres meses no
+//      se le inventa un autor.
+function autorCorto(reg) {
+  const n = String(reg?.creadoPor || '').trim();
+  if(!n) return '';
+  return n.split(/\s+/)[0].slice(0, 12);
+}
+
+// 857. "Jero · 14:37" para poner debajo de la fecha. Si la venta se metió un
+//      día distinto al de la venta (se registró atrasada), la hora sola
+//      engañaría —parecería la hora de la venta—, así que en ese caso se
+//      muestra el día en que se metió.
+function firmaVistaHtml(reg) {
+  const quien = autorCorto(reg);
+  if(!quien) return '';
+  const metida = reg.creadoEnFecha || '';
+  const detalle = (metida && reg.fecha && metida !== reg.fecha)
+    ? 'metida ' + fCorta(metida)
+    : (reg.creadoEnHora || '');
+  return '<div style="font-size:10.5px;color:var(--ink-3);margin-top:2px;white-space:nowrap">'
+    + quien + (detalle ? ' · ' + detalle : '') + '</div>';
+}
+
+// 857. ¿Esta venta ya está en la app? Se reusa el detector del importador
+//      (710/711), que ya está afinado con meses de uso: nombre parecido
+//      (clientesSimilares) y plata parecida, el mismo día o con la fecha
+//      corrida hasta 3 días. No se escribe un detector nuevo a propósito:
+//      dos criterios distintos de "es la misma venta" se contradicen solos.
+function ventaYaRegistrada({ fecha, cliente, total }) {
+  if(!fecha || !cliente || !total) return null;
+  const margen = Math.max(1000, total * 0.01);
+  const casiIgual = v => Math.abs(ingresoVenta(v) - total) <= margen
+    && clientesSimilares(v.cliente, cliente);
+  // El caso típico: los dos la metimos con minutos de diferencia.
+  const mismoDia = DATA.ventas.find(v => v.fecha === fecha && casiIgual(v));
+  if(mismoDia) return mismoDia;
+  // Uno la puso con la fecha de hoy y el otro con la de ayer.
+  return DATA.ventas.find(v => v.fecha !== fecha
+    && Math.abs(diasEntreFechasISO(v.fecha, fecha)) <= 3
+    && casiIgual(v)) || null;
+}
+
 // 817. `autorDe` se borró: nunca se llegó a usar.
 
 // 844. `ubicacionPorDefecto` y `ubicacionConStock` (808) se borraron con el
@@ -4938,7 +4996,10 @@ function renderVentas() {
 
     // 519. data-* attributes para filtrar sin re-renderizar — mismo patrón usado en Inventario
     return `<tr data-cliente="${(v.cliente||'').toLowerCase()}" data-producto="${(v.producto||'').toLowerCase()}" data-canal="${(v.canal||'').toLowerCase()}" data-fecha="${v.fecha||''}" data-total="${v.total||''}">
-      <td style="color:var(--ink-3)">${v.fecha||''}</td>
+      ${/* 857. Quién la metió y a qué hora, debajo de la fecha. Esta línea
+            de 10px es la que faltaba para saber, de un vistazo y sin abrir
+            nada, si el otro ya registró esa venta. */''}
+      <td style="color:var(--ink-3);white-space:nowrap">${v.fecha||''}${firmaVistaHtml(v)}</td>
       <td style="font-weight:500">${v.cliente||'—'}${tipoCompraHtml}</td>
       ${productoCell}
       <td><span class="badge b-${v.canal||'web'}">${v.canal||''}</span></td>
@@ -5577,6 +5638,30 @@ window.guardarVenta = async () => {
       + 'Si es un distribuidor nuevo, créalo con el enlace que está debajo de la lista.');
     return;
   }
+  // 857. ¿Ya la metió el otro? Se pregunta ANTES del contacto y antes de
+  //      tocar el stock, para que si es duplicada no haya que escribir un
+  //      WhatsApp ni se mueva una sola unidad de inventario. Solo en ventas
+  //      nuevas: editar una venta siempre se parece a ella misma.
+  if(!editId) {
+    const gemela = ventaYaRegistrada({ fecha, cliente, total });
+    if(gemela) {
+      const quien = autorCorto(gemela);
+      const cuando = gemela.fecha === fecha ? 'ese mismo día' : 'el ' + fCorta(gemela.fecha);
+      const rastro = quien
+        ? 'La metió ' + quien
+            + (gemela.creadoEnFecha ? ' el ' + fCorta(gemela.creadoEnFecha) : '')
+            + (gemela.creadoEnHora ? ' a las ' + gemela.creadoEnHora : '') + '.'
+        : 'No quedó registrado quién la metió (es una venta vieja).';
+      const seguir = confirm(
+        '⚠️ Puede que esta venta ya esté registrada.\n\n'
+        + (gemela.cliente || 'Cliente') + ' — ' + fmt(ingresoVenta(gemela)) + ', ' + cuando + '.\n'
+        + rastro + '\n\n'
+        + 'Si es la MISMA venta: dale Cancelar y cierra el modal sin guardar.\n'
+        + 'Si de verdad es otra venta distinta: dale Aceptar y se registra igual.');
+      if(!seguir) return;
+    }
+  }
+
   // 842. Contacto: se valida ANTES de tocar el stock, para no dejar nada a
   //      medias si falta el WhatsApp. Solo se exige en ventas nuevas.
   const contacto = leerContactoVenta('v', cliente, canal, !editId);
@@ -5693,18 +5778,44 @@ window.guardarVenta = async () => {
     }
 
     // Notificación
+    // 857. La notificación ahora dice QUIÉN la registró. Es el aviso más
+    //      temprano posible: al otro socio le llega "Nueva venta · Jero"
+    //      antes de que abra la app, así que ya no la mete otra vez.
+    const yo = autorCorto({ creadoPor: usuarioActual?.nombre });
+    const firma = yo ? ' · ' + yo : '';
     if(editId)
-      await pushNotif('✏️ Venta editada', (cliente?cliente+' — ':'') + fmt(total), 'venta', {seccion:'ventas'});
+      await pushNotif('✏️ Venta editada', (cliente?cliente+' — ':'') + fmt(total) + firma, 'venta', {seccion:'ventas'});
     else if(saldo > 0)
-      await pushNotif('💳 Venta a crédito', (cliente||'Cliente') + ' debe ' + fmt(saldo), 'credito', {seccion:'deudores'});
+      await pushNotif('💳 Venta a crédito', (cliente||'Cliente') + ' debe ' + fmt(saldo) + firma, 'credito', {seccion:'deudores'});
     else
-      await pushNotif('💰 Nueva venta', (cliente?cliente+' — ':'') + fmt(total), 'venta', {seccion:'ventas'});
+      await pushNotif('💰 Nueva venta', (cliente?cliente+' — ':'') + fmt(total) + firma, 'venta', {seccion:'ventas'});
 
     // 765. Aquí salía una notificación de stock bajo tras la venta. Ya no.
   }
   await guardarContactoDeVenta(cliente, contacto);   // 842
   closeModal('modal-venta');
 };
+
+// 857. Mismo candado que el abono (856), y por la misma razón: guardar una
+//      venta tarda lo suyo (FIFO, stock, bitácora, notificación), el botón
+//      se queda ahí quieto y el dedo vuelve a tocar. Mientras se está
+//      guardando, el segundo toque no hace nada, y el botón lo dice.
+let guardandoVenta = false;
+{
+  const guardarVentaUnaVez = window.guardarVenta;
+  window.guardarVenta = async () => {
+    if(guardandoVenta) return;
+    guardandoVenta = true;
+    const btn = document.getElementById('btn-guardar-venta');
+    const textoBtn = btn ? btn.textContent : '';
+    if(btn) { btn.disabled = true; btn.textContent = 'Guardando…'; }
+    try { await guardarVentaUnaVez(); }
+    finally {
+      guardandoVenta = false;
+      if(btn) { btn.disabled = false; btn.textContent = textoBtn; }
+    }
+  };
+}
 
 // ============================================================
 // 118. SISTEMA DE ABONOS
@@ -5754,7 +5865,10 @@ window.verHistorialAbonos = (ventaId) => {
       <div>
         <div style="font-size:12px;font-weight:600;color:var(--ink)">Abono #${i+1} — ${a.fecha||''}</div>
         ${a.nota ? `<div style="font-size:11px;color:var(--ink-3);margin-top:2px">${a.nota}</div>` : ''}
-        <div style="font-size:11px;color:var(--ink-3);margin-top:2px">${mpIco[a.metodoPago||'efectivo']||'💵'} ${a.metodoPago||'Efectivo'}</div>
+        <div style="font-size:11px;color:var(--ink-3);margin-top:2px">${mpIco[a.metodoPago||'efectivo']||'💵'} ${a.metodoPago||'Efectivo'}${
+          /* 857. Quién registró el abono, al lado del método de pago. */
+          autorCorto(a) ? ' · ' + autorCorto(a) + (a.creadoEnHora ? ' ' + a.creadoEnHora : '') : ''
+        }</div>
       </div>
       <div style="font-size:15px;font-weight:700;color:var(--green)">${fmt(a.valor)}</div>
     </div>`).join('')
@@ -5842,7 +5956,13 @@ window.guardarAbono = async () => {
     valor,
     nota: document.getElementById('ab-nota').value || '',
     // 227. Guardamos el método de pago del abono
-    metodoPago: metodoPagoAbono
+    metodoPago: metodoPagoAbono,
+    // 857. Y quién lo registró. La venta ya estaba firmada desde el 785,
+    //      pero los abonos no, y Ángel dijo exactamente eso: "no sé si él
+    //      ya registró ese abono". Ahora cada abono lleva su autor y su
+    //      hora, y se ven en 📋 Abonos. Los abonos viejos no la tienen y no
+    //      se les inventa: salen sin firma.
+    ...firmaRegistro()
   }];
 
   // 125. Actualizamos la venta en Firebase con el nuevo saldo y lista de abonos
@@ -5864,8 +5984,11 @@ window.guardarAbono = async () => {
   });
 
   // 126. Notificamos al otro socio del abono recibido
+  // 857. Con el nombre de quien lo registró, igual que la venta.
+  const quienAbono = autorCorto({ creadoPor: usuarioActual?.nombre });
   await pushNotif('💳 Abono recibido',
-    `${venta.cliente||'Cliente'} abonó ${fmt(valor)} — saldo: ${fmt(nuevoSaldo)}`,
+    `${venta.cliente||'Cliente'} abonó ${fmt(valor)} — saldo: ${fmt(nuevoSaldo)}`
+      + (quienAbono ? ' · ' + quienAbono : ''),
     'abono', {seccion:'ventas', id:abonoVentaId});
 
   closeModal('modal-abono');

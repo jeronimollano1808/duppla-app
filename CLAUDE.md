@@ -1557,5 +1557,38 @@ Se escribió directo en Firestore (`lotes` y `costo` promedio), sin apunte en la
 **Arreglo de datos Crisp Bar (31 oct 2026, aprobado por Jero).** Ventas del ciclo de octubre con los pesos de más del 853, llevadas al total redondo con apunte en la bitácora: GREEN ROOTS y RAICES $190.008 → $190.000, JUANCHO JARDINES $100.008 → $100.000, GO UP GYM $95.004 → $95.000, AIDE RUIZ $515.004 → $515.000 (y se quitó el abono duplicado: queda $195.000 + $70.000, saldo $250.000), PAOLA BUILES $142.488 → $142.500 (18 barras = caja y media).
 
 
+### 14.52 La misma venta registrada dos veces (comentario 857) — 3 nov 2026
+
+Ángel: *"cuando yo abro la app, nos dijeron, puede estar en su casa y vamos a registrar la misma venta. Yo necesito que sea mucho más entendible qué ventas se han registrado ya... **y no quiero que llenes otra pestaña de información**"*.
+
+Lo raro del caso: la app **ya guardaba** quién registró cada venta y a qué hora (`firmaRegistro`, 785) y no lo mostraba en ninguna parte. `creadoEnHora` se escribía en cada venta desde el 785 y **no se leía ni una sola vez** en 15.700 líneas; `creadoPor` solo se leía dentro de `resumenDelMes`. Así que no hacía falta una pestaña nueva: hacía falta sacar a la vista lo que ya estaba escrito. Tres piezas:
+
+**1. La firma, debajo de la fecha de cada venta.** En la tabla de Ventas, la celda de fecha lleva ahora una segunda línea de 10,5px: `Jero · 14:37`. Si la venta se metió un día distinto al de la venta (se registró atrasada), la hora sola engañaría —parecería la hora de la venta—, así que ahí dice `Angel · metida 6 oct`. Las ventas viejas sin firma **no muestran nada**: no se les inventa un autor, y un "Sin asignar" repetido en veintitrés filas es ruido, no información.
+
+- `autorCorto(reg)` → primera palabra del nombre, máximo 12 caracteres (las cuentas se llaman por el correo: "Jeronimollano1808").
+- `firmaVistaHtml(reg)` → el `<div>` de la segunda línea, o `''` si no hay firma.
+
+**2. Aviso antes de guardar si ya hay una venta igual.** `ventaYaRegistrada({fecha, cliente, total})` **reusa el detector del importador** (710/711) en vez de escribir uno nuevo, a propósito: dos criterios distintos de "es la misma venta" se contradicen solos. Criterio: `clientesSimilares` (nombre parecido, no idéntico) + plata dentro de `max(1000, 1%)`, el mismo día o con la fecha corrida hasta 3 días. Si encuentra algo, `guardarVenta` saca un `confirm` que dice **quién** la metió y **cuándo**:
+
+```
+⚠️ Puede que esta venta ya esté registrada.
+
+CRISP BAR — $195.000, ese mismo día.
+La metió Jeronimollan el 7 oct a las 14:37.
+```
+
+- **Avisa, no bloquea** (misma regla del 813): dos pedidos iguales el mismo día al mismo cliente existen de verdad. El que manda es el que está vendiendo.
+- Se pregunta **antes** del contacto (842) y **antes** de tocar el stock, para que una venta duplicada no obligue a escribir un WhatsApp ni mueva una sola unidad de inventario.
+- Solo en ventas nuevas: editar una venta siempre se parece a ella misma.
+
+**3. El doble toque.** `guardarVenta` queda envuelto en `guardandoVenta`, igual que el abono en el 856 y por la misma razón: guardar tarda lo suyo (FIFO, stock, bitácora, notificación), el botón se queda quieto y el dedo vuelve a tocar. Mientras se guarda, el segundo toque no hace nada y el botón dice "Guardando…".
+
+**Y de paso, los abonos.** Ángel: *"no sé si él ya registró, si no ha registrado ese abono"*. Cada abono nuevo guarda `...firmaRegistro()` dentro de su entrada del array `abonos`, y en 📋 Abonos se ve `💵 efectivo · Jero 14:37`. Los abonos viejos no la tienen y no se les inventa.
+
+**Las notificaciones dicen quién.** `pushNotif` de venta nueva, venta a crédito, venta editada y abono recibido llevan ` · Jero` al final. Es el aviso más temprano posible: al otro socio le llega al celular **antes** de que abra la app, así que ya no la mete otra vez.
+
+**Lo que NO se hizo:** ninguna pestaña nueva, ningún tablero de "actividad reciente" aparte (la bitácora del 785 ya existe y Ángel pidió explícitamente no llenar otra pantalla), y no se bloquea ningún guardado.
+
+
 ---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*
