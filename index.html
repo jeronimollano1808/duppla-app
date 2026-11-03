@@ -5863,9 +5863,12 @@ function cuentaDe(cliente) {
     : (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0);
   const abonables = suyas.filter(v => !cierreDeFecha(v.fecha)).sort(porFecha);
   const bloqueadas = suyas.filter(v => cierreDeFecha(v.fecha)).sort(porFecha);
+  const todas = [...suyas].sort(porFecha);
   return {
     cliente,
     abonables, bloqueadas,
+    pendientes: todas.length,
+    desde: todas[0]?.fecha || '',
     total: suyas.reduce((s, v) => s + saldoReal(v), 0),
     maximo: abonables.reduce((s, v) => s + saldoReal(v), 0),
     bloqueado: bloqueadas.reduce((s, v) => s + saldoReal(v), 0)
@@ -5984,8 +5987,8 @@ window.abrirAbonoCuenta = (cliente) => {
   document.getElementById('abono-titulo').textContent = 'Abono — ' + cliente;
   document.getElementById('abono-resumen').innerHTML =
     '<div style="font-size:15px;font-weight:700">Debe ' + fmt(c.total) + '</div>'
-    + '<div style="margin-top:2px">' + c.abonables.length + ' venta(s) pendiente(s)'
-      + ' · desde ' + fCorta(c.abonables[0].fecha) + '</div>'
+    + '<div style="margin-top:2px">' + c.pendientes + ' venta(s) pendiente(s)'
+      + (c.desde ? ' · desde ' + fCorta(c.desde) : '') + '</div>'
     + (c.bloqueado > 0
         ? '<div style="margin-top:6px;font-size:11.5px;line-height:1.45">⚠️ ' + fmt(c.bloqueado)
           + ' de esa deuda está en un mes ya cerrado y no entra en este abono.'
