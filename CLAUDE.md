@@ -1672,5 +1672,21 @@ onAuthStateChanged(auth, async user => {
 **Lo que NO se hizo, y es el siguiente paso si vuelve a pasar:** activar la **persistencia local de Firestore** (`persistentLocalCache`), que haría que la app abra al instante con los datos de la última vez y luego se actualice. Es la cura de fondo para la señal mala. No se activó a ciegas porque cambia cómo se comportan las escrituras sin red (un `await addDoc` sin conexión **no resuelve** hasta que el servidor confirma, así que guardar podría parecer colgado) y eso hay que probarlo con Ángel delante, no a distancia.
 
 
+### 14.56 El canal, sin valor por defecto (comentario 861) — 3 nov 2026
+
+Ángel: *"coloca que el canal también sea con selector, porque a veces lo llenamos de afán y lo podemos colocar en otro que no sea y no nos avisa. Que sea de selector y que no nos deje guardar si no lo seleccionamos"*.
+
+Era un `<select>` que arrancaba en **"Venta directa"**. Un desplegable con un valor ya puesto no se lee: se pasa por encima. La venta quedaba en el canal equivocado y **nadie se enteraba nunca**, porque no fallaba nada — la venta queda perfecta, solo que contada en el canal que no es, y eso envenena en silencio el reparto por canal del Dashboard y el historial de los distribuidores. Es el mismo tipo de error del 657/658 (el selector "pegado" del modal reutilizado), pero por la otra vía: ahí el valor sobraba de la venta anterior, aquí venía de fábrica.
+
+**Los dos cambios, y hacen falta los dos:**
+
+1. **Selector segmentado** (`.seg`, del 859), con las tres opciones a la vista: Página web · Directa · Distribuidor. Se ve cuál está escogida sin abrir nada.
+2. **Arranca sin nada escogido y sin canal no se guarda.** Esto es lo que de verdad resuelve el problema: que el formulario **no tenga una respuesta por defecto** es justo lo que obliga a mirarlo. El valor por defecto cómodo era el error.
+
+**Detalle de implementación:** `v-canal` sigue existiendo, ahora como `<input type="hidden">`. A propósito: todo lo que ya leía o escribía ese id —`guardarVenta`, `revisarContactoVenta`, `editarVentaMultiple`— sigue funcionando sin tocarse. `setCanalVenta(canal)` escribe el input, marca el segmento y llama a `toggleDistribuidorField`; con `''` deja todo sin escoger. `abrirModalVenta` llama a `setCanalVenta('')`; `editarVentaMultiple`, a `setCanalVenta(venta.canal || 'directo')`.
+
+**No se tocó el canal del modal de editar una venta de un solo producto** (`ev-canal`): ahí el valor que se ve es el que la venta ya tiene, así que no existe el "no me di cuenta de que venía puesto".
+
+
 ---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*

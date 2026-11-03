@@ -1778,14 +1778,28 @@ button.lista-fila:active{background:var(--border)}
       <button class="modal-close" onclick="closeModal('modal-venta')">✕</button>
     </div>
     <input type="hidden" id="v-edit-id" value="">
-    <div class="f-row">
-      <div class="f-group"><label class="f-label">Fecha *</label><input type="date" id="v-fecha" class="f-input"></div>
-      <div class="f-group"><label class="f-label">Canal</label>
-        <select id="v-canal" class="f-input" onchange="toggleDistribuidorField(this.value)">
-          <option value="web">Página web</option>
-          <option value="directo">Venta directa</option>
-          <option value="distribuidor">Distribuidor</option>
-        </select>
+    <div class="f-group"><label class="f-label">Fecha *</label><input type="date" id="v-fecha" class="f-input"></div>
+    <!--
+         861. El canal era un <select> que arrancaba en "Venta directa". Ángel:
+         "a veces lo llenamos de afán y lo podemos colocar en otro que no sea y
+         no nos avisa". Y así era: un desplegable con un valor ya puesto no se
+         lee, se pasa por encima. La venta quedaba en el canal equivocado y
+         nadie se enteraba, porque nada fallaba.
+
+         Dos cambios y el error desaparece:
+           · Pasa a selector segmentado: las tres opciones a la vista, se ve
+             cuál está escogida sin abrir nada.
+           · ARRANCA SIN NADA ESCOGIDO, y sin canal no se guarda. Que el
+             formulario no tenga una respuesta por defecto es justo lo que
+             obliga a mirarlo. El valor por defecto cómodo era el error.
+    -->
+    <div class="f-group">
+      <label class="f-label">Canal *</label>
+      <input type="hidden" id="v-canal" value="">
+      <div class="seg">
+        <button type="button" id="cn-web" aria-pressed="false" onclick="setCanalVenta('web')">Página web</button>
+        <button type="button" id="cn-directo" aria-pressed="false" onclick="setCanalVenta('directo')">Directa</button>
+        <button type="button" id="cn-distribuidor" aria-pressed="false" onclick="setCanalVenta('distribuidor')">Distribuidor</button>
       </div>
     </div>
 
@@ -5248,7 +5262,6 @@ window.abrirModalVenta = () => {
     //      distribuidor quedaba vinculada a ese distribuidor sin que se viera.
     //      Mismo patrón del bug 12 (selector pegado en Gastos). Todo modal
     //      reutilizado crear/editar debe resetear TODOS sus campos aquí.
-    document.getElementById('v-canal').value = 'directo';
     document.getElementById('v-cliente').value = '';
     document.getElementById('v-nota').value = '';
     // 344. Ocultamos campo distribuidor al abrir el modal
@@ -5264,7 +5277,7 @@ window.abrirModalVenta = () => {
     if(cliAviso) cliAviso.style.display = 'none';
     actualizarSugerenciasCliente();
     resetContactoVenta('v');   // 842
-    toggleDistribuidorField('directo');
+    setCanalVenta('');         // 861. sin canal escogido: hay que mirarlo
     // 859. El contacto arranca escondido (no hay nombre todavía) y el pago
     //      arranca en "Pagó todo", que es como quedan nueve de cada diez.
     revisarContactoVenta();
@@ -5760,6 +5773,20 @@ window.calcSaldo = () => {
   }
 };
 
+// 861. setCanalVenta — el canal, ahora segmentado. El `v-canal` sigue siendo
+//      un input (oculto) a propósito: todo lo que ya leía o escribía ese id
+//      —guardarVenta, revisarContactoVenta, editarVentaMultiple— sigue
+//      funcionando sin tocarse. Se pasa '' para dejarlo sin escoger.
+window.setCanalVenta = (canal) => {
+  const campo = document.getElementById('v-canal');
+  if(campo) campo.value = canal || '';
+  ['web','directo','distribuidor'].forEach(k => {
+    const b = document.getElementById('cn-' + k);
+    if(b) b.setAttribute('aria-pressed', String(k === canal));
+  });
+  toggleDistribuidorField(canal || '');
+};
+
 // 859. El bloque de contacto aparece cuando hay un nombre escrito, y no antes.
 //      También lo llama toggleDistribuidorField: a un distribuidor no se le
 //      pide contacto porque su teléfono vive en Distribuidores (842).
@@ -5806,6 +5833,14 @@ window.guardarVenta = async () => {
   if(!exigirMesAbierto(fecha, 'registrar ni editar una venta')) return;
   if(ventaOriginal && !exigirMesAbierto(ventaOriginal.fecha, 'editar una venta')) return;
   const canal = document.getElementById('v-canal').value;
+  // 861. Sin canal no se guarda. No hay valor por defecto a propósito: el
+  //      defecto cómodo era justo el error —la venta se iba como "directa"
+  //      sin que nadie la hubiera mirado— y de ese no avisa nada después,
+  //      porque la venta queda perfecta, solo que en el canal equivocado.
+  if(!canal) {
+    alert('Escoge el canal de la venta: Página web, Directa o Distribuidor.');
+    return;
+  }
   const total = Number(document.getElementById('v-total').value);
   const cliente = document.getElementById('v-cliente').value;
   const nota = document.getElementById('v-nota').value;
@@ -6583,10 +6618,9 @@ window.editarVentaMultiple = (id) => {
     prepararLineasVenta();
 
     document.getElementById('v-fecha').value = venta.fecha || today();
-    document.getElementById('v-canal').value = venta.canal || 'directo';
     document.getElementById('v-cliente').value = venta.cliente || '';
     document.getElementById('v-nota').value = venta.nota || '';
-    toggleDistribuidorField(venta.canal);
+    setCanalVenta(venta.canal || 'directo');   // 861. marca el segmento y llama a toggleDistribuidorField
     resetContactoVenta('v');          // 842. Lo que tenga guardado ese cliente
     precargarContactoVenta('v');
     // 659. FIX — si la venta que editamos NO es de distribuidor hay que
