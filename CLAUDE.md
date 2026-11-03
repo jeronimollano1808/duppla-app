@@ -1611,5 +1611,35 @@ La metió Jeronimollan el 7 oct a las 14:37.
 **Lo demás.** Una entrada de bitácora por abono, con la deuda antes y después y el reparto completo. Una sola notificación: "AIDE RUIZ abonó $300.000 — debe $200.000 · Jero". Y el candado de doble toque del 856 lo cubre, porque `guardarAbonoCuenta` cuelga del mismo `window.guardarAbono` envuelto.
 
 
+### 14.54 La pantalla de registrar venta (comentario 859) — 3 nov 2026
+
+Ángel: *"el tablero de registrar una venta tiene muchos botones abajo y no se logra ver bien qué es en sí. Entonces, quiero que sea mucho más intuitivo... que se noten bien los botones"*. Y después, por escrito, seis cosas concretas. Están todas aquí.
+
+**1. El control segmentado — `.seg` (CSS nuevo).** *"Que los 'escoge uno' dejen de parecer botones"*. El problema era de dibujo, no de lógica: tres rectángulos sueltos, del mismo tamaño, con borde cada uno, se leen como **tres cosas que hacer**. Un grupo de opciones excluyentes es **una sola pieza partida en pedazos**, con el escogido relleno. Se aplicó al método de pago (nueva venta y edición) y al tipo de precio de cada línea. El estado vive en `aria-pressed` —lo pinta el CSS y además lo dice el lector de pantalla— en vez de seis asignaciones de `style` desde JS. Del tipo de precio se fue el color (azul/ámbar/verde): no significaban nada, y el 835 ya había dejado la regla.
+
+**2. Fuera "Cancelar" del pie.** La ✕ de arriba ya cierra. Queda un solo botón, ancho completo.
+
+**3. El buscador no muestra nada hasta que se escribe.** *"EL BUSCAR PRODUCTO QUE SEA EL BUSCADOR Y QUE PREVIAMENTE NO TENGA VARIOS ABIERTOS"*. Sin búsqueda, `contenidoLineaVenta` pintaba el catálogo **entero** en una caja con scroll — y con tres productos en la venta eran tres catálogos abiertos a la vez, cada uno con su barra. Un buscador que empieza mostrándolo todo no es un buscador: es una lista.
+
+**4. El contacto aparece cuando hay nombre.** *"Que los datos del cliente no aparezca regado el formulario sino que se aparezca cuando se esté llenando"*. `v-contacto-grupo` arranca oculto y lo revela `revisarContactoVenta()` cuando `v-cliente` tiene 2+ caracteres (y el canal no es distribuidor — su teléfono vive en Distribuidores, 842). De paso se arregló algo que venía mal del 842: una venta **sin nombre** exigía el WhatsApp igual, y para salir del paso tocaba marcar "no quiso dar su WhatsApp" de alguien que ni existía. `leerContactoVenta` ahora se sale temprano si no hay nombre: un teléfono se guarda pegado a un nombre (`guardarContactoDeVenta` ya se salía), así que pedirlo antes era pedir un dato que no había dónde guardar.
+
+**5. Fuera el mixto.** *"QUITA EL MIXTO"*. Partir un pago en efectivo + transferencia costaba dos campos permanentes a todo el mundo. Se quitó del formulario de registro **y del de edición**: si no se puede crear una venta mixta, poder convertir una en mixta desde la edición solo reintroduce el dato por la puerta de atrás.
+- **No se reescribe la historia.** Las ventas que ya son mixtas se siguen viendo como mixtas en Ventas, con su desglose. Al editarlas, el desglose se conserva tal cual (`guardarVenta` lo toma de `ventaOriginal` en vez de leer unos campos que ya no existen) y se muestra de solo lectura, con un aviso de que escoger otro método lo borra. Ningún botón queda marcado cuando el método es mixto: marcar "efectivo" sería mentir.
+- `calcMixtoVenta` y `calcMixtoEdit` se borraron. El modal de Combos conserva el suyo: esa pantalla salió del menú en el 816.
+
+**6. El pago: primero cómo quedó, después cuánto.** *"El pago que no diga 'pagó ahora' sino que se registre, y el saldo pendiente o el abono completo que uno sepa cuando registre y no que esté abierto previamente"*. Había dos casillas abiertas desde el primer segundo —"Pagó ahora" y un "Saldo pendiente" de solo lectura, en gris— que había que interpretar. Ahora:
+
+| | |
+|---|---|
+| **Pagó todo** (por defecto) | No pide escribir nada. `v-pagado` sale del total, y **se vuelve a sacar del total** si después se agrega otro producto — ahí se colaba el error de nacer con un saldo que nadie debía. |
+| **Abonó una parte** | Aparece un solo campo, vacío y con el foco puesto. |
+| **Queda debiendo** | `v-pagado` en cero, y el bloque "con qué pagó" **desaparece**: no hay método de pago de una plata que no entró. |
+
+- La casilla "Saldo pendiente" se fue: era un input de solo lectura, la forma de un campo para algo que es un resultado. El monto ahora se dice con palabras debajo ("⚡ Abonó $40.000 — queda debiendo $55.000"). Esto revierte en parte al 657, que había recortado esos mensajes **porque el monto se veía en la casilla de al lado**; sin la casilla, el monto vuelve al texto.
+- Funciones: `estadoPagoVenta` (variable), `setEstadoPagoVenta()`, y `calcSaldo` reescrito. `editarVentaMultiple` deduce el estado de lo que la venta ya tiene (`pagado >= total` → todo; `pagado > 0` → parte; si no → crédito). **Ojo con el orden ahí:** `setEstadoPagoVenta` llama a `calcSaldo`, y con `'todo'` `calcSaldo` reescribe `v-pagado` con el total; por eso el valor guardado se pone **después**, y solo en el caso `'parte'`.
+
+**Lo que NO se tocó:** el reparto FIFO, el precio por caja (853), el candado de mes cerrado, el aviso de venta duplicada (857) ni el candado de doble toque. El modal de editar una venta de **un solo producto** (`modal-editar-venta`) solo perdió el mixto: su "Pagado / Saldo pendiente" sigue como lo dejó el 850, porque ahí sí se corrigen datos a mano y el saldo deducido es lo que se quería.
+
+
 ---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*

@@ -811,6 +811,24 @@ body.solo-lectura .barra-sesion{background:var(--blue-bg)}
 .modal-close:active{transform:scale(.9)}
 .modal-footer{display:flex;gap:8px;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)}
 
+/* 859. "ESCOGE UNO" — el control segmentado.
+   Ángel: "que los 'escoge uno' dejen de parecer botones". Tenía razón y el
+   problema era de dibujo, no de lógica: tres rectángulos sueltos del mismo
+   tamaño, con borde cada uno, se leen como tres COSAS QUE HACER. Un grupo de
+   opciones excluyentes es UNA pieza partida en pedazos, con el escogido
+   relleno: ahí se lee que hay que escoger, no que hay tres acciones.
+   El estado vive en aria-pressed (lo pinta el CSS y además lo dice el lector
+   de pantalla), no en seis asignaciones de style desde JS. */
+.seg{display:flex;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:var(--surface)}
+.seg > button{flex:1;display:block;padding:9px 6px;border:none;background:none;cursor:pointer;
+  font-family:inherit;font-size:12.5px;font-weight:500;color:var(--ink-2);line-height:1.25;
+  transition:background .12s,color .12s}
+.seg > button + button{border-left:1px solid var(--border)}
+.seg > button[aria-pressed="true"]{background:var(--ink);color:var(--on-ink);font-weight:600}
+.seg > button .seg-sub{display:block;font-size:11px;font-weight:600;opacity:.72;margin-top:2px}
+.seg-label{display:block;font-size:11px;font-weight:600;color:var(--ink-3);
+  text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
+
 /* 657. Piloto "minimalista" — más compacto y con menos texto de apoyo.
    Escopado solo a #modal-venta a propósito: si el resultado convence, se
    replica el mismo criterio en el resto de modales (Pedidos, Gastos,
@@ -1825,7 +1843,7 @@ button.lista-fila:active{background:var(--border)}
          lista (siempre entra gente nueva) pero evita que el mismo cliente quede
          como "ISABELLA CERTUCHE" y "CERTUCHE" por escribirlo distinto. -->
     <div class="f-group"><label class="f-label">Cliente</label>
-      <input type="text" id="v-cliente" class="f-input" placeholder="Nombre del cliente" list="dl-clientes-venta" autocomplete="off" oninput="revisarClienteParecido()">
+      <input type="text" id="v-cliente" class="f-input" placeholder="Nombre del cliente" list="dl-clientes-venta" autocomplete="off" oninput="revisarClienteParecido();revisarContactoVenta()">
       <datalist id="dl-clientes-venta"></datalist>
       <div id="v-cliente-aviso" style="font-size:11px;color:var(--ink-3);margin-top:4px;display:none"></div>
     </div>
@@ -1836,7 +1854,12 @@ button.lista-fila:active{background:var(--border)}
          si el cliente ya lo tiene guardado, así a quien recompra no se le pide
          dos veces. No aparece con canal distribuidor (su teléfono vive en
          Distribuidores). -->
-    <div id="v-contacto-grupo">
+    <!-- 859. Arranca escondido. Ángel: "que los datos del cliente no aparezca
+         regado el formulario sino que se aparezca cuando se esté llenando".
+         Aparece en cuanto hay un nombre escrito (ver revisarContactoVenta):
+         sin nombre no hay a quién pegarle un teléfono, así que pedirlo antes
+         era pedir un dato que no se podía guardar. -->
+    <div id="v-contacto-grupo" style="display:none">
       <div class="f-group">
         <label class="f-label">WhatsApp del cliente *</label>
         <input type="tel" inputmode="numeric" id="v-wa" class="f-input" placeholder="3001234567" autocomplete="off" oninput="this.dataset.auto=''">
@@ -1851,54 +1874,61 @@ button.lista-fila:active{background:var(--border)}
       </label>
     </div>
 
-    <!-- Pago -->
+    <!-- Pago
+         859. Aquí había CUATRO casillas abiertas desde el primer segundo (tres
+         métodos de pago, el desglose mixto, "Pagó ahora" y "Saldo pendiente")
+         y Ángel no lograba leer qué era qué: "tiene muchos botones abajo y no
+         se logra ver bien qué es en sí".
+
+         Lo que se fue y por qué:
+           · El MIXTO. "QUITA EL MIXTO". Partir un pago en efectivo +
+             transferencia se usó poquísimo y costaba dos campos permanentes a
+             todo el mundo. Las ventas viejas que son mixtas se siguen viendo
+             como mixtas en Ventas y conservan su desglose al editarlas
+             (ver guardarVenta): no se reescribe la historia, solo se deja de
+             ofrecer para lo nuevo.
+           · "Saldo pendiente" como CASILLA. Era un input de solo lectura, en
+             gris, que nadie podía llenar: la forma de un campo para algo que
+             es un resultado. Ahora el saldo se dice con palabras, debajo.
+           · "Pagó ahora". Ángel: "que no diga 'pagó ahora' sino que se
+             registre... y no que esté abierto previamente". Primero se dice
+             CÓMO quedó la venta —pagó todo, abonó una parte, queda debiendo—
+             y solo si abonó una parte aparece el campo para el monto. El caso
+             normal (pagó todo) no pide escribir nada.
+         Y "con qué pagó" no aparece cuando no pagó nada: no hay método de pago
+         de una plata que no entró. -->
     <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:10px;margin-bottom:10px">
-      <div style="font-size:11px;font-weight:600;color:var(--ink-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Pago</div>
-      <div class="f-group">
-        <div style="display:flex;gap:8px">
-          <button type="button" id="mp-efectivo" onclick="setMetodoPago('efectivo')"
-            style="flex:1;padding:8px;border-radius:var(--radius);border:2px solid var(--ink);background:var(--ink);color:var(--on-ink);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">
-            💵 Efectivo
-          </button>
-          <button type="button" id="mp-transferencia" onclick="setMetodoPago('transferencia')"
-            style="flex:1;padding:8px;border-radius:var(--radius);border:2px solid var(--border);background:var(--surface-2);color:var(--ink-2);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">
-            📲 Transferencia
-          </button>
-          <button type="button" id="mp-mixto" onclick="setMetodoPago('mixto')"
-            style="flex:1;padding:8px;border-radius:var(--radius);border:2px solid var(--border);background:var(--surface-2);color:var(--ink-2);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">
-            🔀 Mixto
-          </button>
-        </div>
+      <span class="seg-label">¿Cómo quedó el pago?</span>
+      <div class="seg">
+        <button type="button" id="ep-todo" aria-pressed="true" onclick="setEstadoPagoVenta('todo')">Pagó todo</button>
+        <button type="button" id="ep-parte" aria-pressed="false" onclick="setEstadoPagoVenta('parte')">Abonó una parte</button>
+        <button type="button" id="ep-credito" aria-pressed="false" onclick="setEstadoPagoVenta('credito')">Queda debiendo</button>
       </div>
-      <!-- 358. Desglose mixto — aparece solo si el método es 'mixto' -->
-      <div class="f-row" id="v-mixto-grupo" style="display:none">
-        <div class="f-group" style="margin-bottom:0">
-          <label class="f-label">💵 Efectivo ($)</label>
-          <input type="number" inputmode="numeric" id="v-mixto-efectivo" class="f-input" placeholder="0" oninput="calcMixtoVenta()">
-        </div>
-        <div class="f-group" style="margin-bottom:0">
-          <label class="f-label">📲 Transferencia ($)</label>
-          <input type="number" inputmode="numeric" id="v-mixto-transferencia" class="f-input" placeholder="0" oninput="calcMixtoVenta()">
-        </div>
+      <div class="f-group" id="v-abono-grupo" style="display:none;margin-top:9px;margin-bottom:0">
+        <label class="f-label">¿Cuánto abonó? ($)</label>
+        <input type="number" inputmode="numeric" id="v-pagado" class="f-input" placeholder="0" oninput="calcSaldo()">
       </div>
-      <div class="f-row">
-        <div class="f-group" style="margin-bottom:0">
-          <label class="f-label">Pagó ahora ($)</label>
-          <input type="number" inputmode="numeric" id="v-pagado" class="f-input" placeholder="0" oninput="calcSaldo()">
-        </div>
-        <div class="f-group" style="margin-bottom:0">
-          <label class="f-label">Saldo pendiente ($)</label>
-          <input type="number" inputmode="numeric" id="v-saldo" class="f-input" readonly style="opacity:.6;cursor:not-allowed;background:var(--amber-bg)">
-        </div>
-      </div>
-      <div id="v-estado-pago" style="margin-top:8px;font-size:12px;color:var(--ink-3)">
+      <div id="v-estado-pago" style="margin-top:8px;font-size:12.5px;color:var(--ink-3)">
         Completa el total
+      </div>
+      <div id="v-metodo-grupo" style="margin-top:12px">
+        <span class="seg-label">Con qué pagó</span>
+        <div class="seg">
+          <button type="button" id="mp-efectivo" aria-pressed="true" onclick="setMetodoPago('efectivo')">💵 Efectivo</button>
+          <button type="button" id="mp-transferencia" aria-pressed="false" onclick="setMetodoPago('transferencia')">📲 Transferencia</button>
+        </div>
+        <!-- 859. Solo se ve al editar una venta vieja que se registró mixta. -->
+        <div id="v-mixto-aviso" style="display:none;font-size:11.5px;color:var(--amber-ink);margin-top:8px;line-height:1.45">
+          🔀 Esta venta se registró como <strong>pago mixto</strong>. Si escoges otro método, su desglose de efectivo y transferencia se pierde.
+        </div>
       </div>
     </div>
     <div class="f-group"><label class="f-label">Nota</label><input type="text" id="v-nota" class="f-input" placeholder="Referencia adicional"></div>
+    <!-- 859. "Cancelar" se fue del pie: la ✕ de arriba ya cierra, y tener dos
+         formas de salir al lado del único botón que importa le quitaba peso.
+         Queda un solo botón, ancho completo, imposible de confundir. -->
     <div class="modal-footer">
-      <button class="btn" onclick="closeModal('modal-venta')">Cancelar</button>
-      <button class="btn btn-lime" id="btn-guardar-venta" onclick="guardarVenta()">Registrar venta</button>
+      <button class="btn btn-lime" id="btn-guardar-venta" style="flex:1" onclick="guardarVenta()">Registrar venta</button>
     </div>
   </div>
 </div>
@@ -1965,33 +1995,33 @@ button.lista-fila:active{background:var(--border)}
       </select>
     </div>
     <div class="f-group"><label class="f-label">Nota</label><input type="text" id="ev-nota" class="f-input" placeholder="Referencia adicional"></div>
-    <!-- 237. Método de pago editable en ventas existentes -->
+    <!-- 237/859. Método de pago editable. El 🔀 Mixto se fue también de aquí:
+         si no se puede crear una venta mixta, tampoco tiene sentido poder
+         convertir una en mixta desde la edición — así no vuelve a entrar un
+         dato que el formulario de registro ya no produce. -->
     <div class="f-group">
       <label class="f-label">Método de pago</label>
-      <div style="display:flex;gap:8px">
-        <button type="button" id="ev-mp-efectivo" onclick="setMetodoPagoEdit('efectivo')"
-          style="flex:1;padding:7px;border-radius:var(--radius);border:2px solid var(--ink);background:var(--ink);color:var(--on-ink);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">
-          💵 Efectivo
-        </button>
-        <button type="button" id="ev-mp-transferencia" onclick="setMetodoPagoEdit('transferencia')"
-          style="flex:1;padding:7px;border-radius:var(--radius);border:2px solid var(--border);background:var(--surface-2);color:var(--ink-2);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">
-          📲 Transferencia
-        </button>
-        <button type="button" id="ev-mp-mixto" onclick="setMetodoPagoEdit('mixto')"
-          style="flex:1;padding:7px;border-radius:var(--radius);border:2px solid var(--border);background:var(--surface-2);color:var(--ink-2);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">
-          🔀 Mixto
-        </button>
+      <div class="seg">
+        <button type="button" id="ev-mp-efectivo" aria-pressed="true" onclick="setMetodoPagoEdit('efectivo')">💵 Efectivo</button>
+        <button type="button" id="ev-mp-transferencia" aria-pressed="false" onclick="setMetodoPagoEdit('transferencia')">📲 Transferencia</button>
       </div>
     </div>
-    <!-- 363. Desglose mixto editable -->
-    <div class="f-row" id="ev-mixto-grupo" style="display:none">
-      <div class="f-group">
-        <label class="f-label">💵 Efectivo ($)</label>
-        <input type="number" inputmode="numeric" id="ev-mixto-efectivo" class="f-input" placeholder="0" oninput="calcMixtoEdit()">
+    <!-- 363/859. El desglose de una venta que YA era mixta: se muestra para
+         que se sepa cómo quedó, pero no se edita. Escoger otro método arriba
+         lo borra, que es exactamente lo que pasa. -->
+    <div id="ev-mixto-grupo" style="display:none">
+      <div style="font-size:11.5px;color:var(--amber-ink);margin-bottom:6px;line-height:1.45">
+        🔀 Esta venta se registró como <strong>pago mixto</strong>. Si escoges efectivo o transferencia arriba, este desglose se pierde.
       </div>
-      <div class="f-group">
-        <label class="f-label">📲 Transferencia ($)</label>
-        <input type="number" inputmode="numeric" id="ev-mixto-transferencia" class="f-input" placeholder="0" oninput="calcMixtoEdit()">
+      <div class="f-row">
+        <div class="f-group">
+          <label class="f-label">💵 Efectivo ($)</label>
+          <input type="number" inputmode="numeric" id="ev-mixto-efectivo" class="f-input" readonly style="opacity:.6;cursor:not-allowed">
+        </div>
+        <div class="f-group">
+          <label class="f-label">📲 Transferencia ($)</label>
+          <input type="number" inputmode="numeric" id="ev-mixto-transferencia" class="f-input" readonly style="opacity:.6;cursor:not-allowed">
+        </div>
       </div>
     </div>
     <!-- 238. Saldo editable para corregir errores o ajustes manuales -->
@@ -3686,6 +3716,14 @@ function leerContactoVenta(prefijo, cliente, canal, exigir) {
   const correo = (document.getElementById(prefijo + '-correo')?.value || '').trim().toLowerCase();
   const sinWa = !!document.getElementById(prefijo + '-sin-wa')?.checked;
   const nombre = String(cliente || '').trim();
+  // 859. Sin nombre no se pide contacto, y no se bloquea la venta por eso.
+  //      Antes una venta sin cliente exigía el WhatsApp igual, y para salir del
+  //      paso tocaba marcar "no quiso dar su WhatsApp" de alguien que ni
+  //      existía. Un teléfono se guarda pegado a un nombre (guardarContactoDeVenta
+  //      ya se sale si no hay nombre), así que pedirlo antes era pedir un dato
+  //      que no había dónde guardar. Desde el 859 el bloque ni siquiera se ve
+  //      hasta que hay nombre, así que exigirlo sería exigir algo invisible.
+  if(!nombre) return { telefono:'', correo:'' };
   if(exigir && !sinWa && !telefono) {
     alert('Falta el WhatsApp del cliente.\n\n'
       + 'Es lo que permite avisarle cuando se le esté acabando el producto. '
@@ -3700,10 +3738,9 @@ function leerContactoVenta(prefijo, cliente, canal, exigir) {
     alert('Ese correo no parece válido. Revísalo o déjalo vacío.');
     return null;
   }
-  if((telefono || correo) && !nombre) {
-    alert('Escribe el nombre del cliente: el WhatsApp y el correo se guardan con su nombre.');
-    return null;
-  }
+  // 859. Aquí había un "escribe el nombre del cliente" para cuando había
+  //      teléfono pero no nombre. Es inalcanzable desde el early return de
+  //      arriba, así que se fue.
   return { telefono, correo };
 }
 
@@ -5084,7 +5121,6 @@ window.abrirModalVenta = () => {
     document.getElementById('btn-guardar-venta').textContent = 'Registrar venta';
     document.getElementById('v-fecha').value = today();
     document.getElementById('v-pagado').value = '';
-    document.getElementById('v-saldo').value = '';
     document.getElementById('v-estado-pago').textContent = 'Completa el total para ver el estado de pago';
     // 821. Ya no hay campos manuales de arriba que resetear (v-prod-manual,
     //      v-cant, v-precio se fueron con el modo manual).
@@ -5114,44 +5150,54 @@ window.abrirModalVenta = () => {
     actualizarSugerenciasCliente();
     resetContactoVenta('v');   // 842
     toggleDistribuidorField('directo');
-    // 362. Reset campos mixto
-    const mixtoGrupo = document.getElementById('v-mixto-grupo');
-    if(mixtoGrupo) mixtoGrupo.style.display = 'none';
-    document.getElementById('v-mixto-efectivo').value = '';
-    document.getElementById('v-mixto-transferencia').value = '';
+    // 859. El contacto arranca escondido (no hay nombre todavía) y el pago
+    //      arranca en "Pagó todo", que es como quedan nueve de cada diez.
+    revisarContactoVenta();
     prepararLineasVenta();   // 821
     setMetodoPago('efectivo');
+    setEstadoPagoVenta('todo');
   }, 30);
 };
 
-// 294. setMetodoPago — toggle método de pago en modal de nueva venta
+// 294/859. setMetodoPago — con qué pagó. El estado vive en aria-pressed y lo
+//          pinta el CSS (.seg), no seis asignaciones de style desde aquí.
 window.setMetodoPago = (tipo) => {
   metodoPagoVenta = tipo; // 303. Guardamos en variable global
-  ['efectivo','transferencia','mixto'].forEach(k => {
+  ['efectivo','transferencia'].forEach(k => {
     const btn = document.getElementById('mp-' + k);
-    if(!btn) return;
-    const activo = k === tipo;
-    btn.style.background = activo ? 'var(--ink)' : 'var(--surface-2)';
-    btn.style.color = activo ? 'var(--on-ink)' : 'var(--ink-2)';
-    btn.style.borderColor = activo ? 'var(--ink)' : 'var(--border)';
+    if(btn) btn.setAttribute('aria-pressed', String(k === tipo));
   });
-  // 359. Mostramos el desglose efectivo/transferencia solo si es mixto
-  const grupo = document.getElementById('v-mixto-grupo');
-  if(grupo) {
-    grupo.style.display = tipo === 'mixto' ? 'flex' : 'none';
-    if(tipo !== 'mixto') {
-      document.getElementById('v-mixto-efectivo').value = '';
-      document.getElementById('v-mixto-transferencia').value = '';
-    }
-  }
+  // 859. 'mixto' ya no se puede escoger, pero sí llega aquí al editar una
+  //      venta vieja que lo era. Ningún botón queda marcado —sería mentir
+  //      diciendo "efectivo"— y en su lugar se explica qué es y qué se pierde.
+  const aviso = document.getElementById('v-mixto-aviso');
+  if(aviso) aviso.style.display = tipo === 'mixto' ? 'block' : 'none';
 };
 
-// 360. calcMixtoVenta — suma efectivo + transferencia y actualiza "Pagó en este momento"
-window.calcMixtoVenta = () => {
-  const ef = Number(document.getElementById('v-mixto-efectivo').value)||0;
-  const tr = Number(document.getElementById('v-mixto-transferencia').value)||0;
-  document.getElementById('v-pagado').value = ef + tr;
+// 859. CÓMO QUEDÓ EL PAGO. Antes esto no se preguntaba: se deducía de dos
+//      casillas abiertas ("Pagó ahora" y un "Saldo pendiente" de solo lectura)
+//      que había que interpretar. Ahora se escoge, y el formulario se abre
+//      solo donde hace falta. 'todo' es lo normal y no pide escribir nada.
+let estadoPagoVenta = 'todo';
+window.setEstadoPagoVenta = (estado) => {
+  estadoPagoVenta = estado;
+  ['todo','parte','credito'].forEach(k => {
+    const b = document.getElementById('ep-' + k);
+    if(b) b.setAttribute('aria-pressed', String(k === estado));
+  });
+  const grupoAbono = document.getElementById('v-abono-grupo');
+  if(grupoAbono) grupoAbono.style.display = estado === 'parte' ? 'block' : 'none';
+  // No hay "con qué pagó" de una plata que no entró.
+  const grupoMetodo = document.getElementById('v-metodo-grupo');
+  if(grupoMetodo) grupoMetodo.style.display = estado === 'credito' ? 'none' : 'block';
+  // El campo se limpia SIEMPRE: al venir de "pagó todo" ya tenía el total
+  //      escrito, y escoger "abonó una parte" para encontrarse el total
+  //      completo en la casilla es justo el malentendido que hay que evitar.
+  //      calcSaldo lo vuelve a llenar en 'todo' y lo deja vacío en 'credito'.
+  const pag = document.getElementById('v-pagado');
+  if(pag) pag.value = '';
   calcSaldo();
+  if(estado === 'parte' && pag) setTimeout(() => pag.focus(), 20);
 };
 
 // 295. setMetodoPagoAbono — toggle en modal de abono
@@ -5167,29 +5213,22 @@ window.setMetodoPagoAbono = (tipo) => {
   });
 };
 
-// 296. setMetodoPagoEdit — toggle en modal de editar venta
+// 296/859. setMetodoPagoEdit — toggle en modal de editar venta. Igual que
+//          setMetodoPago: el estado lo pinta el CSS desde aria-pressed.
 window.setMetodoPagoEdit = (tipo) => {
   metodoPagoEdit = tipo;
-  ['efectivo','transferencia','mixto'].forEach(k => {
+  ['efectivo','transferencia'].forEach(k => {
     const btn = document.getElementById('ev-mp-' + k);
-    if(!btn) return;
-    const activo = k === tipo;
-    btn.style.background = activo ? 'var(--ink)' : 'var(--surface-2)';
-    btn.style.color = activo ? 'var(--on-ink)' : 'var(--ink-2)';
-    btn.style.borderColor = activo ? 'var(--ink)' : 'var(--border)';
+    if(btn) btn.setAttribute('aria-pressed', String(k === tipo));
   });
-  // 364. Mostramos desglose mixto en edición
+  // 364/859. El desglose solo se ve si la venta ya era mixta, y de solo lectura.
   const grupo = document.getElementById('ev-mixto-grupo');
-  if(grupo) grupo.style.display = tipo === 'mixto' ? 'flex' : 'none';
+  if(grupo) grupo.style.display = tipo === 'mixto' ? 'block' : 'none';
 };
 
-// 365. calcMixtoEdit — suma efectivo + transferencia y actualiza pagado en edición
-window.calcMixtoEdit = () => {
-  const ef = Number(document.getElementById('ev-mixto-efectivo').value)||0;
-  const tr = Number(document.getElementById('ev-mixto-transferencia').value)||0;
-  document.getElementById('ev-pagado').value = ef + tr;
-  calcEditSaldo();   // 850
-};
+// 365/859. `calcMixtoEdit` se fue con los campos editables del mixto: sumaba
+//          efectivo + transferencia para llenar "Pagado", y ya no hay nada
+//          que sumar porque el desglose no se escribe.
 
 // 439. setMetodoPagoCombo — toggle método de pago en venta de combo
 window.setMetodoPagoCombo = (tipo) => {
@@ -5263,6 +5302,20 @@ function contenidoLineaVenta(i) {
           + '<input type="number" inputmode="numeric" class="f-input" value="' + subtotalLinea(l) + '" data-idx="' + i + '" data-tipo="total" oninput="actualizarManualLinea(this)" style="font-size:13px;padding:7px 8px;font-weight:700"></div>'
       + '</div>';
     } else if(!l.prodId) {
+      // 859. Mientras no se haya escrito nada, el buscador no muestra nada.
+      //      Ángel: "EL BUSCAR PRODUCTO QUE SEA EL BUSCADOR Y QUE PREVIAMENTE
+      //      NO TENGA VARIOS ABIERTOS, SOLAMENTE CUANDO UNO BUSQUE QUE
+      //      APAREZCA LA COINCIDENCIA". Antes, sin búsqueda, se pintaba el
+      //      catálogo ENTERO en una caja con scroll — y con dos o tres
+      //      productos en la venta eran dos o tres catálogos abiertos a la vez,
+      //      cada uno con su barra de scroll. Un buscador que empieza
+      //      mostrándolo todo no es un buscador: es una lista.
+      if(!busq) {
+        return '<div style="padding:12px 10px;color:var(--ink-3);font-size:12px;text-align:center;line-height:1.5">'
+            + 'Escribe arriba para buscar el producto'
+          + '</div>'
+          + '<button type="button" onclick="activarManualLinea(' + i + ')" style="background:none;border:none;color:var(--blue);cursor:pointer;font-size:11.5px;text-decoration:underline">✏️ No está en la lista — escribirlo a mano</button>';
+      }
       // 433. Lista de resultados agrupados por marca
       let resultados;
       if(prods.length === 0) {
@@ -5286,20 +5339,21 @@ function contenidoLineaVenta(i) {
         //      catálogo, así que dice qué resuelve y no cómo se llama por dentro.
         + '<button type="button" onclick="activarManualLinea(' + i + ')" style="background:none;border:none;color:var(--blue);cursor:pointer;font-size:11.5px;text-decoration:underline">✏️ No está en la lista — escribirlo a mano</button>';
     } else {
-      // Producto seleccionado — botones de tipo de precio
+      // 859. Producto seleccionado — a qué precio. Eran tres recuadros sueltos
+      //      con borde de color cada uno, que se leían como tres acciones.
+      //      Ahora es un control segmentado (.seg): una sola pieza, el precio
+      //      escogido relleno. El color se fue de aquí a propósito —no había
+      //      nada que el azul, el ámbar y el verde significaran, solo eran
+      //      tres colores— y el 835 ya había dejado la regla: color solo donde
+      //      significa algo.
       let tiposBtns = '';
-      [['publico','Público','var(--blue)','var(--blue-bg)'],
-       ['distribuidor','Dist.','var(--amber)','var(--amber-bg)'],
-       ['especial','Especial','var(--green)','var(--green-bg)']
-      ].forEach(function(arr) {
-        const tipo = arr[0], label = arr[1], color = arr[2], bg = arr[3];
-        const activo = l.tipoPrecio === tipo;
+      [['publico','Público'],['distribuidor','Dist.'],['especial','Especial']].forEach(function(arr) {
+        const tipo = arr[0], label = arr[1];
         const precio = tipo==='publico'?prod.pventa:tipo==='distribuidor'?(prod.pdist||0):(prod.pesp||0);
-        tiposBtns += '<button type="button" onclick="seleccionarTipoPrecioLinea(' + i + ',\'' + tipo + '\')" '
-          + 'style="padding:6px 4px;border-radius:6px;border:2px solid ' + (activo?color:'var(--border)') + ';'
-          + 'background:' + (activo?bg:'var(--surface)') + ';cursor:pointer;text-align:center;transition:all .12s">'
-          + '<div style="font-size:9px;font-weight:600;color:' + (activo?color:'var(--ink-3)') + ';text-transform:uppercase">' + label + '</div>'
-          + '<div style="font-size:11px;font-weight:700;color:' + (activo?color:'var(--ink-2)') + '">' + fmtCOP(precio) + '</div>'
+        tiposBtns += '<button type="button" aria-pressed="' + (l.tipoPrecio === tipo) + '" '
+          + 'onclick="seleccionarTipoPrecioLinea(' + i + ',\'' + tipo + '\')" style="padding:6px 4px">'
+          + '<span style="font-size:10px;text-transform:uppercase;letter-spacing:.03em">' + label + '</span>'
+          + '<span class="seg-sub">' + fmtCOP(precio) + '</span>'
           + '</button>';
       });
 
@@ -5315,7 +5369,7 @@ function contenidoLineaVenta(i) {
         + '<span style="font-size:12px;font-weight:600;color:var(--lime);flex:1">' + prod.nombre + '</span>'
         + '<button type="button" onclick="cambiarProductoLinea(' + i + ')" style="background:none;border:none;color:var(--ink-3);cursor:pointer;font-size:11px;text-decoration:underline">Cambiar</button>'
         + '</div>'
-        + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px">' + tiposBtns + '</div>'
+        + '<div class="seg" style="margin-bottom:8px">' + tiposBtns + '</div>'
         + stockHtml
         + '<div style="display:grid;grid-template-columns:80px 1fr 1fr;gap:8px;align-items:end">'
           + '<div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Cant.</label>'
@@ -5562,26 +5616,44 @@ window.calcVentaTotal = () => {
 
 window.calcSaldo = () => {
   const total = Number(document.getElementById('v-total').value)||0;
-  const pagado = Number(document.getElementById('v-pagado').value)||0;
+  const pagInp = document.getElementById('v-pagado');
+  // 859. "Pagó todo" no se escribe: sale del total. Y se vuelve a sacar del
+  //      total si después se agrega otro producto, que es justo donde antes
+  //      se colaba el error —el "pagó ahora" se quedaba con el total viejo y
+  //      la venta nacía con un saldo que nadie debía—.
+  if(pagInp && estadoPagoVenta === 'todo')    pagInp.value = total ? total : '';
+  if(pagInp && estadoPagoVenta === 'credito') pagInp.value = '';
+  const pagado = Number(pagInp?.value)||0;
   const saldo = Math.max(0, total - pagado);
-  document.getElementById('v-saldo').value = saldo > 0 ? saldo : '';
   const estadoEl = document.getElementById('v-estado-pago');
   if(!estadoEl) return;
-  // 657. Mensajes recortados — el monto ya se ve en "Saldo pendiente" justo
-  //      arriba, no hace falta repetirlo en el texto de estado.
+  // 657/859. El 657 recortó estos mensajes porque el monto ya se veía en la
+  //          casilla "Saldo pendiente" de al lado. Esa casilla se fue, así que
+  //          el monto vuelve aquí: es el único sitio donde queda dicho.
   if(total === 0) {
     estadoEl.textContent = 'Completa el total';
     estadoEl.style.color = 'var(--ink-3)';
   } else if(saldo === 0) {
-    estadoEl.innerHTML = '✅ <strong>Pagado completo</strong>';
+    estadoEl.innerHTML = '✅ <strong>Pagado completo</strong> · ' + fmt(total);
     estadoEl.style.color = 'var(--green)';
   } else if(pagado > 0) {
-    estadoEl.innerHTML = '⚡ <strong>Abono parcial</strong>';
+    estadoEl.innerHTML = '⚡ Abonó ' + fmt(pagado) + ' — queda debiendo <strong>' + fmt(saldo) + '</strong>';
     estadoEl.style.color = 'var(--amber)';
   } else {
-    estadoEl.innerHTML = '⚠️ <strong>Pendiente total</strong>';
+    estadoEl.innerHTML = '⚠️ Queda debiendo <strong>' + fmt(saldo) + '</strong>';
     estadoEl.style.color = 'var(--red)';
   }
+};
+
+// 859. El bloque de contacto aparece cuando hay un nombre escrito, y no antes.
+//      También lo llama toggleDistribuidorField: a un distribuidor no se le
+//      pide contacto porque su teléfono vive en Distribuidores (842).
+window.revisarContactoVenta = () => {
+  const grupo = document.getElementById('v-contacto-grupo');
+  if(!grupo) return;
+  const canal = document.getElementById('v-canal')?.value;
+  const nombre = (document.getElementById('v-cliente')?.value || '').trim();
+  grupo.style.display = (canal !== 'distribuidor' && nombre.length >= 2) ? 'block' : 'none';
 };
 
 // 785. Las tres ramas de guardarVenta (manual, un producto, varios) escribían
@@ -5670,9 +5742,15 @@ window.guardarVenta = async () => {
   //      medias si falta el WhatsApp. Solo se exige en ventas nuevas.
   const contacto = leerContactoVenta('v', cliente, canal, !editId);
   if(!contacto) return;
-  // 361. Desglose mixto — solo se guarda si el método es mixto
-  const mixtoEfectivo = metodoPago === 'mixto' ? Number(document.getElementById('v-mixto-efectivo').value)||0 : null;
-  const mixtoTransferencia = metodoPago === 'mixto' ? Number(document.getElementById('v-mixto-transferencia').value)||0 : null;
+  // 361/859. Desglose mixto. El mixto se quitó del formulario, así que ya no
+  //          hay casillas que leer: la única forma de que una venta siga
+  //          siendo mixta es que YA lo fuera y se esté editando. En ese caso
+  //          su desglose se conserva tal cual en vez de borrarse por unos
+  //          campos que dejaron de existir. Si al editarla se cambia el método,
+  //          el desglose se va con él, que es lo que avisa v-mixto-aviso.
+  const eraMixta = metodoPago === 'mixto' && ventaOriginal;
+  const mixtoEfectivo = eraMixta ? (ventaOriginal.mixtoEfectivo ?? null) : null;
+  const mixtoTransferencia = eraMixta ? (ventaOriginal.mixtoTransferencia ?? null) : null;
 
   // 821. Aquí vivía la rama del "modo manual" de arriba: leía v-prod-manual /
   //      v-cant / v-precio y escribía su propio addDoc. Se fue completa con el
@@ -6403,11 +6481,19 @@ window.editarVentaMultiple = (id) => {
     if(selDist) selDist.value = (venta.canal === 'distribuidor' && venta.distribuidorId) ? venta.distribuidorId : '';
 
     setMetodoPago(venta.metodoPago || 'efectivo');
-    const mixtoGrupo = document.getElementById('v-mixto-grupo');
-    if(mixtoGrupo) mixtoGrupo.style.display = venta.metodoPago === 'mixto' ? 'flex' : 'none';
-    document.getElementById('v-mixto-efectivo').value = venta.mixtoEfectivo || '';
-    document.getElementById('v-mixto-transferencia').value = venta.mixtoTransferencia || '';
-    document.getElementById('v-pagado').value = venta.pagado || '';
+    // 859. El estado del pago se deduce de lo que la venta ya tiene, para que
+    //      el formulario se abra en el mismo sitio en que quedó. OJO con el
+    //      orden: setEstadoPagoVenta llama a calcSaldo, y con 'todo' calcSaldo
+    //      reescribe v-pagado con el total — así que el valor guardado se pone
+    //      DESPUÉS, y solo en el caso 'parte', que es el único que lo necesita.
+    const pagadoVenta = Number(venta.pagado || 0);
+    const totalVenta = Number(venta.total || 0);
+    const comoQuedo = (pagadoVenta >= totalVenta && totalVenta > 0) ? 'todo'
+      : pagadoVenta > 0 ? 'parte'
+      : 'credito';
+    setEstadoPagoVenta(comoQuedo);
+    if(comoQuedo === 'parte') document.getElementById('v-pagado').value = pagadoVenta;
+    revisarContactoVenta();   // 859. ya hay nombre: el contacto se muestra
 
     calcVentaTotal();
     calcSaldo();
@@ -11515,9 +11601,9 @@ window.toggleDistribuidorField = (canal) => {
     // 762. Al salir del canal distribuidor se devuelve el control del nombre.
     if(cli) { cli.readOnly = false; cli.style.opacity = ''; }
   }
-  // 842. El contacto se pide a clientes, no a distribuidores.
-  const contacto = document.getElementById('v-contacto-grupo');
-  if(contacto) contacto.style.display = canal === 'distribuidor' ? 'none' : 'block';
+  // 842/859. El contacto se pide a clientes, no a distribuidores — y solo
+  //          cuando ya hay un nombre escrito.
+  revisarContactoVenta();
   actualizarSugerenciasCliente();
 };
 
@@ -11584,6 +11670,7 @@ window.usarClienteExistente = (nombre) => {
   const aviso = document.getElementById('v-cliente-aviso');
   if(aviso) aviso.style.display = 'none';
   precargarContactoVenta('v');   // 842
+  revisarContactoVenta();        // 859
 };
 
 window.abrirNuevoDistribuidor = () => {
