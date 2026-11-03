@@ -2779,7 +2779,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/fireba
 import {
   getFirestore, collection, addDoc, deleteDoc,
   doc, getDoc, getDocs, updateDoc, setDoc, onSnapshot, query, orderBy,
-  serverTimestamp, limit
+  serverTimestamp, limit,
+  // 858. writeBatch: un abono a la cuenta toca VARIAS ventas a la vez. O se
+  //      escriben todas o no se escribe ninguna; plata a medio aplicar es
+  //      peor que plata sin aplicar.
+  writeBatch
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
   getAuth, signInWithEmailAndPassword,
@@ -5827,6 +5831,65 @@ let guardandoVenta = false;
 let abonoVentaId = null; // 119. ID de la venta que se está abonando
 
 // ============================================================
+// 858. ABONO A LA CUENTA — la deuda de una persona es UNA sola.
+//
+// Ángel: "ES UNA MISMA CUENTA, ES DECIR QUE SI LA PERSONA DEBE 500.000 DE
+// DIFERENTES COMPRAS, ABONO 300.000 ENTONCES QUEDA DEBIENDO 200.000, SIN
+// IMPORTAR A CUÁL LE VA A ABONAR POR POQUITOS, SINO VIENDO LA DEUDA COMO
+// UN TODO".
+//
+// Y tiene razón: cuando alguien le pasa $300.000 no está pagando la venta
+// del 7 de octubre, está bajando lo que debe. Pero por dentro la plata SÍ
+// tiene que quedar escrita en ventas concretas, porque de ahí salen el
+// saldo, la caja, el margen y los meses cerrados. Así que la app reparte
+// sola, de la venta más vieja a la más nueva, y Ángel no escoge nada.
+//
+// Lo único que se le muestra del reparto es una línea chiquita, porque
+// esconderlo del todo sería mentir sobre lo que la app hizo con la plata.
+// ============================================================
+let abonoCuenta = null;  // { cliente, abonables:[], bloqueadas:[], maximo }
+
+// 858. Las ventas con saldo de una persona, separadas en las que SÍ pueden
+//      recibir plata y las que están dentro de un mes ya cerrado (784). Una
+//      deuda de un mes cerrado no desaparece: se muestra aparte y se dice
+//      por qué no entra, en vez de bloquear el abono entero o —peor— de
+//      aplicarla en silencio y mover un mes que ya se dio por bueno.
+//      Se agrupa por el nombre EXACTO, igual que calcularDeudores (576), para
+//      que el total del abono sea el mismo que la tarjeta tiene en pantalla.
+function cuentaDe(cliente) {
+  const suyas = DATA.ventas.filter(v => (v.cliente || 'Sin nombre') === cliente && saldoReal(v) > 0);
+  const porFecha = (a, b) => a.fecha !== b.fecha
+    ? (a.fecha > b.fecha ? 1 : -1)
+    : (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0);
+  const abonables = suyas.filter(v => !cierreDeFecha(v.fecha)).sort(porFecha);
+  const bloqueadas = suyas.filter(v => cierreDeFecha(v.fecha)).sort(porFecha);
+  return {
+    cliente,
+    abonables, bloqueadas,
+    total: suyas.reduce((s, v) => s + saldoReal(v), 0),
+    maximo: abonables.reduce((s, v) => s + saldoReal(v), 0),
+    bloqueado: bloqueadas.reduce((s, v) => s + saldoReal(v), 0)
+  };
+}
+
+// 858. El reparto: de la más vieja a la más nueva, hasta que se acabe la
+//      plata. Devuelve los tramos y lo que sobró (si sobró, el abono es
+//      mayor que la deuda y no se guarda).
+function repartirAbono(ventas, valor) {
+  let resta = Math.round(Number(valor) || 0);
+  const tramos = [];
+  for(const v of ventas) {
+    if(resta <= 0) break;
+    const s = saldoReal(v);
+    if(s <= 0) continue;
+    const parte = Math.min(s, resta);
+    tramos.push({ venta: v, parte });
+    resta -= parte;
+  }
+  return { tramos, sobra: resta };
+}
+
+// ============================================================
 // 248. VER HISTORIAL DE ABONOS
 // Muestra todos los abonos registrados en una venta
 // ============================================================
@@ -5883,6 +5946,7 @@ window.abrirAbono = (ventaId) => {
   const venta = DATA.ventas.find(v => v.id === ventaId);
   if(!venta) return;
   abonoVentaId = ventaId;
+  abonoCuenta = null;   // 858. este es el abono a UNA venta, no a la cuenta
 
   // 121. Resumen con todos los valores formateados en COP
   document.getElementById('abono-titulo').textContent =
@@ -5903,7 +5967,67 @@ window.abrirAbono = (ventaId) => {
   openModal('modal-abono');
 };
 
+// 858. Abonar a la cuenta de una persona. Mismo modal del abono de siempre,
+//      pero el resumen habla de la deuda entera y no de una venta.
+window.abrirAbonoCuenta = (cliente) => {
+  const c = cuentaDe(cliente);
+  if(!c.abonables.length) {
+    alert(c.bloqueado > 0
+      ? 'Toda la deuda de ' + cliente + ' (' + fmt(c.bloqueado) + ') está en meses ya cerrados.\n\n'
+        + 'Para abonarle hay que reabrir ese mes en Informes, o registrarlo como "Cobro de cuenta".'
+      : cliente + ' no tiene saldo pendiente.');
+    return;
+  }
+  abonoCuenta = c;
+  abonoVentaId = null;
+
+  document.getElementById('abono-titulo').textContent = 'Abono — ' + cliente;
+  document.getElementById('abono-resumen').innerHTML =
+    '<div style="font-size:15px;font-weight:700">Debe ' + fmt(c.total) + '</div>'
+    + '<div style="margin-top:2px">' + c.abonables.length + ' venta(s) pendiente(s)'
+      + ' · desde ' + fCorta(c.abonables[0].fecha) + '</div>'
+    + (c.bloqueado > 0
+        ? '<div style="margin-top:6px;font-size:11.5px;line-height:1.45">⚠️ ' + fmt(c.bloqueado)
+          + ' de esa deuda está en un mes ya cerrado y no entra en este abono.'
+          + ' Aquí se puede abonar hasta <strong>' + fmt(c.maximo) + '</strong>.</div>'
+        : '');
+  document.getElementById('ab-fecha').value = today();
+  document.getElementById('ab-valor').value = '';
+  document.getElementById('ab-nota').value = '';
+  document.getElementById('prev-ab-valor').textContent = '';
+  document.getElementById('ab-nuevo-saldo').textContent = '';
+  setMetodoPagoAbono('efectivo');
+  openModal('modal-abono');
+};
+
 window.calcNuevoSaldo = () => {
+  // 858. Modo cuenta: la cuenta baja como un todo. Debajo, en letra chica,
+  //      a qué ventas les va cayendo — Ángel no lo escoge, pero tiene
+  //      derecho a saber qué hizo la app con su plata.
+  if(abonoCuenta) {
+    const abono = Number(document.getElementById('ab-valor').value) || 0;
+    const el = document.getElementById('ab-nuevo-saldo');
+    if(abono <= 0) { el.innerHTML = ''; return; }
+    if(abono > abonoCuenta.maximo) {
+      el.innerHTML = '⚠️ Es más de lo que debe. Máximo: <strong>' + fmt(abonoCuenta.maximo) + '</strong>';
+      el.style.color = 'var(--red)';
+      return;
+    }
+    const { tramos } = repartirAbono(abonoCuenta.abonables, abono);
+    const queda = abonoCuenta.total - Math.round(abono);
+    const saldadas = tramos.filter(t => t.parte >= saldoReal(t.venta)).length;
+    el.innerHTML =
+      (queda === 0
+        ? '✅ Queda <strong>sin deber nada</strong>'
+        : 'Le queda debiendo <strong>' + fmt(queda) + '</strong>')
+      + '<div style="font-size:11px;color:var(--ink-3);margin-top:4px;line-height:1.45">'
+        + 'Se aplica de la venta más vieja a la más nueva: '
+        + tramos.map(t => fCorta(t.venta.fecha) + ' ' + fmt(t.parte)).join(' · ')
+        + (saldadas ? ' — cierra ' + saldadas + ' venta(s)' : '')
+      + '</div>';
+    el.style.color = queda === 0 ? 'var(--green)' : 'var(--amber)';
+    return;
+  }
   // 153. Calculamos el nuevo saldo con los valores en COP correctamente
   const venta = DATA.ventas.find(v => v.id === abonoVentaId);
   if(!venta) return;
@@ -5929,8 +6053,81 @@ window.calcNuevoSaldo = () => {
   }
 };
 
+// 858. Guardar un abono a la cuenta. La plata entra UNA vez y sale repartida
+//      en varias ventas, en una sola escritura (writeBatch): o quedan todas
+//      o no queda ninguna.
+async function guardarAbonoCuenta() {
+  // Se vuelve a leer la cuenta: el modal pudo quedar abierto mientras Jero
+  // registraba algo desde su casa (onSnapshot ya trajo el cambio).
+  const c = cuentaDe(abonoCuenta.cliente);
+  const valor = Math.round(Number(document.getElementById('ab-valor').value));
+  if(!valor || valor <= 0) { alert('Ingresa un valor de abono válido'); return; }
+  if(valor > c.maximo) {
+    alert('El abono no puede superar lo que debe: ' + fmt(c.maximo)
+      + (c.bloqueado > 0
+          ? '\n\n(' + fmt(c.bloqueado) + ' de su deuda está en un mes ya cerrado y no se puede tocar desde aquí.)'
+          : ''));
+    return;
+  }
+  const fechaAbono = document.getElementById('ab-fecha').value;
+  if(!exigirMesAbierto(fechaAbono, 'registrar un abono')) return;
+
+  const { tramos, sobra } = repartirAbono(c.abonables, valor);
+  if(sobra > 0 || !tramos.length) {
+    alert('No se pudo repartir el abono. Cierra y vuelve a abrir Deudores, e inténtalo otra vez.');
+    return;
+  }
+
+  const nota = document.getElementById('ab-nota').value || '';
+  const firma = firmaRegistro();
+  const quedaDespues = c.total - valor;
+
+  const lote = writeBatch(db);
+  tramos.forEach(({ venta, parte }) => {
+    const nuevoPagado = Number(venta.pagado || 0) + parte;
+    const nuevoSaldo = Math.max(0, saldoReal(venta) - parte);
+    const abonos = [...(venta.abonos || []), {
+      fecha: fechaAbono, valor: parte, nota,
+      metodoPago: metodoPagoAbono,
+      // 858. Queda marcado que vino de un abono a la cuenta, con el total que
+      //      la persona entregó ese día. Sin esto, encontrarse un abono de
+      //      $47.312 suelto dentro de una venta no tendría explicación.
+      deCuenta: true, cuentaValor: valor,
+      ...firma
+    }];
+    lote.update(doc(db, 'ventas', venta.id), {
+      pagado: nuevoPagado,
+      saldo: nuevoSaldo,
+      estadoPago: nuevoSaldo === 0 ? 'pagado' : 'parcial',
+      abonos
+    });
+  });
+  await lote.commit();
+
+  await registrarEnBitacora({
+    accion:'creó', coleccion:'abonos', docId: tramos[0].venta.id,
+    titulo: 'Abono a la cuenta de ' + c.cliente + ' · ' + fmt(valor),
+    cambios: [
+      { campo:'valor', etiqueta:'Abono a la cuenta', antes:'—', despues: fmt(valor) },
+      { campo:'deuda', etiqueta:'Deuda de ' + c.cliente, antes: fmt(c.total), despues: fmt(quedaDespues) },
+      { campo:'reparto', etiqueta:'Repartido en', antes:'—',
+        despues: tramos.map(t => (t.venta.fecha||'') + ' ' + (t.venta.producto||'venta') + ': ' + fmt(t.parte)).join(' · ') }
+    ]
+  });
+
+  const quien = autorCorto({ creadoPor: usuarioActual?.nombre });
+  await pushNotif('💳 Abono recibido',
+    c.cliente + ' abonó ' + fmt(valor) + ' — debe ' + fmt(quedaDespues) + (quien ? ' · ' + quien : ''),
+    'abono', { seccion:'deudores' });
+
+  closeModal('modal-abono');
+  abonoCuenta = null;
+  toast('✅ ' + fmt(valor) + ' aplicado a la cuenta de ' + c.cliente);
+}
+
 window.guardarAbono = async () => {
   if(!exigirAdmin('registrar abonos')) return;   // 803
+  if(abonoCuenta) { await guardarAbonoCuenta(); return; }   // 858
   const venta = DATA.ventas.find(v => v.id === abonoVentaId);
   if(!venta) return;
   const valor = Number(document.getElementById('ab-valor').value);
@@ -11037,16 +11234,30 @@ function renderDeudores() {
   } else {
     deudores.forEach(function(d) {
       const initials = d.cliente.split(' ').map(function(w){return w[0]||'';}).slice(0,2).join('').toUpperCase();
+      // 858. Aquí cada venta tenía su propio "+ Abono" y había que escoger a
+      //      cuál echarle la plata. Ángel: "ES UNA MISMA CUENTA... SIN
+      //      IMPORTAR A CUÁL LE VA A ABONAR POR POQUITOS, SINO VIENDO LA
+      //      DEUDA COMO UN TODO". El botón ahora es uno solo, arriba, contra
+      //      el total; esta lista queda como lo que siempre debió ser: la
+      //      explicación de de dónde sale esa deuda, no un menú de decisiones.
+      //      (El abono a UNA venta puntual sigue existiendo en Ventas.)
       let detalles = '';
+      let bloqueadoCard = 0;
       d.ventas.forEach(function(v) {
+        const cerrado = cierreDeFecha(v.fecha);
+        if(cerrado) bloqueadoCard += saldoReal(v);
         detalles += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">'
           + '<div><div style="font-weight:500;color:var(--ink)">' + (v.producto||'') + '</div>'
-          + '<div style="color:var(--ink-3)">' + (v.fecha||'') + ' · Total: ' + fmt(v.total) + '</div></div>'
-          + '<div style="display:flex;align-items:center;gap:8px">'
-            + '<span style="font-weight:700;color:var(--red)">' + fmt(v.saldo) + '</span>'
-            + '<button class="btn btn-xs" style="color:var(--amber);border-color:var(--amber-bd)" onclick="abrirAbono(\'' + v.id + '\')">+ Abono</button>'
-          + '</div></div>';
+          + '<div style="color:var(--ink-3)">' + (v.fecha||'') + ' · Total: ' + fmt(v.total)
+            + (cerrado ? ' · 🔒 mes cerrado' : '') + '</div></div>'
+          + '<span style="font-weight:700;color:var(--red)">' + fmt(v.saldo) + '</span>'
+        + '</div>';
       });
+      const notaBloqueada = bloqueadoCard > 0
+        ? '<div style="font-size:11px;color:var(--ink-3);margin-top:8px;line-height:1.45">'
+          + '🔒 ' + fmt(bloqueadoCard) + ' está en meses ya cerrados: no entra en el abono. '
+          + 'Para tocarlo hay que reabrir el mes en Informes.</div>'
+        : '';
       // 406. Badge de mora + botón de recordatorio WhatsApp — solo si está en mora
       const moraBadge = d.enMora
         ? '<div style="font-size:10px;font-weight:700;color:var(--red);margin-top:3px">⏰ ' + d.diasMora + ' días en mora</div>'
@@ -11054,6 +11265,11 @@ function renderDeudores() {
       const nombreSeg = d.cliente.replace(/'/g,"\\'");
       const btnRecordatorio = d.enMora
         ? '<button class="btn btn-sm" style="color:var(--green);border-color:var(--green-bd);margin-top:8px" onclick="abrirRecordatorioCobro(\'' + nombreSeg + '\')">💬 Generar recordatorio</button>'
+        : '';
+      // 858. Un solo botón por persona, pegado al total: se abona contra la
+      //      deuda, no contra una venta.
+      const btnAbonarCuenta = (d.total - bloqueadoCard) > 0
+        ? '<button class="btn btn-sm btn-lime" style="margin-top:8px" onclick="abrirAbonoCuenta(\'' + nombreSeg + '\')">💵 Abonar</button>'
         : '';
       htmlDeudores += '<div class="list-card">'
         + '<div class="list-card-header">'
@@ -11072,10 +11288,12 @@ function renderDeudores() {
           + '<div style="text-align:right">'
             + '<div style="font-size:20px;font-weight:800;color:var(--red)">' + fmt(d.total) + '</div>'
             + '<div style="font-size:11px;color:var(--ink-3)">total pendiente</div>'
-            + btnRecordatorio
+            + '<div style="display:flex;flex-direction:column;align-items:flex-end">'
+              + btnAbonarCuenta + btnRecordatorio
+            + '</div>'
           + '</div>'
         + '</div>'
-        + '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">' + detalles + '</div>'
+        + '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">' + detalles + notaBloqueada + '</div>'
       + '</div>';
     });
   }
@@ -11116,7 +11334,8 @@ function renderDeudores() {
   document.getElementById('page-deudores').innerHTML =
     tabsFamiliaHtml('deudores')   // 831
     + '<div class="page-header"><div><div class="page-title">Deudores</div>'
-      + '<div class="page-sub">Para cerrar una venta con saldo usa <strong>+ Abono</strong>. '
+      + '<div class="page-sub">La deuda de cada quien es una sola: con <strong>💵 Abonar</strong> se le baja al total '
+      + 'y la app reparte sola, de la venta más vieja a la más nueva. '
       + 'Si te pagan algo de un mes viejo que no está en la app, va por <strong>Cobro de cuenta</strong>.</div></div>'
       + '<button class="btn btn-sm" onclick="abrirModalCobro()">💳 Cobro de cuenta</button></div>'
     + avisoSaldosDescuadradosHtml()   // 850

@@ -1590,5 +1590,26 @@ La metió Jeronimollan el 7 oct a las 14:37.
 **Lo que NO se hizo:** ninguna pestaña nueva, ningún tablero de "actividad reciente" aparte (la bitácora del 785 ya existe y Ángel pidió explícitamente no llenar otra pantalla), y no se bloquea ningún guardado.
 
 
+### 14.53 La deuda de una persona es UNA sola (comentario 858) — 3 nov 2026
+
+Ángel, textual: *"ES UNA MISMA CUENTA, ES DECIR QUE SI LA PERSONA DEBE 500.000 DE DIFERENTES COMPRAS, ABONO 300.000 ENTONCES QUEDA DEBIENDO 200.000, **SIN IMPORTAR A CUÁL LE VA A ABONAR POR POQUITOS**, SINO VIENDO LA DEUDA COMO UN TODO"*. (Antes de esto se le habían ofrecido tres formas de repartir el abono —la más vieja primero, la más pequeña primero, a mano— y las rechazó las tres: el problema no era cuál escoger, era tener que escoger.)
+
+**La tensión real.** Cuando alguien entrega $300.000 no está pagando la venta del 7 de octubre: está bajando lo que debe. Pero por dentro la plata **tiene** que quedar escrita en ventas concretas, porque de ahí salen `saldo`, `ingresoVenta`, el margen, la caja y los meses cerrados. La salida: la app reparte sola, **de la venta más vieja a la más nueva**, y Ángel no escoge nada. No se le esconde del todo —una línea chiquita dice a qué ventas cayó— porque ocultarlo sería mentir sobre lo que la app hizo con la plata.
+
+**En Deudores.** Cada tarjeta tenía un `+ Abono` por venta: había que escoger. Ahora hay **un solo botón 💵 Abonar** pegado al total, y la lista de ventas queda como lo que siempre debió ser: la explicación de de dónde sale la deuda, no un menú de decisiones. El abono a **una** venta puntual sigue existiendo en Ventas, que es donde tiene sentido.
+
+**Funciones nuevas:**
+
+- `cuentaDe(cliente)` → `{cliente, abonables, bloqueadas, total, maximo, bloqueado}`. Agrupa por el nombre **exacto**, igual que `calcularDeudores` (576), para que el máximo del abono sea el mismo número que la tarjeta tiene en pantalla. Ordena por fecha y, a igual fecha, por `createdAt`.
+- `repartirAbono(ventas, valor)` → `{tramos:[{venta, parte}], sobra}`. De la más vieja a la más nueva hasta que se acabe la plata. `sobra > 0` significa que el abono supera la deuda: no se guarda.
+- `abrirAbonoCuenta(cliente)` y `guardarAbonoCuenta()`. Reusan el modal `modal-abono` de siempre; `abonoCuenta` es la bandera que distingue los dos modos (`abrirAbono` la pone en null).
+
+**Meses cerrados (784).** Una deuda de un mes cerrado no desaparece, pero tampoco se puede tocar: abonarle movería un mes que ya se dio por bueno. En vez de bloquear el abono entero —o, peor, aplicarlo en silencio—, esas ventas se apartan: salen marcadas `🔒 mes cerrado` en la tarjeta, el máximo del abono las descuenta, y tanto la tarjeta como el modal dicen cuánto quedó fuera y por qué. Si **toda** la deuda está en meses cerrados, el botón no aparece.
+
+**La escritura es una sola.** Un abono a la cuenta toca varias ventas, así que va en `writeBatch` (se agregó al import de Firestore): o quedan todas o no queda ninguna. Plata a medio aplicar es peor que plata sin aplicar. Cada tramo escribe `pagado += parte` (acumulativo, 772), `saldo = max(0, saldoReal(v) − parte)` (redondeado, 544/850) y su `estadoPago`, y agrega una entrada al array `abonos` con `deCuenta:true` y `cuentaValor` (el total que la persona entregó ese día) — sin esa marca, encontrarse un abono de $47.312 suelto dentro de una venta no tendría explicación. Antes de guardar se **relee** la cuenta con `cuentaDe`, por si Jero registró algo mientras el modal estaba abierto.
+
+**Lo demás.** Una entrada de bitácora por abono, con la deuda antes y después y el reparto completo. Una sola notificación: "AIDE RUIZ abonó $300.000 — debe $200.000 · Jero". Y el candado de doble toque del 856 lo cubre, porque `guardarAbonoCuenta` cuelga del mismo `window.guardarAbono` envuelto.
+
+
 ---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*
