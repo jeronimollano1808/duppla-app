@@ -1641,5 +1641,36 @@ La metió Jeronimollan el 7 oct a las 14:37.
 **Lo que NO se tocó:** el reparto FIFO, el precio por caja (853), el candado de mes cerrado, el aviso de venta duplicada (857) ni el candado de doble toque. El modal de editar una venta de **un solo producto** (`modal-editar-venta`) solo perdió el mixto: su "Pagado / Saldo pendiente" sigue como lo dejó el 850, porque ahí sí se corrigen datos a mano y el saldo deducido es lo que se quería.
 
 
+### 14.55 Por qué había que abrir y cerrar la app varias veces (comentario 860) — 3 nov 2026
+
+Ángel: *"la abro y se queda cargando, la abro y se queda cargando y la abro y ahí sí da"*.
+
+**La causa era una sola palabra: `await`.** El arranque hacía esto:
+
+```js
+onAuthStateChanged(auth, async user => {
+  document.getElementById('loading').style.display = 'none';   // se va la pantalla de carga
+  document.getElementById('app').style.display = 'block';      // se muestra la app… vacía
+  usuarioActual = await cargarPerfil(user);                    // ← AQUÍ SE QUEDABA
+  aplicarPermisos(); startListeners(); buildNav(); showPage('inicio');
+});
+```
+
+`cargarPerfil` hace un `getDoc` a Firestore, y **un `getDoc` no tiene tiempo de espera**: si el saludo con el servidor se atasca —señal mala, el teléfono volviendo de dormir, la pestaña suspendida— se queda esperando sin quejarse. Y mientras espera no corre nada de lo de abajo: ni los oyentes, ni el menú, ni una sola página. Pero la pantalla de carga **ya se había ocultado** y la app **ya se había mostrado**, así que lo que quedaba a la vista era un cuadro en blanco. Cerrar y volver a abrir forzaba una conexión nueva y a la tercera entraba. No era lentitud: era un bloqueo, y además un bloqueo que no se veía como tal.
+
+**Los cuatro cambios:**
+
+1. **La app se pinta ya, sin esperar el perfil.** `startListeners`, `buildNav` y `showPage` van **antes** del `await`. Los oyentes de Firestore no dependen del rol, así que no había ninguna razón para que esperaran a uno.
+2. **Rol provisional.** Mientras el perfil llega se entra con el rol que se supo la última vez de **ese mismo uid** (`perfilProvisional` / `recordarRol`, en `localStorage`), y si no se sabe nada, **visitante**. El 801 pedía resolver el rol antes de pintar para que un visitante no viera los botones ni un instante; se sigue cumpliendo, porque se empieza por lo que menos puede y se sube, nunca al revés. Se guarda un solo uid: si Ángel y Jero comparten un equipo, el último que entró es el que se recuerda y el otro arranca como visitante hasta que llega su perfil (uno o dos segundos).
+   - **Lo de siempre (802):** el rol guardado en el navegador es para **pintar**. Quien manda son las reglas de Firestore. Cualquiera puede editarse su propio `localStorage`, igual que puede llamar a las funciones desde la consola — por eso el bloqueo de verdad tiene que estar en `firestore.rules`, que **sigue pendiente de pegar en la consola de Firebase**.
+3. **No saber qué eres no es ser visitante.** `cargarPerfil` devolvía `rol:'visitante'` tanto cuando el servidor decía "visitante" como cuando **no se pudo preguntar**. Ahora el segundo caso va marcado `incierto:true`, y el arranque no degrada a quien ya se sabía admin: una señal mala ya no deja a Ángel con la app en solo lectura.
+4. **Dos relojes de guardia, porque un cuadro en blanco no es información.**
+   - Si la **sesión** no contesta en 9 s, la pantalla de carga dice "Está tardando más de lo normal en conectar" y ofrece Reintentar (antes: tres puntos rebotando para siempre).
+   - Si las tres colecciones esenciales (`ventas`, `gastos`, `inventario`) no llegan en 12 s, la página —que se quedaría en esqueleto indefinidamente, la otra forma de "se queda cargando"— muestra "No llegaron los datos" con Reintentar. Si los datos llegan después, el propio `onSnapshot` repinta y el aviso desaparece solo.
+   - Y el oyente de colecciones **no tenía manejador de error**: si una fallaba, el fallo no salía por ningún lado. Ahora al menos queda en consola.
+
+**Lo que NO se hizo, y es el siguiente paso si vuelve a pasar:** activar la **persistencia local de Firestore** (`persistentLocalCache`), que haría que la app abra al instante con los datos de la última vez y luego se actualice. Es la cura de fondo para la señal mala. No se activó a ciegas porque cambia cómo se comportan las escrituras sin red (un `await addDoc` sin conexión **no resuelve** hasta que el servidor confirma, así que guardar podría parecer colgado) y eso hay que probarlo con Ángel delante, no a distancia.
+
+
 ---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*

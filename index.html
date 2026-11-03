@@ -1093,6 +1093,15 @@ button.lista-fila:active{background:var(--border)}
     <div class="loading-dot"></div>
     <div class="loading-dot"></div>
   </div>
+  <!-- 860. Si la sesión no responde en 9 segundos, se dice. Tres puntos
+       rebotando para siempre no son información: Ángel terminaba cerrando y
+       abriendo la app a ciegas hasta que una vez entraba. -->
+  <div id="loading-aviso" style="display:none;margin-top:18px;text-align:center;max-width:300px;padding:0 20px">
+    <div style="font-size:12.5px;color:var(--ink-3);line-height:1.5">
+      Está tardando más de lo normal en conectar. Puede ser la señal.
+    </div>
+    <button onclick="location.reload()" class="btn btn-sm" style="margin-top:10px">Reintentar</button>
+  </div>
 </div>
 
 <!-- ============================================================
@@ -3956,6 +3965,62 @@ const nombreDeCorreo = (correo) => {
   return base ? base.replace(/\b\w/g, c => c.toUpperCase()) : 'Sin nombre';
 };
 
+// ============================================================
+// 860. EL ARRANQUE — por qué había que abrir y cerrar la app varias veces
+//
+// Ángel: "la abro y se queda cargando, la abro y se queda cargando y la abro
+// y ahí sí da".
+//
+// La causa estaba en una sola palabra: `await`. El arranque hacía esto:
+//
+//     onAuthStateChanged(auth, async user => {
+//       ocultar la pantalla de carga
+//       mostrar la app
+//       usuarioActual = await cargarPerfil(user);   // ← aquí se quedaba
+//       startListeners(); buildNav(); showPage('inicio');
+//     });
+//
+// `cargarPerfil` hace un `getDoc` a Firestore, y un `getDoc` NO tiene tiempo
+// de espera: si el saludo con el servidor se atasca —señal mala, el teléfono
+// volviendo de dormir, la pestaña suspendida— se queda esperando. Y mientras
+// espera, NADA de lo de abajo corre: no arrancan los oyentes, no se arma el
+// menú, no se pinta ninguna página. Pero la pantalla de carga ya se había
+// ocultado y la app ya se había mostrado, así que lo que quedaba a la vista
+// era un cuadro en blanco. Cerrar y volver a abrir forzaba una conexión nueva,
+// y a la tercera entraba. No era lentitud: era un bloqueo, y la app ni
+// siquiera se veía bloqueada.
+//
+// Lo que cambia:
+//   1. La app se pinta YA, sin esperar el perfil. Los oyentes de Firestore no
+//      dependen del rol, así que no hay razón para que esperen.
+//   2. Mientras el perfil llega, se entra con el rol que se supo la última vez
+//      de ESTE mismo uid; si no se sabe nada, visitante, que es lo que menos
+//      daño hace. Cuando llega el de verdad, se corrige.
+//   3. Si no se puede LEER el perfil (red), no se degrada a nadie: no saber
+//      qué eres no es lo mismo que ser visitante (ver `incierto`).
+//   4. Si la sesión no responde en 9 segundos, la pantalla de carga lo dice y
+//      ofrece reintentar, en vez de rebotar tres puntos para siempre.
+//
+// OJO, lo de siempre (802): el rol guardado en el navegador es para PINTAR.
+// Quien manda son las reglas de Firestore. Cualquiera puede editarse su propio
+// localStorage, igual que puede llamar a las funciones desde la consola — por
+// eso el bloqueo de verdad tiene que estar en firestore.rules.
+// ============================================================
+const CLAVE_ROL = 'duppla-rol';
+
+function perfilProvisional(user) {
+  let rol = 'visitante';
+  try {
+    const guardado = JSON.parse(localStorage.getItem(CLAVE_ROL) || 'null');
+    if(guardado && guardado.uid === user.uid && guardado.rol === 'admin') rol = 'admin';
+  } catch(e) {}
+  return { uid:user.uid, email:user.email, nombre: nombreDeCorreo(user.email), rol, provisional:true };
+}
+
+function recordarRol(perfil) {
+  try { localStorage.setItem(CLAVE_ROL, JSON.stringify({ uid:perfil.uid, rol:perfil.rol })); } catch(e) {}
+}
+
 async function cargarPerfil(user) {
   const ref = doc(db, 'usuarios', user.uid);
   try {
@@ -3987,8 +4052,12 @@ async function cargarPerfil(user) {
   } catch(e) {
     // Si la lectura falla (reglas, red), se entra como visitante: nunca se
     // abre la puerta por culpa de un error.
+    // 860. Pero va marcado `incierto`: esto no es "el servidor dijo que eres
+    //      visitante", es "no se pudo preguntar". Quien lo recibe decide —y lo
+    //      que hace el arranque es NO degradar a quien ya se sabía admin, para
+    //      que una señal mala no deje a Ángel con la app en solo lectura.
     console.warn('No se pudo leer el perfil, se entra como visitante:', e);
-    return { uid:user.uid, email:user.email, nombre: nombreDeCorreo(user.email), rol:'visitante' };
+    return { uid:user.uid, email:user.email, nombre: nombreDeCorreo(user.email), rol:'visitante', incierto:true };
   }
 }
 
@@ -4101,23 +4170,49 @@ function aplicarPermisos() {
   if(av) av.textContent = (usuarioActual?.nombre || '?').charAt(0).toUpperCase();
 }
 
+// 860. Reloj de guardia del arranque. Si la sesión no contesta, se avisa.
+let arranqueResuelto = false;
+const relojArranque = setTimeout(() => {
+  if(arranqueResuelto) return;
+  const aviso = document.getElementById('loading-aviso');
+  if(aviso) aviso.style.display = 'block';
+}, 9000);
+
 onAuthStateChanged(auth, async user => {
-  document.getElementById('loading').style.display = 'none';
+  arranqueResuelto = true;
+  clearTimeout(relojArranque);
   if (user) {
-    // 44. Usuario logueado: mostramos la app y configuramos UI
-    document.getElementById('app').style.display = 'block';
-    // 801. El rol se resuelve ANTES de pintar nada: si se pintara primero y
-    //      se ocultara después, el visitante vería los botones un instante.
-    usuarioActual = await cargarPerfil(user);
+    // 860. Se entra con el rol provisional y se pinta TODO de una, sin esperar
+    //      a Firestore. El 801 pedía resolver el rol antes de pintar para que
+    //      un visitante no viera los botones ni un instante; eso se sigue
+    //      cumpliendo, porque sin nada guardado el provisional es visitante:
+    //      se empieza por lo que menos puede y se sube, nunca al revés.
+    usuarioActual = perfilProvisional(user);
     aplicarPermisos();
     startListeners();   // Iniciamos conexión con Firebase
     buildNav();         // Construimos el menú lateral
     showPage('inicio'); // 664. Entramos por Inicio, no por Dashboard
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
     requestNotifPermission(); // Pedimos permiso de notificaciones
+
+    // 860. Y ahora sí, el perfil de verdad — tarde lo que tarde. La app ya
+    //      está en pie, así que si esto se demora no se nota y si no llega
+    //      nunca, se queda con lo que ya se sabía.
+    const real = await cargarPerfil(user);
+    // Una lectura fallida (incierto) no degrada a quien ya se sabía admin.
+    if(!(real.incierto && usuarioActual?.rol === 'admin')) {
+      usuarioActual = real;
+      if(!real.incierto) recordarRol(real);
+    }
+    aplicarPermisos();
+    buildNav();                                   // 806. el menú depende del rol
+    if(currentPage) renderPage(currentPage);
   } else {
     // 45. Sin usuario: mostramos pantalla de login
     usuarioActual = null;
     document.body.classList.remove('solo-lectura');
+    document.getElementById('loading').style.display = 'none';
     document.getElementById('login-screen').style.display = 'flex';
     document.getElementById('app').style.display = 'none';
   }
@@ -4220,8 +4315,28 @@ function startListeners() {
       // 620. Purga automática de la papelera — registros de más de 7 días
       //      se borran definitivamente (ya cumplieron su plazo de recuperación).
       if(col === 'papelera') limpiarPapeleraVieja();
-    });
+    // 860. Hasta hoy este oyente no tenía manejador de error: si una colección
+    //      fallaba, el fallo no aparecía por ningún lado y la pantalla se
+    //      quedaba en esqueleto sin decir por qué.
+    }, e => console.warn('Falló el oyente de ' + col + ':', e));
   });
+  // 860. Y si a los 12 segundos las tres colecciones esenciales no llegaron,
+  //      la pantalla se quedaría en esqueleto PARA SIEMPRE, que es la otra
+  //      forma en que esto se veía como "se queda cargando". Se dice lo que
+  //      pasa. Si los datos llegan después, el propio onSnapshot repinta y
+  //      este aviso desaparece solo.
+  setTimeout(() => {
+    if(datosListos) return;
+    const cont = document.getElementById('page-' + (currentPage || 'inicio'));
+    if(!cont) return;
+    cont.innerHTML = '<div class="card" style="padding:26px 20px;text-align:center">'
+      + '<div style="font-size:30px;margin-bottom:10px">📡</div>'
+      + '<div style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:5px">No llegaron los datos</div>'
+      + '<div style="font-size:12.5px;color:var(--ink-3);line-height:1.5;max-width:360px;margin:0 auto">'
+        + 'La app abrió pero Firebase no ha respondido. Casi siempre es la señal.</div>'
+      + '<button class="btn btn-sm" style="margin-top:14px" onclick="location.reload()">Reintentar</button>'
+    + '</div>';
+  }, 12000);
   // 785. La bitácora crece sin tope: no entra en el bucle de colecciones
   //      completas, va con su propio oyente limitado a los últimos 400
   //      movimientos. Lo viejo sigue en Firestore, pero no se trae a memoria
