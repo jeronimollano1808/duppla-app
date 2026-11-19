@@ -1376,6 +1376,19 @@ button.lista-fila:active{background:var(--border)}
 </div>
 
 <!-- 494. MODAL: REPORTAR VENTA O DEVOLUCIÓN DE CONSIGNACIÓN -->
+<!-- 862. Resumen de consignación por tienda -->
+<div class="modal-bg" id="modal-resumen-consig">
+  <div class="modal" style="max-width:640px">
+    <div class="modal-header">
+      <span class="modal-title" id="rsc-titulo">Resumen</span>
+      <button class="modal-close" onclick="closeModal('modal-resumen-consig')">✕</button>
+    </div>
+    <div id="rsc-cuerpo"></div>
+    <div class="modal-footer">
+      <button class="btn btn-lime" id="rsc-descargar" onclick="descargarResumenConsig()">⬇️ Descargar PDF</button>
+    </div>
+  </div>
+</div>
 <div class="modal-bg" id="modal-reportar-consig">
   <div class="modal" style="max-width:420px">
     <div class="modal-header">
@@ -12878,6 +12891,202 @@ window.guardarEditarConsignacion = async () => {
 // ============================================================
 let consigTiendaAbiertaId = null;
 
+// ============================================================
+// 862. RESUMEN DE CONSIGNACIÓN POR TIENDA — qué se le ha llevado, qué vendió,
+// qué devolvió y qué tiene hoy. Incluye lo que ya se acabó: la tarjeta solo
+// muestra lo activo, y una tienda que vendió todo un producto se quedaba sin
+// rastro de que alguna vez se le llevó.
+//   - Llevado:  cantidadInicial de cada entrega (incluye reposiciones, 654).
+//   - Vendido:  las VENTAS reales (consignacionIds de esta tienda) — es lo
+//               que se facturó, con su plata y su saldo.
+//   - Devuelto: movimientos 'devolucion' del historial de cada entrega.
+//   - Hoy:      cantidadActual.
+// Si llevado ≠ vendido + devuelto + hoy (una entrega editada a mano, una
+// venta borrada), no se esconde: se dice cuántas unidades no cuadran.
+// ============================================================
+let resumenConsigTiendaId = null;
+
+function resumenConsigDe(tiendaId) {
+  const t = DATA.tiendasConsignacion.find(x => x.id === tiendaId);
+  if(!t) return null;
+  const entregas = DATA.consignaciones.filter(c => c.tiendaId === tiendaId);
+  const ids = new Set(entregas.map(c => c.id));
+  const ventas = DATA.ventas.filter(v => v.esDeConsignacion &&
+    ((v.consignacionIds||[]).some(id => ids.has(id)) || (!(v.consignacionIds||[]).length && v.cliente === t.nombre)));
+
+  const porProd = new Map();
+  const fila = (prodId, nombre) => {
+    if(!porProd.has(prodId)) porProd.set(prodId, { prodId, nombre, llevado:0, valorLlevado:0, vendido:0, valorVendido:0, devuelto:0, hoy:0, valorHoy:0, debe:0 });
+    return porProd.get(prodId);
+  };
+  const movs = [];
+  entregas.forEach(c => {
+    const f = fila(c.prodId, c.prodNombre || '');
+    const precio = Number(c.precioSugerido||0);
+    const inicial = Number(c.cantidadInicial||0);
+    f.llevado += inicial; f.valorLlevado += inicial * precio;
+    f.hoy += Number(c.cantidadActual||0); f.valorHoy += Number(c.cantidadActual||0) * precio;
+    const hist = c.historialMovimientos || [];
+    const repos = hist.filter(m => m.tipo === 'reposicion');
+    const primera = inicial - repos.reduce((s,m) => s + Number(m.cantidad||0), 0);
+    // La fecha de la entrega se pisa con cada reposición (654); la de la primera
+    // vez queda en la firma (creadoEnFecha). Registros viejos sin firma: c.fecha.
+    if(primera > 0) movs.push({ fecha: c.creadoEnFecha || (repos.length ? '' : (c.fecha||'')), tipo:'dejo', nombre: f.nombre, cant: primera });
+    repos.forEach(m => movs.push({ fecha: m.fecha||'', tipo:'dejo', nombre: f.nombre, cant: Number(m.cantidad||0) }));
+    hist.filter(m => m.tipo === 'devolucion').forEach(m => {
+      f.devuelto += Number(m.cantidad||0);
+      movs.push({ fecha: m.fecha||'', tipo:'devolvio', nombre: f.nombre, cant: Number(m.cantidad||0) });
+    });
+  });
+  ventas.forEach(v => {
+    const f = fila(v.prodId, v.producto || '');
+    f.vendido += Number(v.cant||0); f.valorVendido += ingresoVenta(v); f.debe += saldoReal(v);
+    movs.push({ fecha: v.fecha||'', tipo:'vendio', nombre: f.nombre, cant: Number(v.cant||0), valor: ingresoVenta(v), debe: saldoReal(v) });
+  });
+
+  const filas = [...porProd.values()].map(f => ({ ...f, sinCuadrar: f.llevado - f.vendido - f.devuelto - f.hoy }))
+    .sort((a,b) => b.llevado - a.llevado || a.nombre.localeCompare(b.nombre));
+  const tot = filas.reduce((s,f) => {
+    ['llevado','valorLlevado','vendido','valorVendido','devuelto','hoy','valorHoy','debe'].forEach(k => s[k] += f[k]);
+    s.sinCuadrar += Math.abs(f.sinCuadrar);
+    return s;
+  }, { llevado:0, valorLlevado:0, vendido:0, valorVendido:0, devuelto:0, hoy:0, valorHoy:0, debe:0, sinCuadrar:0 });
+  movs.sort((a,b) => (b.fecha||'').localeCompare(a.fecha||''));
+  return { tienda: t, filas, tot, movs };
+}
+
+function fechaCortaConsig(f) {
+  if(!f) return '—';
+  const m = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  const [y,mm,d] = f.split('-');
+  return Number(d) + ' ' + m[Number(mm)-1] + ' ' + y;
+}
+
+window.abrirResumenConsig = (tiendaId) => {
+  const r = resumenConsigDe(tiendaId);
+  if(!r) return;
+  resumenConsigTiendaId = tiendaId;
+  const { tienda, filas, tot, movs } = r;
+  document.getElementById('rsc-titulo').textContent = 'Resumen · ' + tienda.nombre;
+
+  if(filas.length === 0) {
+    document.getElementById('rsc-cuerpo').innerHTML = '<div style="padding:24px;text-align:center;color:var(--ink-3);font-size:13px">Todavía no le has dejado nada a ' + escTxt(tienda.nombre) + '.</div>';
+    document.getElementById('rsc-descargar').style.display = 'none';
+    openModal('modal-resumen-consig');
+    return;
+  }
+  document.getElementById('rsc-descargar').style.display = '';
+
+  const caja = (tit, uds, valor, sub, color) =>
+    '<div class="metric-card" style="padding:12px">'
+      + '<div class="metric-value" style="font-size:20px;color:' + (color||'var(--ink)') + '">' + uds + ' <span style="font-size:11px;font-weight:500;color:var(--ink-3)">uds</span></div>'
+      + '<div class="metric-label">' + tit + '</div>'
+      + (valor !== null ? '<div class="metric-sub">' + fmt(valor) + (sub ? ' · ' + sub : '') + '</div>' : '<div class="metric-sub">' + (sub||'&nbsp;') + '</div>')
+    + '</div>';
+  const cajas = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:14px">'
+    + caja('Le has llevado', tot.llevado, tot.valorLlevado, 'a precio dist.')
+    + caja('Ha vendido', tot.vendido, tot.valorVendido, '')
+    + caja('Te devolvió', tot.devuelto, null, '')
+    + caja('Tiene hoy', tot.hoy, tot.valorHoy, 'a precio dist.')
+  + '</div>'
+  + (tot.debe > 0 ? '<div style="background:var(--red-bg);color:var(--red-ink);border-radius:12px;padding:10px 12px;font-size:12.5px;margin-bottom:14px">💳 De lo vendido te debe <strong>' + fmt(tot.debe) + '</strong>.</div>' : '');
+
+  const th = (t, der) => '<th style="text-align:' + (der?'right':'left') + ';padding:6px 6px;font-size:11px;font-weight:600;color:var(--ink-3);border-bottom:1px solid var(--border)">' + t + '</th>';
+  const td = (t, der, extra) => '<td style="text-align:' + (der?'right':'left') + ';padding:7px 6px;font-size:12.5px;border-bottom:1px solid var(--border);' + (extra||'') + '">' + t + '</td>';
+  const tabla = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">'
+    + '<thead><tr>' + th('Producto') + th('Llevado',1) + th('Vendido',1) + th('Devuelto',1) + th('Tiene hoy',1) + '</tr></thead><tbody>'
+    + filas.map(f => '<tr>'
+        + td(escTxt(f.nombre) + (f.sinCuadrar ? '<div style="font-size:10.5px;color:var(--amber-ink)">⚠️ ' + Math.abs(f.sinCuadrar) + ' ud(s) no cuadran</div>' : ''))
+        + td(f.llevado, 1)
+        + td(f.vendido + (f.valorVendido ? '<div style="font-size:10.5px;color:var(--ink-3)">' + fmt(f.valorVendido) + '</div>' : ''), 1)
+        + td(f.devuelto || '—', 1, 'color:var(--ink-3)')
+        + td(f.hoy, 1, f.hoy ? 'font-weight:600' : 'color:var(--ink-3)')
+      + '</tr>').join('')
+    + '<tr>' + td('<strong>Total</strong>') + td('<strong>' + tot.llevado + '</strong>',1) + td('<strong>' + tot.vendido + '</strong>',1) + td('<strong>' + tot.devuelto + '</strong>',1) + td('<strong>' + tot.hoy + '</strong>',1) + '</tr>'
+    + '</tbody></table></div>'
+    + (tot.sinCuadrar ? '<div style="font-size:11px;color:var(--ink-3);margin-top:6px">Las unidades que no cuadran vienen de una entrega corregida a mano o de una venta borrada: llevado no da vendido + devuelto + tiene hoy.</div>' : '');
+
+  const etiqueta = { dejo:'📦 Le dejaste', vendio:'💰 Vendió', devolvio:'↩️ Devolvió' };
+  const lista = '<div class="sec-title" style="margin:18px 0 6px">Movimientos</div>'
+    + '<div style="max-height:260px;overflow-y:auto">'
+    + movs.map(m => '<div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);font-size:12.5px">'
+        + '<div><div>' + etiqueta[m.tipo] + ' ' + m.cant + ' × ' + escTxt(m.nombre) + '</div>'
+        + '<div style="font-size:11px;color:var(--ink-3)">' + fechaCortaConsig(m.fecha) + '</div></div>'
+        + (m.tipo === 'vendio' ? '<div style="text-align:right;white-space:nowrap">' + fmt(m.valor) + (m.debe ? '<div style="font-size:11px;color:var(--red-ink)">debe ' + fmt(m.debe) + '</div>' : '') + '</div>' : '')
+      + '</div>').join('')
+    + '</div>';
+
+  document.getElementById('rsc-cuerpo').innerHTML = cajas + tabla + lista;
+  openModal('modal-resumen-consig');
+};
+
+window.descargarResumenConsig = () => {
+  const r = resumenConsigDe(resumenConsigTiendaId);
+  if(!r || !window.jspdf) { alert('No se pudo generar el PDF'); return; }
+  const { tienda, filas, tot, movs } = r;
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ unit:'mm', format:'letter' });
+  const W = pdf.internal.pageSize.getWidth(), H = pdf.internal.pageSize.getHeight(), M = 18;
+  let y = 22;
+  const salto = (alto) => { if(y + alto > H - 18) { pdf.addPage(); y = 22; } };
+  const recorta = (t, n) => (t||'').length > n ? t.slice(0, n-1) + '…' : (t||'');
+
+  pdf.setFont('helvetica','bold'); pdf.setFontSize(16);
+  pdf.text('RESUMEN DE CONSIGNACIÓN', M, y); y += 8;
+  pdf.setFontSize(12); pdf.text(tienda.nombre || '', M, y);
+  pdf.setFont('helvetica','normal'); pdf.setFontSize(9);
+  pdf.text('DUPPLA · Corte al ' + fechaCortaConsig(today()), W - M, y, { align:'right' }); y += 10;
+
+  pdf.setFontSize(10);
+  [['Le hemos llevado', tot.llevado + ' uds', fmt(tot.valorLlevado) + ' (precio distribuidor)'],
+   ['Ha vendido', tot.vendido + ' uds', fmt(tot.valorVendido)],
+   ['Ha devuelto', tot.devuelto + ' uds', ''],
+   ['Tiene hoy', tot.hoy + ' uds', fmt(tot.valorHoy) + ' (precio distribuidor)']]
+    .concat(tot.debe > 0 ? [['Saldo pendiente', '', fmt(tot.debe)]] : [])
+    .forEach(([a,b,c]) => { pdf.setFont('helvetica','bold'); pdf.text(a, M, y); pdf.setFont('helvetica','normal'); pdf.text(b, M+50, y); pdf.text(c, M+75, y); y += 6; });
+  y += 6;
+
+  const col = [M, W-M-75, W-M-50, W-M-25, W-M];
+  const cabecera = () => {
+    pdf.setFont('helvetica','bold'); pdf.setFontSize(9);
+    pdf.line(M, y, W-M, y); y += 5;
+    pdf.text('Producto', col[0], y); pdf.text('Llevado', col[1], y, {align:'right'}); pdf.text('Vendido', col[2], y, {align:'right'});
+    pdf.text('Devuelto', col[3], y, {align:'right'}); pdf.text('Tiene hoy', col[4], y, {align:'right'});
+    y += 2; pdf.line(M, y, W-M, y); y += 5;
+    pdf.setFont('helvetica','normal');
+  };
+  cabecera();
+  filas.forEach(f => {
+    salto(7); if(y === 22) cabecera();
+    pdf.text(recorta(f.nombre, 52), col[0], y);
+    pdf.text(String(f.llevado), col[1], y, {align:'right'}); pdf.text(String(f.vendido), col[2], y, {align:'right'});
+    pdf.text(String(f.devuelto), col[3], y, {align:'right'}); pdf.text(String(f.hoy), col[4], y, {align:'right'});
+    y += 6;
+  });
+  pdf.line(M, y-3, W-M, y-3); y += 1;
+  pdf.setFont('helvetica','bold');
+  pdf.text('Total', col[0], y);
+  pdf.text(String(tot.llevado), col[1], y, {align:'right'}); pdf.text(String(tot.vendido), col[2], y, {align:'right'});
+  pdf.text(String(tot.devuelto), col[3], y, {align:'right'}); pdf.text(String(tot.hoy), col[4], y, {align:'right'});
+  y += 12;
+
+  salto(14);
+  pdf.setFontSize(11); pdf.text('Movimientos', M, y); y += 6;
+  pdf.setFontSize(9);
+  const etiqueta = { dejo:'Le dejamos', vendio:'Vendió', devolvio:'Devolvió' };
+  movs.forEach(m => {
+    salto(6);
+    pdf.setFont('helvetica','normal');
+    pdf.text(fechaCortaConsig(m.fecha), M, y);
+    pdf.text(etiqueta[m.tipo] + ' ' + m.cant + ' × ' + recorta(m.nombre, 48), M+24, y);
+    if(m.tipo === 'vendio') pdf.text(fmt(m.valor) + (m.debe ? '  (debe ' + fmt(m.debe) + ')' : ''), W-M, y, {align:'right'});
+    y += 5.5;
+  });
+
+  const nombreArchivo = 'Consignacion_' + (tienda.nombre||'tienda').replace(/[^A-Za-z0-9ÁÉÍÓÚÑáéíóúñ]+/g,'_').replace(/_+$/,'') + '_' + today() + '.pdf';
+  pdf.save(nombreArchivo);
+};
+
 window.toggleTiendaConsig = (id) => {
   consigTiendaAbiertaId = consigTiendaAbiertaId === id ? null : id;
   renderConsignacion();
@@ -12982,6 +13191,7 @@ function renderConsignacion() {
         + '</div>'
         + '<div style="display:flex;gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">'
           + '<button class="btn btn-sm" onclick="toggleTiendaConsig(\'' + t.id + '\')" style="flex:1">' + (isOpen?'▲ Ocultar':'▼ Ver productos ('+productosDistintosActivos+')') + '</button>'
+          + '<button class="btn btn-sm" onclick="abrirResumenConsig(\'' + t.id + '\')">📋 Resumen</button>'   /* 862 */
           + '<button class="btn btn-sm btn-lime" onclick="abrirDejarConsignacion(\'' + t.id + '\')">+ Dejar producto</button>'
           + '<button class="btn btn-sm" onclick="editarTiendaConsig(\'' + t.id + '\')">✏️</button>'
           + '<button class="btn btn-sm btn-danger" onclick="eliminarTiendaConsig(\'' + t.id + '\')">✕</button>'

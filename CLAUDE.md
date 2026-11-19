@@ -1690,3 +1690,15 @@ Era un `<select>` que arrancaba en **"Venta directa"**. Un desplegable con un va
 
 ---
 *Fin del documento. Para retomar el trabajo (Jero o Ángel, con cualquier instancia de Claude): clonar el repo, abrir la carpeta con Claude Code, y este archivo se carga solo como contexto. Verificar cualquier duda contra el `index.html` real antes de asumir algo de aquí — el código es la fuente de verdad, este documento es el mapa.*
+
+
+### 14.57 Resumen por tienda de consignación (comentario 862) — Jero, 18 nov 2026
+
+Jero: *"necesito saber qué le he llevado a la tienda y si ya han vendido productos, qué han vendido... como un resumen... y descargar todo"*. La tarjeta solo mostraba lo **activo**: una tienda que vendió todo un producto se quedaba sin rastro de que alguna vez se le llevó, y "4 de 12" no decía si las 8 que faltaban se vendieron o se devolvieron.
+
+- Botón **📋 Resumen** en cada tarjeta → `modal-resumen-consig`. Cuatro cajas (le has llevado · ha vendido · te devolvió · tiene hoy, con plata a precio distribuidor), aviso rojo si debe algo, tabla por producto (incluye lo ya agotado) y la lista de movimientos con fecha.
+- **⬇️ Descargar PDF** (`descargarResumenConsig`, jsPDF): `Consignacion_<TIENDA>_<fecha>.pdf`.
+- `resumenConsigDe(tiendaId)` es la única cuenta. Llevado = `cantidadInicial`; vendido = las **ventas** reales (`consignacionIds` de esa tienda; ventas viejas sin ids, por `cliente === tienda.nombre`), con su plata y su saldo; devuelto = movimientos `devolucion` del historial; hoy = `cantidadActual`.
+- Si llevado ≠ vendido + devuelto + hoy (entrega corregida a mano, venta borrada), se muestra "⚠️ N ud(s) no cuadran" en vez de esconderlo.
+- La fecha de la primera entrega sale de `creadoEnFecha` (la `fecha` de la entrega se pisa con cada reposición, 654). Registros viejos sin firma y con reposiciones: la primera entrega sale sin fecha ("—"), no con una inventada.
+- No escribe nada; el visitante también lo ve.
