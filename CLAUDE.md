@@ -1702,3 +1702,4 @@ Jero: *"necesito saber qué le he llevado a la tienda y si ya han vendido produc
 - Si llevado ≠ vendido + devuelto + hoy (entrega corregida a mano, venta borrada), se muestra "⚠️ N ud(s) no cuadran" en vez de esconderlo.
 - La fecha de la primera entrega sale de `creadoEnFecha` (la `fecha` de la entrega se pisa con cada reposición, 654). Registros viejos sin firma y con reposiciones: la primera entrega sale sin fecha ("—"), no con una inventada.
 - No escribe nada; el visitante también lo ve.
+- **863. El PDF no lleva plata.** Jero: *"no me gustaría que ellos vieran el valor total que nos deben... solamente como si fuera un inventario"*. La hoja se le entrega a la tienda: solo nombre, fecha de corte, unidades (llevado/vendido/devuelto/tiene hoy, por producto) y movimientos con fecha. Los valores y el saldo se quedan solo en el modal dentro de la app.

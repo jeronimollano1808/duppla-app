@@ -13037,13 +13037,13 @@ window.descargarResumenConsig = () => {
   pdf.setFont('helvetica','normal'); pdf.setFontSize(9);
   pdf.text('DUPPLA · Corte al ' + fechaCortaConsig(today()), W - M, y, { align:'right' }); y += 10;
 
+  // 863. La hoja va para la tienda: es un inventario, sin ningún valor en plata.
   pdf.setFontSize(10);
-  [['Le hemos llevado', tot.llevado + ' uds', fmt(tot.valorLlevado) + ' (precio distribuidor)'],
-   ['Ha vendido', tot.vendido + ' uds', fmt(tot.valorVendido)],
-   ['Ha devuelto', tot.devuelto + ' uds', ''],
-   ['Tiene hoy', tot.hoy + ' uds', fmt(tot.valorHoy) + ' (precio distribuidor)']]
-    .concat(tot.debe > 0 ? [['Saldo pendiente', '', fmt(tot.debe)]] : [])
-    .forEach(([a,b,c]) => { pdf.setFont('helvetica','bold'); pdf.text(a, M, y); pdf.setFont('helvetica','normal'); pdf.text(b, M+50, y); pdf.text(c, M+75, y); y += 6; });
+  [['Le hemos llevado', tot.llevado + ' uds'],
+   ['Ha vendido', tot.vendido + ' uds'],
+   ['Ha devuelto', tot.devuelto + ' uds'],
+   ['Tiene hoy', tot.hoy + ' uds']]
+    .forEach(([a,b]) => { pdf.setFont('helvetica','bold'); pdf.text(a, M, y); pdf.setFont('helvetica','normal'); pdf.text(b, M+50, y); y += 6; });
   y += 6;
 
   const col = [M, W-M-75, W-M-50, W-M-25, W-M];
@@ -13079,7 +13079,6 @@ window.descargarResumenConsig = () => {
     pdf.setFont('helvetica','normal');
     pdf.text(fechaCortaConsig(m.fecha), M, y);
     pdf.text(etiqueta[m.tipo] + ' ' + m.cant + ' × ' + recorta(m.nombre, 48), M+24, y);
-    if(m.tipo === 'vendio') pdf.text(fmt(m.valor) + (m.debe ? '  (debe ' + fmt(m.debe) + ')' : ''), W-M, y, {align:'right'});
     y += 5.5;
   });
 
